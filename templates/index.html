@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WP Launcher - Créateur de Sites WordPress</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 40px;
+            max-width: 1200px;
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e1e1e1;
+        }
+
+        .header-content h1 {
+            color: #333;
+            font-size: 2.5em;
+            margin-bottom: 5px;
+            font-weight: 700;
+        }
+
+        .header-content p {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .add-site-btn {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .add-site-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(40, 167, 69, 0.3);
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 1.1em;
+        }
+
+        input[type="text"],
+        input[type="file"] {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e1e1e1;
+            border-radius: 10px;
+            font-size: 1em;
+            transition: border-color 0.3s ease;
+        }
+
+        input[type="text"]:focus,
+        input[type="file"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+            width: 100%;
+        }
+
+        .file-input-wrapper input[type="file"] {
+            position: absolute;
+            left: -9999px;
+        }
+
+        .file-input-label {
+            display: block;
+            width: 100%;
+            padding: 15px;
+            background: #f8f9fa;
+            border: 2px dashed #e1e1e1;
+            border-radius: 10px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: #666;
+        }
+
+        .file-input-label:hover {
+            background: #e9ecef;
+            border-color: #667eea;
+        }
+
+        .file-input-label.has-file {
+            background: #e8f5e8;
+            border-color: #28a745;
+            color: #155724;
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 18px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.2em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .submit-btn:active {
+            transform: translateY(0);
+        }
+
+        .alert {
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 10px;
+            font-weight: 500;
+        }
+
+        .alert.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+
+        .alert.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+
+        .alert.warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+        }
+
+        .projects-section {
+            margin-top: 0;
+        }
+
+        .projects-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .projects-header h2 {
+            color: #333;
+            font-size: 1.8em;
+            font-weight: 600;
+        }
+
+        .projects-count {
+            color: #666;
+            font-size: 0.9em;
+            background: #f8f9fa;
+            padding: 4px 12px;
+            border-radius: 20px;
+        }
+
+        .projects-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+        }
+
+        .project-item {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            border: 1px solid #e1e1e1;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .project-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+        }
+
+        .project-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 15px;
+        }
+
+        .project-name {
+            font-size: 1.3em;
+            font-weight: 600;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .project-status {
+            font-size: 0.85em;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .project-status.active {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .project-status.inactive {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .project-info {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 15px;
+        }
+
+        .project-hostname {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 15px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 8px;
+            border-left: 4px solid #28a745;
+        }
+        
+        .hostname-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .hostname-text {
+            color: #495057;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            font-weight: 600;
+        }
+
+        .hostname-ip {
+            color: #6c757d;
+            font-family: 'Courier New', monospace;
+            font-size: 0.8em;
+        }
+
+        .project-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+        }
+
+        .btn-action {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.9em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #0056b3;
+        }
+
+        .btn-warning {
+            background: #ffc107;
+            color: #212529;
+        }
+
+        .btn-warning:hover {
+            background: #e0a800;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .btn-cancel {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-cancel:hover {
+            background: #5a6268;
+        }
+
+        .btn-info {
+            background: #17a2b8;
+            color: white;
+        }
+
+        .btn-info:hover {
+            background: #138496;
+        }
+
+        /* Styles pour les modals */
+        .modal {
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background-color: white;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            color: #333;
+        }
+
+        .close {
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            color: #aaa;
+            transition: color 0.3s ease;
+        }
+
+        .close:hover {
+            color: #333;
+        }
+
+        .modal-body {
+            padding: 20px;
+        }
+
+        .modal-body p {
+            margin-bottom: 15px;
+            line-height: 1.5;
+        }
+
+        .modal-body ul {
+            margin: 15px 0;
+            padding-left: 25px;
+        }
+
+        .modal-body li {
+            margin-bottom: 8px;
+        }
+
+        .confirmation-input {
+            margin: 20px 0;
+        }
+
+        .confirmation-input label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .confirmation-input input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e1e1e1;
+            border-radius: 8px;
+            font-size: 1em;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+
+        .modal-actions button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .help-text {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+                margin: 10px;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-content">
+                <h1>🚀 WP Launcher</h1>
+                <p>Gestionnaire de sites WordPress avec Docker</p>
+            </div>
+            <button class="add-site-btn" onclick="openAddSiteModal()">
+                ➕ Ajouter un site
+            </button>
+        </div>
+
+        <!-- Messages flash -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert {{ category }}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- Section des projets -->
+        <div class="projects-section">
+            <div class="projects-header">
+                <h2>📊 Mes Sites WordPress</h2>
+                <span class="projects-count" id="projectsCount">0 site(s)</span>
+            </div>
+            <div class="projects-list" id="projectsList">
+                <!-- Les projets seront chargés ici -->
+            </div>
+        </div>
+
+        <!-- Modal d'ajout de site -->
+        <div id="addSiteModal" class="modal" style="display: none;">
+            <div class="modal-content" style="max-width: 600px;">
+                <div class="modal-header">
+                    <h3>➕ Ajouter un nouveau site WordPress</h3>
+                    <span class="close" id="closeAddSite">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <form method="POST" action="/create_project" enctype="multipart/form-data" id="projectForm">
+                        <div class="form-group">
+                            <label for="project_name">📝 Nom du projet</label>
+                            <input type="text" id="project_name" name="project_name" required 
+                                   placeholder="Ex: mon-super-site">
+                            <div class="help-text">Le nom sera utilisé comme nom de dossier et préfixe Docker</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="project_hostname">🌐 Hostname personnalisé (optionnel)</label>
+                            <input type="text" id="project_hostname" name="project_hostname" 
+                                   placeholder="Ex: monsite.local ou monsite.dev">
+                            <div class="help-text">
+                                Si laissé vide, utilisera: <code id="auto-hostname">mon-super-site.local</code><br>
+                                <strong>Note:</strong> L'hostname sera automatiquement ajouté à votre fichier /etc/hosts
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="wp_content_file">📦 Archive wp-content (.zip) - <span style="color: #28a745;">OPTIONNEL</span></label>
+                            <div class="file-input-wrapper">
+                                <input type="file" id="wp_content_file" name="wp_content_file" accept=".zip">
+                                <label for="wp_content_file" class="file-input-label" id="wp_content_label">
+                                    📁 Sélectionner l'archive ou laissez vide pour un site propre
+                                </label>
+                            </div>
+                            <div class="help-text">
+                                <strong>📦 Avec archive :</strong> Restaure vos plugins, thèmes et uploads existants<br>
+                                <strong>🆕 Sans archive :</strong> Crée un site WordPress neuf avec les thèmes par défaut
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="db_file">🗃️ Base de données (.sql ou .zip) - <span style="color: #28a745;">OPTIONNEL</span></label>
+                            <div class="file-input-wrapper">
+                                <input type="file" id="db_file" name="db_file" accept=".sql,.zip">
+                                <label for="db_file" class="file-input-label" id="db_label">
+                                    📄 Sélectionner le fichier ou laissez vide pour une DB vierge
+                                </label>
+                            </div>
+                            <div class="help-text">
+                                <strong>🗃️ Avec BDD :</strong> Importe vos données existantes (articles, pages, utilisateurs)<br>
+                                <strong>🆕 Sans BDD :</strong> Crée une base WordPress vide prête pour l'installation
+                            </div>
+                        </div>
+
+                        <div class="modal-actions">
+                            <button type="button" class="btn-cancel" onclick="closeAddSiteModal()">Annuler</button>
+                            <button type="submit" class="submit-btn" id="submitBtn">
+                                🚀 Créer le projet WordPress
+                            </button>
+                        </div>
+                    </form>
+
+                    <div class="loading" id="loading">
+                        <div class="spinner"></div>
+                        <p>Création du projet en cours...<br>
+                        <small>Cela peut prendre quelques minutes</small></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal pour réuploader la base de données -->
+        <div id="updateDbModal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>🔄 Mettre à jour la base de données</h3>
+                    <span class="close" id="closeUpdateDb">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <p><strong>Projet :</strong> <span id="updateDbProjectName"></span></p>
+                    <p><strong>⚠️ Attention :</strong> Cette action va <strong>écraser complètement</strong> la base de données existante. Toutes les données actuelles seront perdues.</p>
+                    
+                    <form id="updateDbForm" enctype="multipart/form-data">
+                        <div class="form-group">
+                            <label for="new_db_file">🗃️ Nouvelle base de données (.sql ou .zip)</label>
+                            <div class="file-input-wrapper">
+                                <input type="file" id="new_db_file" name="new_db_file" accept=".sql,.zip" required>
+                                <label for="new_db_file" class="file-input-label" id="new_db_label">
+                                    📄 Sélectionner le nouveau fichier de base de données
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="modal-actions">
+                            <button type="button" class="btn-cancel" id="cancelUpdateDb">Annuler</button>
+                            <button type="submit" class="btn-danger">🔄 Mettre à jour la base de données</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal pour supprimer le projet -->
+        <div id="deleteProjectModal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>🗑️ Supprimer le projet</h3>
+                    <span class="close" id="closeDeleteProject">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <p><strong>Projet :</strong> <span id="deleteProjectName"></span></p>
+                    <p><strong>⚠️ ATTENTION :</strong> Cette action est <strong>irréversible</strong> et va :</p>
+                    <ul>
+                        <li>🛑 Arrêter tous les conteneurs Docker</li>
+                        <li>🗑️ Supprimer tous les conteneurs et images</li>
+                        <li>💾 Supprimer tous les volumes de données</li>
+                        <li>📁 Supprimer tous les fichiers du projet</li>
+                    </ul>
+                    <p><strong>Toutes les données seront perdues définitivement.</strong></p>
+                    
+                    <div class="confirmation-input">
+                        <label for="deleteConfirmation">Pour confirmer, tapez le nom du projet :</label>
+                        <input type="text" id="deleteConfirmation" placeholder="Nom du projet">
+                    </div>
+                    
+                    <div class="modal-actions">
+                        <button type="button" class="btn-cancel" id="cancelDeleteProject">Annuler</button>
+                        <button type="button" class="btn-danger" id="confirmDeleteProject" disabled>🗑️ Supprimer définitivement</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal pour éditer l'hostname -->
+        <div id="editHostnameModal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>✏️ Éditer l'hostname</h3>
+                    <span class="close" id="closeEditHostname">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <p><strong>Projet :</strong> <span id="editHostnameProjectName"></span></p>
+                    <p><strong>Hostname actuel :</strong> <span id="currentHostname"></span></p>
+                    
+                    <form id="editHostnameForm">
+                        <div class="form-group">
+                            <label for="new_hostname">🌐 Nouveau hostname</label>
+                            <input type="text" id="new_hostname" name="new_hostname" placeholder="mon-nouveau-site.local" required>
+                            <small style="color: #666; font-size: 0.85em;">
+                                💡 Utilisez des caractères alphanumériques et des tirets. Évitez les espaces et caractères spéciaux.<br>
+                                ⚠️ <strong>Important</strong> : Si vous avez GitLab sur le port 80, accédez via hostname:8080
+                            </small>
+                        </div>
+                        
+                        <div class="modal-actions">
+                            <button type="button" class="btn-cancel" id="cancelEditHostname">Annuler</button>
+                            <button type="submit" class="btn-info">✏️ Mettre à jour l'hostname</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal de progression d'import -->
+        <div id="progressModal" class="modal" style="display: none;">
+            <div class="modal-content" style="max-width: 500px;">
+                <div class="modal-header">
+                    <h3>📊 Import de base de données en cours</h3>
+                </div>
+                <div class="modal-body">
+                    <div class="progress-container" style="margin: 20px 0;">
+                        <div class="progress-bar-wrapper" style="background: #e0e0e0; border-radius: 10px; overflow: hidden; height: 30px; position: relative;">
+                            <div id="progressBar" class="progress-bar" style="
+                                height: 100%; 
+                                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                                border-radius: 10px; 
+                                transition: width 0.3s ease;
+                                width: 0%;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                color: white;
+                                font-weight: bold;
+                            ">
+                                <span id="progressText">0%</span>
+                            </div>
+                        </div>
+                        <p id="progressMessage" style="text-align: center; margin-top: 10px; color: #666;">Initialisation...</p>
+                    </div>
+                    <div style="text-align: center; margin-top: 20px;">
+                        <p style="color: #666; font-size: 0.9em;">
+                            ⏳ L'import peut prendre plusieurs minutes pour les gros fichiers.<br>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
+    <script>
+        // Initialiser Socket.IO
+        const socket = io();
+        
+        // Écouter les mises à jour de progression
+        socket.on('import_progress', function(data) {
+            updateProgressBar(data);
+        });
+        
+        // Fonction pour mettre à jour la progress bar
+        function updateProgressBar(data) {
+            const progressModal = document.getElementById('progressModal');
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            const progressMessage = document.getElementById('progressMessage');
+            
+            // Afficher le modal de progression si ce n'est pas déjà fait
+            if (data.progress > 0 && data.status !== 'completed' && data.status !== 'error') {
+                progressModal.style.display = 'flex';
+            }
+            
+            // Mettre à jour la progress bar
+            progressBar.style.width = data.progress + '%';
+            progressText.textContent = data.progress + '%';
+            progressMessage.textContent = data.message;
+            
+            // Changer la couleur selon le statut
+            if (data.status === 'error') {
+                progressBar.style.background = 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)';
+                progressText.textContent = 'Erreur !';
+                
+                // Fermer le modal après 3 secondes
+                setTimeout(() => {
+                    progressModal.style.display = 'none';
+                }, 3000);
+            } else if (data.status === 'completed') {
+                progressBar.style.background = 'linear-gradient(135deg, #28a745 0%, #20c997 100%)';
+                progressText.textContent = '✅ Terminé !';
+                
+                // Fermer le modal après 2 secondes et recharger les projets
+                setTimeout(() => {
+                    progressModal.style.display = 'none';
+                    loadProjects(); // Recharger la liste des projets
+                }, 2000);
+            } else {
+                // Couleur par défaut
+                progressBar.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+            }
+        }
+
+        // Mise à jour automatique de l'hostname suggéré
+        document.getElementById('project_name').addEventListener('input', function(e) {
+            const projectName = e.target.value;
+            const autoHostname = document.getElementById('auto-hostname');
+            if (projectName) {
+                const cleanName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-');
+                autoHostname.textContent = cleanName + '.local';
+            } else {
+                autoHostname.textContent = 'mon-super-site.local';
+            }
+        });
+
+        // Gestion des labels de fichiers
+        document.getElementById('wp_content_file').addEventListener('change', function(e) {
+            const label = document.getElementById('wp_content_label');
+            const fileName = e.target.files[0] ? e.target.files[0].name : '';
+            if (fileName) {
+                label.textContent = `✅ ${fileName}`;
+                label.classList.add('has-file');
+            } else {
+                label.textContent = '📁 Sélectionner l\'archive ou laissez vide pour un site propre';
+                label.classList.remove('has-file');
+            }
+        });
+
+        document.getElementById('db_file').addEventListener('change', function(e) {
+            const label = document.getElementById('db_label');
+            const fileName = e.target.files[0] ? e.target.files[0].name : '';
+            if (fileName) {
+                label.textContent = `✅ ${fileName}`;
+                label.classList.add('has-file');
+            } else {
+                label.textContent = '📄 Sélectionner le fichier ou laissez vide pour une DB vierge';
+                label.classList.remove('has-file');
+            }
+        });
+
+        // Gestion du formulaire
+        document.getElementById('projectForm').addEventListener('submit', function(e) {
+            document.getElementById('loading').classList.add('show');
+            document.getElementById('submitBtn').disabled = true;
+            document.getElementById('submitBtn').textContent = 'Création en cours...';
+        });
+
+        // Fermer le modal d'ajout après création réussie
+        // Cette fonction sera appelée par le rechargement de page ou après succès
+        function checkForSuccess() {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('created') === 'success') {
+                closeAddSiteModal();
+                loadProjects();
+                // Nettoyer l'URL
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+        }
+
+        // Vérifier au chargement de la page
+        window.addEventListener('load', checkForSuccess);
+
+        // Variables globales pour les infos serveur
+        let serverInfo = { server_ip: '127.0.0.1', wordpress_port: 8080 };
+
+        // Fonction pour charger les informations du serveur
+        function loadServerInfo() {
+            fetch('/server_info')
+                .then(response => response.json())
+                .then(info => {
+                    serverInfo = info;
+                    // Recharger les projets avec les nouvelles infos
+                    loadProjects();
+                })
+                .catch(error => {
+                    console.error('Erreur lors du chargement des infos serveur:', error);
+                    // Continuer avec les valeurs par défaut
+                    loadProjects();
+                });
+        }
+
+        // Charger la liste des projets avec leurs statuts
+        function loadProjects() {
+            fetch('/projects_with_status')
+                .then(response => response.json())
+                .then(projects => {
+                    const projectsList = document.getElementById('projectsList');
+                    if (projects.length === 0) {
+                        projectsList.innerHTML = '<p style="text-align: center; color: #666;">Aucun projet créé pour le moment</p>';
+                    } else {
+                        // Mettre à jour le compteur
+                        document.getElementById('projectsCount').textContent = `${projects.length} site${projects.length > 1 ? 's' : ''}`;
+                        
+                        projectsList.innerHTML = projects.map(project => 
+                            `<div class="project-item">
+                                <div class="project-header">
+                                    <div class="project-name">
+                                        <span>📁 ${project.name}</span>
+                                    </div>
+                                    <span class="project-status ${project.status}">${project.status === 'active' ? '🟢 Actif' : '🔴 Arrêté'}</span>
+                                </div>
+                                <div class="project-info">
+                                    <div class="project-hostname">
+                                        <div class="hostname-info">
+                                            <div class="hostname-text">🌐 ${project.hostname || project.name + '.local'}:${project.port || 8080}</div>
+                                            <div class="hostname-ip" style="font-size: 0.9em; color: #666;">💡 Accès : http://${project.hostname || project.name + '.local'}:${project.port || 8080}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="project-actions">
+                                    <button class="btn-action btn-primary" onclick="openProjectSite('${project.hostname || project.name + '.local'}', ${project.port || 8080})">🌐 Voir le site</button>
+                                    <button class="btn-action btn-info" onclick="openEditHostnameModal('${project.name}', '${project.hostname || project.name + '.local'}')">✏️ Hostname</button>
+                                    <button class="btn-action btn-warning" onclick="openUpdateDbModal('${project.name}')">🔄 MAJ DB</button>
+                                    <button class="btn-action btn-danger" onclick="openDeleteProjectModal('${project.name}')">🗑️ Supprimer</button>
+                                </div>
+                            </div>`
+                        ).join('');
+                    }
+                })
+                .catch(error => {
+                    console.error('Erreur lors du chargement des projets:', error);
+                });
+        }
+
+        // Ouvrir le site du projet
+        function openProjectSite(hostname, port = 8080) {
+            // Ouvrir le site avec l'hostname personnalisé sur le port spécifique
+            const siteUrl = `http://${hostname}:${port}`;
+            window.open(siteUrl, '_blank');
+        }
+
+        // Ouvrir le modal de mise à jour de la base de données
+        function openUpdateDbModal(projectName) {
+            document.getElementById('updateDbProjectName').textContent = projectName;
+            document.getElementById('updateDbModal').style.display = 'flex';
+        }
+
+        // Ouvrir le modal de suppression de projet
+        function openDeleteProjectModal(projectName) {
+            document.getElementById('deleteProjectName').textContent = projectName;
+            document.getElementById('deleteConfirmation').value = '';
+            document.getElementById('confirmDeleteProject').disabled = true;
+            document.getElementById('deleteProjectModal').style.display = 'flex';
+        }
+
+        // Ouvrir le modal d'édition d'hostname
+        function openEditHostnameModal(projectName, currentHostname) {
+            document.getElementById('editHostnameProjectName').textContent = projectName;
+            document.getElementById('currentHostname').textContent = currentHostname;
+            document.getElementById('new_hostname').value = currentHostname;
+            document.getElementById('editHostnameModal').style.display = 'flex';
+        }
+
+        // Ouvrir le modal d'ajout de site
+        function openAddSiteModal() {
+            document.getElementById('addSiteModal').style.display = 'flex';
+            // Réinitialiser le formulaire
+            document.getElementById('projectForm').reset();
+            document.getElementById('wp_content_label').textContent = '📁 Sélectionner l\'archive ou laissez vide pour un site propre';
+            document.getElementById('wp_content_label').classList.remove('has-file');
+            document.getElementById('db_label').textContent = '📄 Sélectionner le fichier ou laissez vide pour une DB vierge';
+            document.getElementById('db_label').classList.remove('has-file');
+            document.getElementById('loading').classList.remove('show');
+            document.getElementById('submitBtn').disabled = false;
+            document.getElementById('submitBtn').textContent = '🚀 Créer le projet WordPress';
+        }
+
+        // Fermer le modal d'ajout de site
+        function closeAddSiteModal() {
+            document.getElementById('addSiteModal').style.display = 'none';
+        }
+
+        // Fermer les modals
+        function closeModals() {
+            document.getElementById('updateDbModal').style.display = 'none';
+            document.getElementById('deleteProjectModal').style.display = 'none';
+            document.getElementById('editHostnameModal').style.display = 'none';
+            document.getElementById('addSiteModal').style.display = 'none';
+        }
+
+        // Gestionnaire pour le fichier de base de données
+        document.getElementById('new_db_file').addEventListener('change', function(e) {
+            const label = document.getElementById('new_db_label');
+            const fileName = e.target.files[0] ? e.target.files[0].name : '';
+            if (fileName) {
+                label.textContent = `✅ ${fileName}`;
+                label.classList.add('has-file');
+            } else {
+                label.textContent = '📄 Sélectionner le nouveau fichier de base de données';
+                label.classList.remove('has-file');
+            }
+        });
+
+        // Gestionnaire pour la confirmation de suppression
+        document.getElementById('deleteConfirmation').addEventListener('input', function(e) {
+            const projectName = document.getElementById('deleteProjectName').textContent;
+            const confirmButton = document.getElementById('confirmDeleteProject');
+            if (e.target.value === projectName) {
+                confirmButton.disabled = false;
+            } else {
+                confirmButton.disabled = true;
+            }
+        });
+
+        // Gestionnaire pour le formulaire de mise à jour de la base de données
+        document.getElementById('updateDbForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const projectName = document.getElementById('updateDbProjectName').textContent;
+            const fileInput = document.getElementById('new_db_file');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('Veuillez sélectionner un fichier de base de données');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('db_file', file);
+            
+            // Afficher le loading
+            const submitButton = e.target.querySelector('button[type="submit"]');
+            const originalText = submitButton.textContent;
+            submitButton.textContent = 'Mise à jour en cours...';
+            submitButton.disabled = true;
+            
+            fetch(`/update_database/${projectName}`, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('✅ Base de données mise à jour avec succès !');
+                    closeModals();
+                    loadProjects();
+                } else {
+                    alert('❌ Erreur: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                alert('❌ Erreur lors de la mise à jour de la base de données');
+            })
+            .finally(() => {
+                submitButton.textContent = originalText;
+                submitButton.disabled = false;
+            });
+        });
+
+        // Gestionnaire pour la suppression de projet
+        document.getElementById('confirmDeleteProject').addEventListener('click', function() {
+            const projectName = document.getElementById('deleteProjectName').textContent;
+            
+            // Afficher le loading
+            this.textContent = 'Suppression en cours...';
+            this.disabled = true;
+            
+            fetch(`/delete_project/${projectName}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('✅ Projet supprimé avec succès !');
+                    closeModals();
+                    loadProjects();
+                } else {
+                    alert('❌ Erreur: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                alert('❌ Erreur lors de la suppression du projet');
+            })
+            .finally(() => {
+                this.textContent = '🗑️ Supprimer définitivement';
+                this.disabled = false;
+            });
+        });
+
+        // Gestionnaire pour l'édition d'hostname
+        document.getElementById('editHostnameForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const projectName = document.getElementById('editHostnameProjectName').textContent;
+            const newHostname = document.getElementById('new_hostname').value.trim();
+            
+            if (!newHostname) {
+                alert('Veuillez saisir un hostname valide');
+                return;
+            }
+            
+            // Validation du hostname
+            if (!/^[a-zA-Z0-9.-]+$/.test(newHostname)) {
+                alert('Le hostname ne peut contenir que des lettres, chiffres, points et tirets');
+                return;
+            }
+            
+            const submitButton = e.target.querySelector('button[type="submit"]');
+            const originalText = submitButton.textContent;
+            submitButton.textContent = 'Mise à jour en cours...';
+            submitButton.disabled = true;
+            
+            fetch(`/edit_hostname/${projectName}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    new_hostname: newHostname
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('✅ Hostname mis à jour avec succès ! Le site est maintenant accessible sur : ' + newHostname);
+                    closeModals();
+                    loadProjects();
+                } else {
+                    alert('❌ Erreur: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                alert('❌ Erreur lors de la mise à jour de l\'hostname');
+            })
+            .finally(() => {
+                submitButton.textContent = originalText;
+                submitButton.disabled = false;
+            });
+        });
+
+        // Gestionnaires pour fermer les modals
+        document.getElementById('closeUpdateDb').addEventListener('click', closeModals);
+        document.getElementById('closeDeleteProject').addEventListener('click', closeModals);
+        document.getElementById('closeEditHostname').addEventListener('click', closeModals);
+        document.getElementById('closeAddSite').addEventListener('click', closeModals);
+        document.getElementById('cancelUpdateDb').addEventListener('click', closeModals);
+        document.getElementById('cancelDeleteProject').addEventListener('click', closeModals);
+        document.getElementById('cancelEditHostname').addEventListener('click', closeModals);
+
+        // Fermer les modals en cliquant en dehors
+        window.addEventListener('click', function(e) {
+            if (e.target.classList.contains('modal')) {
+                closeModals();
+            }
+        });
+
+        // Charger les infos serveur et les projets au démarrage
+        loadServerInfo();
+    </script>
+</body>
+</html> 

@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: PROJECT_NAME_mysql_1
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: wordpress
+      MYSQL_USER: wordpress
+      MYSQL_PASSWORD: wordpress
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql-config:/etc/mysql/conf.d
+    networks:
+      - wordpress_network
+    command: --default-authentication-plugin=mysql_native_password
+    # Optimisations haute performance Intel 285K + 35GB RAM
+    mem_limit: 16g
+    cpus: '16'
+    ulimits:
+      nproc: 100000
+      nofile:
+        soft: 100000
+        hard: 100000
+    sysctls:
+      - net.core.somaxconn=65535
+      - net.ipv4.tcp_max_syn_backlog=65535
+
+  wordpress:
+    depends_on:
+      - mysql
+    image: wordpress:latest
+    container_name: PROJECT_NAME_wordpress_1
+    restart: unless-stopped
+    environment:
+      WORDPRESS_DB_HOST: mysql:3306
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      # Activer les logs de debug WordPress
+      WORDPRESS_DEBUG: 1
+      WORDPRESS_DEBUG_LOG: 1
+      WORDPRESS_DEBUG_DISPLAY: 1
+    volumes:
+      - ./wordpress:/var/www/html
+      - ./php-config/php.ini:/usr/local/etc/php/conf.d/custom.ini
+    networks:
+      - wordpress_network
+    ports:
+      - "8080:80"  # Exposition directe sur le port 8080
+    # Optimisations haute performance
+    mem_limit: 4g
+    cpus: '8'
+    ulimits:
+      nproc: 100000
+      nofile:
+        soft: 100000
+        hard: 100000
+
+volumes:
+  mysql_data:
+    driver: local
+
+networks:
+  wordpress_network:
+    driver: bridge 

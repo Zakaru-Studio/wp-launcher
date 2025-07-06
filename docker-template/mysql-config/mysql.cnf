@@ -1,0 +1,62 @@
+[mysql]
+default-character-set = utf8mb4
+
+[mysqld]
+# Configuration ultra haute performance - Intel 285K + 35GB RAM
+max_allowed_packet = 2048M
+innodb_buffer_pool_size = 12G
+innodb_log_file_size = 2G
+innodb_log_buffer_size = 256M
+innodb_flush_log_at_trx_commit = 2
+innodb_file_per_table = 1
+innodb_buffer_pool_instances = 16
+innodb_io_capacity = 20000
+innodb_io_capacity_max = 40000
+innodb_read_io_threads = 16
+innodb_write_io_threads = 16
+innodb_purge_threads = 16
+innodb_page_cleaners = 16
+innodb_flush_method = O_DIRECT
+
+# Optimisations pour gros imports
+bulk_insert_buffer_size = 256M
+myisam_sort_buffer_size = 256M
+key_buffer_size = 512M
+sort_buffer_size = 32M
+read_buffer_size = 16M
+read_rnd_buffer_size = 32M
+join_buffer_size = 128M
+
+# Timeouts étendus
+interactive_timeout = 14400
+wait_timeout = 14400
+net_read_timeout = 1200
+net_write_timeout = 1200
+lock_wait_timeout = 3600
+
+# Limites de connexions haute performance
+max_connections = 1000
+max_user_connections = 500
+thread_cache_size = 64
+table_open_cache = 8192
+table_definition_cache = 2048
+
+# Logs et debug
+general_log = 1
+general_log_file = /var/log/mysql/mysql.log
+slow_query_log = 1
+slow_query_log_file = /var/log/mysql/slow.log
+long_query_time = 2
+
+# Charset
+character-set-server = utf8mb4
+collation-server = utf8mb4_unicode_ci
+
+# Optimisations diverses
+tmp_table_size = 128M
+max_heap_table_size = 128M
+# query_cache_type et query_cache_size supprimés dans MySQL 8.0+
+thread_cache_size = 8
+
+# Sécurité
+sql_mode = STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO 
