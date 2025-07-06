@@ -97,7 +97,7 @@ services:
     cpus: '1'
     # Configuration sécurité pour éviter les problèmes AppArmor
     security_opt:
-      - apparmor:unconfined
+      - "apparmor:unconfined"
 
   nextjs:
     image: node:18-alpine
@@ -118,7 +118,7 @@ services:
     cpus: '2'
     # Configuration sécurité pour éviter les problèmes AppArmor
     security_opt:
-      - apparmor:unconfined
+      - "apparmor:unconfined"
 
 volumes:
   mysql_data:

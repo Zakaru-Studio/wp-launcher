@@ -1,1489 +1,742 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WP Launcher - Créateur de Sites WordPress</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-            background: #000000;
-            color: #ffffff;
-            min-height: 100vh;
-            line-height: 1.6;
-        }
-
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 32px 24px;
-        }
-
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 48px;
-            padding-bottom: 24px;
-            border-bottom: 1px solid #333;
-        }
-
-        .header-content h1 {
-            color: #ffffff;
-            font-size: 2.25rem;
-            margin-bottom: 8px;
-            font-weight: 600;
-            letter-spacing: -0.025em;
-        }
-
-        .header-content p {
-            color: #888888;
-            font-size: 1rem;
-        }
-
-        .add-site-btn {
-            padding: 12px 24px;
-            background: #ffffff;
-            color: #000000;
-            border: none;
-            border-radius: 8px;
-            font-size: 0.875rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            height: 40px;
-        }
-
-        .add-site-btn:hover {
-            background: #f5f5f5;
-            transform: translateY(-1px);
-        }
-
-        .form-group {
-            margin-bottom: 25px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 8px;
-            color: #333;
-            font-weight: 600;
-            font-size: 1.1em;
-        }
-
-        input[type="text"],
-        input[type="file"] {
-            width: 100%;
-            padding: 15px;
-            border: 2px solid #e1e1e1;
-            border-radius: 10px;
-            font-size: 1em;
-            transition: border-color 0.3s ease;
-        }
-
-        input[type="text"]:focus,
-        input[type="file"]:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        .file-input-wrapper {
-            position: relative;
-            overflow: hidden;
-            display: inline-block;
-            width: 100%;
-        }
-
-        .file-input-wrapper input[type="file"] {
-            position: absolute;
-            left: -9999px;
-        }
-
-        .file-input-label {
-            display: block;
-            width: 100%;
-            padding: 15px;
-            background: #f8f9fa;
-            border: 2px dashed #e1e1e1;
-            border-radius: 10px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            color: #666;
-        }
-
-        .file-input-label:hover {
-            background: #e9ecef;
-            border-color: #667eea;
-        }
-
-        .file-input-label.has-file {
-            background: #e8f5e8;
-            border-color: #28a745;
-            color: #155724;
-        }
-
-        .submit-btn {
-            width: 100%;
-            padding: 18px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-size: 1.2em;
-            font-weight: 600;
-            cursor: pointer;
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-        }
-
-        .submit-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
-        }
-
-        .submit-btn:active {
-            transform: translateY(0);
-        }
-
-        .alert {
-            padding: 15px;
-            margin-bottom: 20px;
-            border-radius: 10px;
-            font-weight: 500;
-        }
-
-        .alert.success {
-            background: #d4edda;
-            border: 1px solid #c3e6cb;
-            color: #155724;
-        }
-
-        .alert.error {
-            background: #f8d7da;
-            border: 1px solid #f5c6cb;
-            color: #721c24;
-        }
-
-        .alert.warning {
-            background: #fff3cd;
-            border: 1px solid #ffeaa7;
-            color: #856404;
-        }
-
-        .projects-section {
-            margin-top: 0;
-        }
-
-        .projects-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 24px;
-        }
-
-        .projects-header h2 {
-            color: #ffffff;
-            font-size: 1.5rem;
-            font-weight: 600;
-            letter-spacing: -0.025em;
-        }
-
-        .projects-count {
-            color: #888888;
-            font-size: 0.875rem;
-            background: #111111;
-            padding: 6px 12px;
-            border-radius: 6px;
-            border: 1px solid #333;
-        }
-
-        .projects-list {
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-        }
-
-        .project-item {
-            background: #111111;
-            border: 1px solid #333;
-            border-radius: 12px;
-            padding: 24px;
-            transition: all 0.2s ease;
-            width: 100%;
-        }
-
-        .project-item:hover {
-            border-color: #555;
-            background: #1a1a1a;
-        }
-
-        .project-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 20px;
-        }
-
-        .project-name {
-            font-size: 1.25rem;
-            font-weight: 600;
-            color: #ffffff;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .project-status {
-            font-size: 0.75rem;
-            padding: 4px 8px;
-            border-radius: 6px;
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        .project-status.active {
-            background: #0070f3;
-            color: #ffffff;
-        }
-
-        .project-status.inactive {
-            background: #333;
-            color: #888;
-        }
-
-        .project-info {
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-            margin-bottom: 24px;
-        }
-
-        .project-urls {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 16px;
-        }
-
-        .url-card {
-            background: #000000;
-            border: 1px solid #333;
-            border-radius: 8px;
-            padding: 16px;
-            transition: all 0.2s ease;
-            cursor: pointer;
-        }
-
-        .url-card:hover {
-            border-color: #0070f3;
-            background: #0a0a0a;
-        }
-
-        .url-card-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 8px;
-        }
-
-        .url-card-title {
-            color: #ffffff;
-            font-size: 0.875rem;
-            font-weight: 500;
-        }
-
-        .url-card-url {
-            color: #0070f3;
-            font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
-            font-size: 0.75rem;
-            word-break: break-all;
-        }
-
-        .project-actions {
-            display: flex;
-            gap: 12px;
-            justify-content: flex-end;
-            flex-wrap: wrap;
-        }
-
-        .action-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 16px;
-            border: 1px solid #333;
-            border-radius: 8px;
-            font-size: 0.875rem;
-            font-weight: 500;
-            text-decoration: none;
-            transition: all 0.2s ease;
-            cursor: pointer;
-            background: #000000;
-            color: #ffffff;
-            height: 36px;
-        }
-
-        .action-btn:hover {
-            border-color: #555;
-            background: #111111;
-            transform: translateY(-1px);
-        }
-
-        .action-btn.primary {
-            background: #0070f3;
-            border-color: #0070f3;
-            color: #ffffff;
-        }
-
-        .action-btn.primary:hover {
-            background: #0051cc;
-            border-color: #0051cc;
-        }
-
-        .action-btn.success {
-            background: #00d924;
-            border-color: #00d924;
-            color: #000000;
-        }
-
-        .action-btn.success:hover {
-            background: #00b01f;
-            border-color: #00b01f;
-        }
-
-        .action-btn.warning {
-            background: #f5a623;
-            border-color: #f5a623;
-            color: #000000;
-        }
-
-        .action-btn.warning:hover {
-            background: #d9941c;
-            border-color: #d9941c;
-        }
-
-        .action-btn.danger {
-            background: #e00;
-            border-color: #e00;
-            color: #ffffff;
-        }
-
-        .action-btn.danger:hover {
-            background: #c00;
-            border-color: #c00;
-        }
-
-        .action-btn.secondary {
-            background: #333;
-            border-color: #333;
-            color: #ffffff;
-        }
-
-        .action-btn.secondary:hover {
-            background: #555;
-            border-color: #555;
-        }
-
-        /* Styles pour les modals */
-        .modal {
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .modal-content {
-            background-color: #111111;
-            border: 1px solid #333;
-            border-radius: 12px;
-            width: 90%;
-            max-width: 500px;
-            max-height: 90vh;
-            overflow-y: auto;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8);
-        }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 24px;
-            border-bottom: 1px solid #333;
-        }
-
-        .modal-header h3 {
-            margin: 0;
-            color: #ffffff;
-            font-size: 1.25rem;
-            font-weight: 600;
-        }
-
-        .close {
-            font-size: 24px;
-            font-weight: bold;
-            cursor: pointer;
-            color: #888;
-            transition: color 0.2s ease;
-        }
-
-        .close:hover {
-            color: #ffffff;
-        }
-
-        .modal-body {
-            padding: 24px;
-            color: #ffffff;
-        }
-
-        .modal-body p {
-            margin-bottom: 15px;
-            line-height: 1.6;
-            color: #cccccc;
-        }
-
-        .modal-body ul {
-            margin: 15px 0;
-            padding-left: 25px;
-        }
-
-        .modal-body li {
-            margin-bottom: 8px;
-            color: #cccccc;
-        }
-
-        .modal-body label {
-            color: #ffffff;
-            font-weight: 500;
-            margin-bottom: 8px;
-            display: block;
-        }
-
-        .modal-body input,
-        .modal-body select,
-        .modal-body textarea {
-            background: #000000;
-            border: 1px solid #333;
-            color: #ffffff;
-            border-radius: 8px;
-            padding: 12px;
-            font-size: 0.875rem;
-        }
-
-        .modal-body input:focus,
-        .modal-body select:focus,
-        .modal-body textarea:focus {
-            outline: none;
-            border-color: #0070f3;
-        }
-
-        .modal-body input::placeholder {
-            color: #666;
-        }
-
-        .confirmation-input {
-            margin: 20px 0;
-        }
-
-        .confirmation-input label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 500;
-            color: #ffffff;
-        }
-
-        .confirmation-input input {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #333;
-            border-radius: 8px;
-            font-size: 1em;
-            background: #000000;
-            color: #ffffff;
-        }
-
-        .confirmation-input input:focus {
-            outline: none;
-            border-color: #0070f3;
-        }
-
-        .modal-actions {
-            display: flex;
-            gap: 10px;
-            justify-content: flex-end;
-            margin-top: 20px;
-        }
-
-        .modal-actions button {
-            padding: 12px 24px;
-            border: 1px solid #333;
-            border-radius: 8px;
-            font-size: 0.875rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            background: #000000;
-            color: #ffffff;
-        }
-
-        .modal-actions button:hover {
-            border-color: #555;
-            background: #111111;
-        }
-
-        .modal-actions button.primary {
-            background: #0070f3;
-            border-color: #0070f3;
-        }
-
-        .modal-actions button.primary:hover {
-            background: #0051cc;
-            border-color: #0051cc;
-        }
-
-        .modal-actions button.danger {
-            background: #e00;
-            border-color: #e00;
-        }
-
-        .modal-actions button.danger:hover {
-            background: #c00;
-            border-color: #c00;
-        }
-
-        .loading {
-            display: none;
-            text-align: center;
-            margin-top: 20px;
-        }
-
-        .loading.show {
-            display: block;
-        }
-
-        .spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #667eea;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 10px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .help-text {
-            font-size: 0.9em;
-            color: #666;
-            margin-top: 5px;
-        }
-        
-        .checkbox-wrapper {
-            display: flex;
-            align-items: center;
-            margin-bottom: 8px;
-        }
-        
-        .checkbox-input {
-            width: 18px;
-            height: 18px;
-            margin-right: 12px;
-            accent-color: #0070f3;
-            cursor: pointer;
-        }
-        
-        .checkbox-label {
-            color: #ffffff;
-            font-size: 1rem;
-            cursor: pointer;
-            user-select: none;
-            margin-bottom: 0;
-        }
-        
-        .checkbox-label:hover {
-            color: #0070f3;
-        }
-        
-        .control-buttons {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 16px;
-        }
-        
-        .control-btn {
-            padding: 6px 12px;
-            border: 1px solid #333;
-            border-radius: 6px;
-            background: #1a1a1a;
-            color: #ffffff;
-            font-size: 0.8rem;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-        
-        .control-btn:hover {
-            background: #333;
-            transform: translateY(-1px);
-        }
-        
-        .control-btn.start {
-            border-color: #28a745;
-            color: #28a745;
-        }
-        
-        .control-btn.start:hover {
-            background: #28a745;
-            color: #ffffff;
-        }
-        
-        .control-btn.stop {
-            border-color: #dc3545;
-            color: #dc3545;
-        }
-        
-        .control-btn.stop:hover {
-            background: #dc3545;
-            color: #ffffff;
-        }
-        
-        .nextjs-actions {
-            display: flex;
-            gap: 8px;
-            margin-top: 8px;
-        }
-        
-        .nextjs-btn {
-            padding: 4px 8px;
-            border: 1px solid #333;
-            border-radius: 4px;
-            background: #1a1a1a;
-            color: #ffffff;
-            font-size: 0.75rem;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-        
-        .nextjs-btn:hover {
-            background: #333;
-        }
-        
-        .nextjs-btn.add {
-            border-color: #0070f3;
-            color: #0070f3;
-        }
-        
-        .nextjs-btn.add:hover {
-            background: #0070f3;
-            color: #ffffff;
-        }
-        
-        .nextjs-btn.remove {
-            border-color: #dc3545;
-            color: #dc3545;
-        }
-        
-        .nextjs-btn.remove:hover {
-            background: #dc3545;
-            color: #ffffff;
-        }
-
-        @media (max-width: 768px) {
-            .container {
-                padding: 20px;
-                margin: 10px;
-            }
-            
-            .header h1 {
-                font-size: 2em;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <div class="header-content">
-                <h1>🚀 WP Launcher</h1>
-                <p>Gestionnaire de sites WordPress avec Docker</p>
-            </div>
-            <button class="add-site-btn" onclick="openAddSiteModal()">
-                ➕ Ajouter un site
-            </button>
+{% extends "base.html" %}
+
+{% block title %}WordPress Launcher - Dashboard{% endblock %}
+
+{% block content %}
+<!-- Header avec design amélioré -->
+<header class="header">
+        <div class="header-left">
+    <h1 class="header-title">WordPress Launcher</h1>
         </div>
+    <div class="header-center">
+    <div class="search-bar">
+        <i class="fas fa-search search-icon"></i>
+        <input type="text" id="search-input" placeholder="Rechercher un projet..." autocomplete="off">
+        <button class="clear-search" id="clear-search" style="display: none;" onclick="clearSearch()">
+            <i class="fas fa-times"></i>
+        </button>
+    </div> 
+    </div>
+    <div class="header-right">
+     <button class="add-site-btn" onclick="showCreateProjectModal()"><i class="fas fa-plus"></i> Ajouter un site</button>
+    </div>
+</header>
 
-        <!-- Messages flash -->
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert {{ category }}">
-                        {{ message }}
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
+<!-- Stats Section cliquables -->
+<div class="stats-section fade-in">
+    <div class="stat-card" data-filter="all" onclick="filterProjects('all')">
+        <div class="stat-number" id="total-projects">-</div>
+        <div class="stat-label">Projets Total</div>
+        <div class="stat-subtitle">Tous les projets</div>
+    </div>
+    <div class="stat-card" data-filter="active" onclick="filterProjects('active')">
+        <div class="stat-number" id="active-projects">-</div>
+        <div class="stat-label">Projets Actifs</div>
+        <div class="stat-subtitle">En cours d'exécution</div>
+    </div>
+    <div class="stat-card" data-filter="inactive" onclick="filterProjects('inactive')">
+        <div class="stat-number" id="inactive-projects">-</div>
+        <div class="stat-label">Projets Arrêtés</div>
+        <div class="stat-subtitle">Actuellement arrêtés</div>
+    </div>
+    <div class="stat-card" data-filter="nextjs" onclick="filterProjects('nextjs')">
+        <div class="stat-number" id="nextjs-projects">-</div>
+        <div class="stat-label">Avec Next.js</div>
+        <div class="stat-subtitle">Frontend headless</div>
+    </div>
+</div>
 
-        <!-- Section des projets -->
-        <div class="projects-section">
-            <div class="projects-header">
-                <h2>📊 Mes Sites WordPress</h2>
-                <span class="projects-count" id="projectsCount">0 site(s)</span>
+<!-- Indicateur de filtre actif -->
+<div class="filter-indicator" id="filter-indicator" style="display: none;">
+    <span class="filter-text">Filtre actif : <strong id="current-filter">Tous</strong></span>
+    <button class="clear-filter-btn" onclick="clearFilter()">
+        <i class="fas fa-times"></i>
+    </button>
+</div>
+
+<!-- Projects Grid -->
+<div class="projects-grid" id="projects-grid">
+    <div class="project-item fade-in">
+        <div class="empty-state">
+            <i class="fas fa-box-open"></i>
+            <h3>Aucun projet pour le moment</h3>
+            <p>Créez votre premier projet WordPress pour commencer</p>
+        </div>
+    </div>
+</div>
+
+<!-- Bouton Flottant Créer Projet -->
+<button class="create-project-btn" onclick="showCreateProjectModal()" title="Créer un nouveau projet">
+    <i class="fas fa-plus"></i>
+</button>
+
+<!-- Progress bar pour import DB -->
+<div id="import-progress" class="d-none import-progress-sticky">
+    <div class="import-progress-container">
+        <div class="import-progress-header">
+            <div class="import-progress-title">
+                <i class="fas fa-database me-2"></i>
+                Import de base de données
             </div>
-            <div class="projects-list" id="projectsList">
-                <!-- Les projets seront chargés ici -->
+            <div class="import-progress-subtitle">
+                <span id="progress-project-name">-</span>
             </div>
         </div>
+        <div class="progress mb-2">
+            <div id="progress-bar" class="progress-bar" role="progressbar" style="width: 0%"></div>
+        </div>
+        <p id="progress-message" class="mb-0 import-progress-message">Initialisation...</p>
+        <button type="button" class="btn-close-progress" onclick="hideImportProgress()">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+</div>
+{% endblock %}
 
-        <!-- Modal d'ajout de site -->
-        <div id="addSiteModal" class="modal" style="display: none;">
-            <div class="modal-content" style="max-width: 600px;">
-                <div class="modal-header">
-                    <h3>➕ Ajouter un nouveau site WordPress</h3>
-                    <span class="close" id="closeAddSite">&times;</span>
-                </div>
+{% block modals %}
+<!-- Modal Créer Projet -->
+<div class="modal fade" id="createProjectModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-plus-circle me-2"></i>
+                    Créer un nouveau projet
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="createProjectForm" action="/create_project" method="post" enctype="multipart/form-data">
                 <div class="modal-body">
-                    <form method="POST" action="/create_project" enctype="multipart/form-data" id="projectForm">
-                        <div class="form-group">
-                            <label for="project_name">📝 Nom du projet</label>
-                            <input type="text" id="project_name" name="project_name" required 
-                                   placeholder="Ex: mon-super-site">
-                            <div class="help-text">Le nom sera utilisé comme nom de dossier et préfixe Docker</div>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="project_hostname">🌐 Hostname personnalisé (optionnel)</label>
-                            <input type="text" id="project_hostname" name="project_hostname" 
-                                   placeholder="Ex: monsite.local ou monsite.dev">
-                            <div class="help-text">
-                                Si laissé vide, utilisera: <code id="auto-hostname">mon-super-site.local</code><br>
-                                <strong>Note:</strong> L'hostname sera automatiquement ajouté à votre fichier /etc/hosts
-                            </div>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="wp_migrate_archive">📦 Archive WP Migrate Pro (.zip) - <span style="color: #28a745;">OPTIONNEL</span></label>
-                            <div class="file-input-wrapper">
-                                <input type="file" id="wp_migrate_archive" name="wp_migrate_archive" accept=".zip">
-                                <label for="wp_migrate_archive" class="file-input-label" id="wp_migrate_label">
-                                    📁 Sélectionner l'archive ou laissez vide pour un site propre
+                    <div class="row">
+                        <div class="col-md-6">
+                            <!-- Nom du projet -->
+                            <div class="form-group">
+                                <label for="project_name" class="form-label">
+                                    <i class="fas fa-tag me-1"></i>
+                                    Nom du projet *
                                 </label>
+                                <input type="text" class="form-control" id="project_name" name="project_name" required 
+                                       placeholder="mon-site-wordpress" pattern="[a-zA-Z0-9-_]+" 
+                                       title="Lettres, chiffres, tirets et underscores uniquement">
+                                <div class="form-text">Lettres, chiffres, tirets et underscores uniquement</div>
                             </div>
-                            <div class="help-text">
-                                <strong>📦 Avec archive WP Migrate Pro :</strong> Restaure automatiquement votre wp-content et base de données<br>
-                                <strong>📁 Structure attendue :</strong> <code>app/public/wp-content/</code> et <code>app/sql/local.sql</code><br>
-                                <strong>🆕 Sans archive :</strong> Crée un site WordPress neuf avec les thèmes par défaut
-                            </div>
-                        </div>
 
-                        <div class="form-group">
-                            <div class="checkbox-wrapper">
-                                <input type="checkbox" id="enable_nextjs" name="enable_nextjs" class="checkbox-input">
-                                <label for="enable_nextjs" class="checkbox-label">
-                                    ⚡ Inclure Next.js (Frontend headless)
+                            <!-- Hostname (optionnel) -->
+                            <div class="form-group">
+                                <label for="project_hostname" class="form-label">
+                                    <i class="fas fa-globe me-1"></i>
+                                    Hostname (optionnel)
                                 </label>
+                                <input type="text" class="form-control" id="project_hostname" name="project_hostname" 
+                                       placeholder="mon-site.local">
+                                <div class="form-text">Sera généré automatiquement si vide</div>
                             </div>
-                            <div class="help-text">
-                                <strong>⚡ Next.js inclus :</strong> Ajoute un service Next.js pour développer un frontend React<br>
-                                <strong>🔗 WordPress Headless :</strong> Utilisez l'API REST WordPress comme backend<br>
-                                <strong>📁 Structure :</strong> Un dossier <code>nextjs/</code> avec package.json sera créé
+
+                            <!-- Option Next.js -->
+                            <div class="form-group">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="enable_nextjs" name="enable_nextjs">
+                                    <label class="form-check-label" for="enable_nextjs">
+                                        <i class="fab fa-react me-1"></i>
+                                        Activer Next.js (frontend headless)
+                                    </label>
+                                </div>
+                                <div class="form-text">Ajoute un conteneur Next.js pour du développement headless</div>
                             </div>
                         </div>
-
-                        <div class="modal-actions">
-                            <button type="button" class="btn-cancel" onclick="closeAddSiteModal()">Annuler</button>
-                            <button type="submit" class="submit-btn" id="submitBtn">
-                                🚀 Créer le projet WordPress
-                            </button>
-                        </div>
-                    </form>
-
-                    <div class="loading" id="loading">
-                        <div class="spinner"></div>
-                        <p>Création du projet en cours...<br>
-                        <small>Cela peut prendre quelques minutes</small></p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Modal pour réuploader la base de données -->
-        <div id="updateDbModal" class="modal" style="display: none;">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h3>🔄 Mettre à jour la base de données</h3>
-                    <span class="close" id="closeUpdateDb">&times;</span>
-                </div>
-                <div class="modal-body">
-                    <p><strong>Projet :</strong> <span id="updateDbProjectName"></span></p>
-                    <p><strong>⚠️ Attention :</strong> Cette action va <strong>écraser complètement</strong> la base de données existante. Toutes les données actuelles seront perdues.</p>
-                    
-                    <form id="updateDbForm" enctype="multipart/form-data">
-                        <div class="form-group">
-                            <label for="new_db_file">🗃️ Nouvelle base de données (.sql ou .zip)</label>
-                            <div class="file-input-wrapper">
-                                <input type="file" id="new_db_file" name="new_db_file" accept=".sql,.zip" required>
-                                <label for="new_db_file" class="file-input-label" id="new_db_label">
-                                    📄 Sélectionner le nouveau fichier de base de données
+                        <div class="col-md-6">
+                            <!-- Archive WP Migrate Pro -->
+                            <div class="form-group">
+                                <label for="wp_migrate_archive" class="form-label">
+                                    <i class="fas fa-file-archive me-1"></i>
+                                    Archive WP Migrate Pro (optionnel)
                                 </label>
+                                <div class="upload-zone" id="upload-zone">
+                                    <input type="file" class="form-control" id="wp_migrate_archive" name="wp_migrate_archive" 
+                                           accept=".zip,.sql,.gz" style="display: none;">
+                                    <div class="upload-content text-center">
+                                        <i class="fas fa-cloud-upload-alt"></i>
+                                        <p class="mb-1">Glissez-déposez votre archive</p>
+                                        <p class="small">ou cliquez pour sélectionner</p>
+                                        <div class="upload-types">
+                                            <span class="badge">ZIP</span>
+                                            <span class="badge">SQL</span>
+                                            <span class="badge">GZ</span>
+                                        </div>
+                                    </div>
+                                    <div class="upload-file-info d-none">
+                                        <i class="fas fa-file me-2"></i>
+                                        <span class="file-name"></span>
+                                        <button type="button" class="btn btn-sm btn-danger ms-2" onclick="clearFile()">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="form-text">Archive d'export WP Migrate Pro ou fichier SQL</div>
                             </div>
                         </div>
-                        
-                        <div class="modal-actions">
-                            <button type="button" class="btn-cancel" id="cancelUpdateDb">Annuler</button>
-                            <button type="submit" class="btn-danger">🔄 Mettre à jour la base de données</button>
-                        </div>
-                    </form>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-modern btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-2"></i>
+                        Annuler
+                    </button>
+                    <button type="submit" class="btn-modern btn-start">
+                        <i class="fas fa-rocket me-2"></i>
+                        Créer le projet
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de confirmation de suppression -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Confirmer la suppression
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Êtes-vous sûr de vouloir supprimer le projet <strong id="delete-project-name"></strong> ?</p>
+                <div class="alert alert-warning" style="background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); color: var(--text-primary); border-radius: 12px;">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Cette action est irréversible. Tous les fichiers et la base de données seront supprimés.
                 </div>
             </div>
-        </div>
-
-        <!-- Modal pour supprimer le projet -->
-        <div id="deleteProjectModal" class="modal" style="display: none;">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h3>🗑️ Supprimer le projet</h3>
-                    <span class="close" id="closeDeleteProject">&times;</span>
-                </div>
-                <div class="modal-body">
-                    <p><strong>Projet :</strong> <span id="deleteProjectName"></span></p>
-                    <p><strong>⚠️ ATTENTION :</strong> Cette action est <strong>irréversible</strong> et va :</p>
-                    <ul>
-                        <li>🛑 Arrêter tous les conteneurs Docker</li>
-                        <li>🗑️ Supprimer tous les conteneurs et images</li>
-                        <li>💾 Supprimer tous les volumes de données</li>
-                        <li>📁 Supprimer tous les fichiers du projet</li>
-                    </ul>
-                    <p><strong>Toutes les données seront perdues définitivement.</strong></p>
-                    
-                    <div class="confirmation-input">
-                        <label for="deleteConfirmation">Pour confirmer, tapez le nom du projet :</label>
-                        <input type="text" id="deleteConfirmation" placeholder="Nom du projet">
-                    </div>
-                    
-                    <div class="modal-actions">
-                        <button type="button" class="btn-cancel" id="cancelDeleteProject">Annuler</button>
-                        <button type="button" class="btn-danger" id="confirmDeleteProject" disabled>🗑️ Supprimer définitivement</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Modal pour éditer l'hostname -->
-        <div id="editHostnameModal" class="modal" style="display: none;">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h3>✏️ Éditer l'hostname</h3>
-                    <span class="close" id="closeEditHostname">&times;</span>
-                </div>
-                <div class="modal-body">
-                    <p><strong>Projet :</strong> <span id="editHostnameProjectName"></span></p>
-                    <p><strong>Hostname actuel :</strong> <span id="currentHostname"></span></p>
-                    
-                    <form id="editHostnameForm">
-                        <div class="form-group">
-                            <label for="new_hostname">🌐 Nouveau hostname</label>
-                            <input type="text" id="new_hostname" name="new_hostname" placeholder="mon-nouveau-site.local" required>
-                            <small style="color: #666; font-size: 0.85em;">
-                                💡 Utilisez des caractères alphanumériques et des tirets. Évitez les espaces et caractères spéciaux.<br>
-                                ⚠️ <strong>Important</strong> : Si vous avez GitLab sur le port 80, accédez via hostname:8080
-                            </small>
-                        </div>
-                        
-                        <div class="modal-actions">
-                            <button type="button" class="btn-cancel" id="cancelEditHostname">Annuler</button>
-                            <button type="submit" class="btn-info">✏️ Mettre à jour l'hostname</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-
-        <!-- Modal de progression d'import -->
-        <div id="progressModal" class="modal" style="display: none;">
-            <div class="modal-content" style="max-width: 500px;">
-                <div class="modal-header">
-                    <h3>📊 Import de base de données en cours</h3>
-                </div>
-                <div class="modal-body">
-                    <div class="progress-container" style="margin: 20px 0;">
-                        <div class="progress-bar-wrapper" style="background: #e0e0e0; border-radius: 10px; overflow: hidden; height: 30px; position: relative;">
-                            <div id="progressBar" class="progress-bar" style="
-                                height: 100%; 
-                                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                                border-radius: 10px; 
-                                transition: width 0.3s ease;
-                                width: 0%;
-                                display: flex;
-                                align-items: center;
-                                justify-content: center;
-                                color: white;
-                                font-weight: bold;
-                            ">
-                                <span id="progressText">0%</span>
-                            </div>
-                        </div>
-                        <p id="progressMessage" style="text-align: center; margin-top: 10px; color: #666;">Initialisation...</p>
-                    </div>
-                    <div style="text-align: center; margin-top: 20px;">
-                        <p style="color: #666; font-size: 0.9em;">
-                            ⏳ L'import peut prendre plusieurs minutes pour les gros fichiers.<br>
-                        </p>
-                    </div>
-                </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-modern btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn-modern btn-danger" id="confirm-delete">
+                    <i class="fas fa-trash me-2"></i>
+                    Supprimer définitivement
+                </button>
             </div>
         </div>
     </div>
+</div>
 
-    <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
-    <script>
-        // Initialiser Socket.IO
-        const socket = io();
+<!-- Modal d'édition d'hostname -->
+<div class="modal fade" id="hostnameModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-globe me-2"></i>
+                    Modifier l'hostname
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="hostname-form">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="new-hostname" class="form-label">Nouvel hostname</label>
+                        <input type="text" class="form-control" id="new-hostname" name="new_hostname" required>
+                        <div class="form-text">Format: example.local ou example.dev</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-modern btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn-modern btn-start">
+                        <i class="fas fa-save me-2"></i>
+                        Sauvegarder
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal mise à jour DB -->
+<div class="modal fade" id="updateDbModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-database me-2"></i>
+                    Mettre à jour la base de données
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="update-db-form" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <div class="alert alert-info" style="background: rgba(23, 162, 184, 0.1); border: 1px solid rgba(23, 162, 184, 0.3); color: var(--text-primary); border-radius: 12px;">
+                        <i class="fas fa-info-circle me-2"></i>
+                        La nouvelle base de données remplacera complètement l'existante.
+                    </div>
+                    <div class="form-group">
+                        <label for="db-file" class="form-label">Fichier de base de données</label>
+                        <input type="file" class="form-control" id="db-file" name="db_file" 
+                               accept=".sql,.zip,.gz" required>
+                        <div class="form-text">Formats acceptés: SQL, ZIP, GZ</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-modern btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn-modern btn-start">
+                        <i class="fas fa-upload me-2"></i>
+                        Importer
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/projects.js') }}"></script>
+<script src="{{ url_for('static', filename='js/upload.js') }}"></script>
+
+<script>
+// Initialisation SocketIO pour les progress bars
+const socket = io();
+
+// Variables globales
+let projects = [];
+
+// Fonction pour afficher le modal de création
+function showCreateProjectModal() {
+    const modal = new bootstrap.Modal(document.getElementById('createProjectModal'));
+    modal.show();
+}
+
+// Fonction pour charger les projets
+async function loadProjects() {
+    try {
+        const response = await fetch('/projects_with_status');
+        const data = await response.json();
+        projects = data.projects || [];
         
-        // Écouter les mises à jour de progression
-        socket.on('import_progress', function(data) {
-            updateProgressBar(data);
-        });
+        // Mettre à jour les données pour le filtrage
+        if (typeof updateProjectsList === 'function') {
+            updateProjectsList(projects);
+        }
         
-        // Fonction pour mettre à jour la progress bar
-        function updateProgressBar(data) {
-            const progressModal = document.getElementById('progressModal');
-            const progressBar = document.getElementById('progressBar');
-            const progressText = document.getElementById('progressText');
-            const progressMessage = document.getElementById('progressMessage');
+        updateStats();
+        
+        // Si le système de filtrage n'est pas disponible, utiliser le rendu classique
+        if (typeof filterAndRenderProjects === 'function') {
+            filterAndRenderProjects();
+        } else {
+            renderProjects();
+        }
+    } catch (error) {
+        console.error('Erreur lors du chargement des projets:', error);
+        showError('Erreur lors du chargement des projets');
+    }
+}
+
+// Fonction pour mettre à jour les statistiques
+function updateStats() {
+    const totalProjects = projects.length;
+    const activeProjects = projects.filter(p => p.status === 'active').length;
+    const inactiveProjects = projects.filter(p => p.status === 'inactive').length;
+    const nextjsProjects = projects.filter(p => p.nextjs_enabled).length;
+    
+    document.getElementById('total-projects').textContent = totalProjects;
+    document.getElementById('active-projects').textContent = activeProjects;
+    document.getElementById('inactive-projects').textContent = inactiveProjects;
+    document.getElementById('nextjs-projects').textContent = nextjsProjects;
+}
+
+// Fonction pour rendre les projets (fallback si le système de filtrage n'est pas disponible)
+function renderProjects() {
+    const container = document.getElementById('projects-grid');
+    
+    if (projects.length === 0) {
+        container.innerHTML = `
+            <div class="project-item fade-in">
+                <div class="empty-state">
+                    <i class="fas fa-box-open"></i>
+                    <h3>Aucun projet pour le moment</h3>
+                    <p>Créez votre premier projet WordPress pour commencer</p>
+                </div>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = projects.map(project => createProjectHTML(project)).join('');
+    
+    // Ajouter les animations
+    const items = container.querySelectorAll('.project-item');
+    items.forEach((item, index) => {
+        item.style.animationDelay = `${index * 0.1}s`;
+        item.classList.add('slide-in');
+    });
+}
+
+// Fonction pour créer le HTML d'un projet
+function createProjectHTML(project) {
+    const statusClass = project.status === 'active' ? 'active' : 'inactive';
+    const statusText = project.status === 'active' ? 'Actif' : 'Arrêté';
+    
+    // Services disponibles
+    const services = [];
+    if (project.status === 'active') {
+        services.push({
+            name: 'WordPress',
+            icon: 'fab fa-wordpress',
+            url: `http://192.168.1.21:${project.port}`,
+            port: project.port
+        });
+        services.push({
+            name: 'phpMyAdmin',
+            icon: 'fas fa-database',
+            url: `http://192.168.1.21:${project.pma_port}`,
+            port: project.pma_port
+        });
+        if (project.nextjs_enabled && project.nextjs_port) {
+            services.push({
+                name: 'Next.js',
+                icon: 'fab fa-react',
+                url: `http://192.168.1.21:${project.nextjs_port}`,
+                port: project.nextjs_port
+            });
+        }
+    }
+    
+    return `
+        <div class="project-item">
+            <div class="project-header">
+                <div>
+                    <div class="project-title">${project.name}</div>
+                    <div class="project-subtitle">
+                        <i class="fas fa-globe me-1"></i>
+                        ${project.hostname || project.name + '.local'}
+                    </div>
+                </div>
+                <div class="project-status">
+                    <div class="status-dot ${statusClass}"></div>
+                    ${statusText}
+                </div>
+            </div>
             
-            // Afficher le modal de progression si ce n'est pas déjà fait
-            if (data.progress > 0 && data.status !== 'completed' && data.status !== 'error') {
-                progressModal.style.display = 'flex';
-            }
+            ${services.length > 0 ? `
+                <div class="services-grid">
+                    ${services.map(service => `
+                        <a href="${service.url}" target="_blank" class="service-card">
+                            <i class="${service.icon} service-icon"></i>
+                            <div class="service-name">${service.name}</div>
+                            <div class="service-port">:${service.port}</div>
+                        </a>
+                    `).join('')}
+                </div>
+            ` : ''}
             
-            // Mettre à jour la progress bar
-            progressBar.style.width = data.progress + '%';
-            progressText.textContent = data.progress + '%';
-            progressMessage.textContent = data.message;
-            
-            // Changer la couleur selon le statut
-            if (data.status === 'error') {
-                progressBar.style.background = 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)';
-                progressText.textContent = 'Erreur !';
+            <div class="project-actions">
+                ${project.status === 'active' ? `
+                    <button class="btn-modern btn-stop" onclick="stopProject('${project.name}')">
+                        <i class="fas fa-stop me-1"></i>
+                        Arrêter
+                    </button>
+                ` : `
+                    <button class="btn-modern btn-start" onclick="startProject('${project.name}')">
+                        <i class="fas fa-play me-1"></i>
+                        Démarrer
+                    </button>
+                `}
                 
-                // Fermer le modal après 3 secondes
-                setTimeout(() => {
-                    progressModal.style.display = 'none';
-                }, 3000);
-            } else if (data.status === 'completed') {
-                progressBar.style.background = 'linear-gradient(135deg, #28a745 0%, #20c997 100%)';
-                progressText.textContent = '✅ Terminé !';
+                <button class="btn-modern btn-secondary" onclick="editHostname('${project.name}', '${project.hostname || project.name + '.local'}')">
+                    <i class="fas fa-edit me-1"></i>
+                    Hostname
+                </button>
                 
-                // Fermer le modal après 2 secondes et recharger les projets
-                setTimeout(() => {
-                    progressModal.style.display = 'none';
-                    loadProjects(); // Recharger la liste des projets
-                }, 2000);
+                <button class="btn-modern btn-secondary" onclick="updateDatabase('${project.name}')">
+                    <i class="fas fa-database me-1"></i>
+                    Import SQL
+                </button>
+                
+                ${project.nextjs_enabled ? `
+                    <button class="btn-modern btn-secondary" onclick="removeNextjs('${project.name}')">
+                        <i class="fab fa-react me-1"></i>
+                        Suppr Next.js
+                    </button>
+                ` : `
+                    <button class="btn-modern btn-secondary" onclick="addNextjs('${project.name}')">
+                        <i class="fab fa-react me-1"></i>
+                        Ajouter Next.js
+                    </button>
+                `}
+                
+                <button class="btn-modern btn-danger" onclick="deleteProject('${project.name}')">
+                    <i class="fas fa-trash me-1"></i>
+                    Supprimer
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+// Fonction pour rafraîchir les projets
+function refreshProjects() {
+    loadProjects();
+}
+
+// Chargement initial
+document.addEventListener('DOMContentLoaded', function() {
+    loadProjects();
+    
+    // Rafraîchir automatiquement toutes les 30 secondes
+    setInterval(loadProjects, 30000);
+    
+    // Initialiser la gestion des fichiers
+    initFileUpload();
+    
+    // Initialiser la gestion du formulaire
+    initCreateProjectForm();
+});
+
+// Initialisation de l'upload de fichiers
+function initFileUpload() {
+    const uploadZone = document.getElementById('upload-zone');
+    const fileInput = document.getElementById('wp_migrate_archive');
+    const uploadContent = uploadZone.querySelector('.upload-content');
+    const fileInfo = uploadZone.querySelector('.upload-file-info');
+    const fileName = fileInfo.querySelector('.file-name');
+    
+    // Clic sur la zone d'upload
+    uploadZone.addEventListener('click', function() {
+        fileInput.click();
+    });
+    
+    // Changement de fichier
+    fileInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            showFileInfo(file);
+        }
+    });
+    
+    // Drag & Drop
+    uploadZone.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        uploadZone.classList.add('dragover');
+    });
+    
+    uploadZone.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        uploadZone.classList.remove('dragover');
+    });
+    
+    uploadZone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        uploadZone.classList.remove('dragover');
+        
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            const file = files[0];
+            fileInput.files = files;
+            showFileInfo(file);
+        }
+    });
+    
+    function showFileInfo(file) {
+        const allowedTypes = ['application/zip', 'application/sql', 'application/gzip', 'application/x-gzip', 'text/plain'];
+        const allowedExtensions = ['.zip', '.sql', '.gz'];
+        
+        // Vérifier l'extension
+        const extension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+        if (!allowedExtensions.includes(extension)) {
+            showError('Type de fichier non autorisé. Utilisez .zip, .sql ou .gz');
+            fileInput.value = '';
+            return;
+        }
+        
+        // Vérifier la taille (100MB max)
+        if (file.size > 100 * 1024 * 1024) {
+            showError('Fichier trop volumineux. Taille maximale : 100MB');
+            fileInput.value = '';
+            return;
+        }
+        
+        // Afficher les informations du fichier
+        fileName.textContent = file.name;
+        uploadContent.classList.add('d-none');
+        fileInfo.classList.remove('d-none');
+    }
+}
+
+// Fonction pour effacer le fichier sélectionné
+function clearFile() {
+    const fileInput = document.getElementById('wp_migrate_archive');
+    const uploadZone = document.getElementById('upload-zone');
+    const uploadContent = uploadZone.querySelector('.upload-content');
+    const fileInfo = uploadZone.querySelector('.upload-file-info');
+    
+    fileInput.value = '';
+    uploadContent.classList.remove('d-none');
+    fileInfo.classList.add('d-none');
+}
+
+// Initialisation du formulaire de création de projet
+function initCreateProjectForm() {
+    const form = document.getElementById('createProjectForm');
+    
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(form);
+        const submitButton = form.querySelector('button[type="submit"]');
+        
+        // Validation
+        const projectName = formData.get('project_name');
+        if (!projectName || !projectName.match(/^[a-zA-Z0-9-_]+$/)) {
+            showError('Le nom du projet doit contenir uniquement des lettres, chiffres, tirets et underscores');
+            return;
+        }
+        
+        // Désactiver le bouton et afficher le loader
+        submitButton.classList.add('loading');
+        submitButton.disabled = true;
+        
+        // Envoyer la requête
+        fetch('/create_project', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showSuccess('Projet créé avec succès !');
+                // Fermer le modal
+                const modal = bootstrap.Modal.getInstance(document.getElementById('createProjectModal'));
+                modal.hide();
+                // Réinitialiser le formulaire
+                form.reset();
+                clearFile();
+                // Recharger les projets
+                setTimeout(() => loadProjects(), 1000);
             } else {
-                // Couleur par défaut
-                progressBar.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                showError(data.message || 'Erreur lors de la création du projet');
             }
-        }
-
-        // Mise à jour automatique de l'hostname suggéré
-        document.getElementById('project_name').addEventListener('input', function(e) {
-            const projectName = e.target.value;
-            const autoHostname = document.getElementById('auto-hostname');
-            if (projectName) {
-                const cleanName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-');
-                autoHostname.textContent = cleanName + '.local';
-            } else {
-                autoHostname.textContent = 'mon-super-site.local';
-            }
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            showError('Erreur lors de la création du projet');
+        })
+        .finally(() => {
+            submitButton.classList.remove('loading');
+            submitButton.disabled = false;
         });
+    });
+    
+    // Réinitialiser le formulaire à la fermeture du modal
+    const modal = document.getElementById('createProjectModal');
+    modal.addEventListener('hidden.bs.modal', function() {
+        form.reset();
+        clearFile();
+    });
+}
 
-        // Gestion du label du fichier WP Migrate Pro
-        document.getElementById('wp_migrate_archive').addEventListener('change', function(e) {
-            const label = document.getElementById('wp_migrate_label');
-            const fileName = e.target.files[0] ? e.target.files[0].name : '';
-            if (fileName) {
-                label.textContent = `✅ ${fileName}`;
-                label.classList.add('has-file');
-            } else {
-                label.textContent = '📁 Sélectionner l\'archive ou laissez vide pour un site propre';
-                label.classList.remove('has-file');
-            }
-        });
+// Fonction pour cacher la barre de progression
+function hideImportProgress() {
+    const progressDiv = document.getElementById('import-progress');
+    if (progressDiv) {
+        progressDiv.classList.add('d-none');
+        document.body.classList.remove('import-progress-visible');
+    }
+}
 
-        // Gestion du formulaire
-        document.getElementById('projectForm').addEventListener('submit', function(e) {
-            document.getElementById('loading').classList.add('show');
-            document.getElementById('submitBtn').disabled = true;
-            document.getElementById('submitBtn').textContent = 'Création en cours...';
-        });
+// Fonction pour afficher la barre de progression
+function showImportProgress() {
+    const progressDiv = document.getElementById('import-progress');
+    if (progressDiv) {
+        progressDiv.classList.remove('d-none');
+        document.body.classList.add('import-progress-visible');
+    }
+}
 
-        // Fermer le modal d'ajout après création réussie
-        // Cette fonction sera appelée par le rechargement de page ou après succès
-        function checkForSuccess() {
-            const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.get('created') === 'success') {
-                closeAddSiteModal();
-                loadProjects();
-                // Nettoyer l'URL
-                window.history.replaceState({}, document.title, window.location.pathname);
-            }
-        }
+// Gestion des progress bars SocketIO (uniquement pour import DB)
+socket.on('import_progress', function(data) {
+    // Vérifier que c'est bien un import de base de données
+    if (!data.type || data.type !== 'database_import') {
+        return; // Ignorer les autres types d'événements
+    }
+    
+    const progressDiv = document.getElementById('import-progress');
+    const progressBar = document.getElementById('progress-bar');
+    const progressMessage = document.getElementById('progress-message');
+    const progressProject = document.getElementById('progress-project-name');
+    
+    if (!progressDiv || !progressBar || !progressMessage || !progressProject) {
+        return;
+    }
+    
+    showImportProgress();
+    progressBar.style.width = data.progress + '%';
+    progressMessage.textContent = data.message;
+    progressProject.textContent = data.project;
+    
+    if (data.status === 'complete' || data.status === 'error') {
+        setTimeout(() => {
+            hideImportProgress();
+            loadProjects(); // Recharger les projets
+        }, 3000);
+    }
+});
 
-        // Vérifier au chargement de la page
-        window.addEventListener('load', checkForSuccess);
+// Notifications toast
+function showSuccess(message) {
+    // Créer un toast de succès
+    const toast = document.createElement('div');
+    toast.className = 'toast align-items-center text-white bg-success border-0';
+    toast.setAttribute('role', 'alert');
+    toast.style.position = 'fixed';
+    toast.style.top = '20px';
+    toast.style.right = '20px';
+    toast.style.zIndex = '9999';
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                <i class="fas fa-check-circle me-2"></i>
+                ${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    `;
+    
+    document.body.appendChild(toast);
+    const bsToast = new bootstrap.Toast(toast);
+    bsToast.show();
+    
+    toast.addEventListener('hidden.bs.toast', () => {
+        document.body.removeChild(toast);
+    });
+}
 
-        // Variables globales pour les infos serveur
-        let serverInfo = { server_ip: '127.0.0.1', wordpress_port: 8080 };
-
-        // Fonction pour charger les informations du serveur
-        function loadServerInfo() {
-            fetch('/server_info')
-                .then(response => response.json())
-                .then(info => {
-                    serverInfo = info;
-                    // Recharger les projets avec les nouvelles infos
-                    loadProjects();
-                })
-                .catch(error => {
-                    console.error('Erreur lors du chargement des infos serveur:', error);
-                    // Continuer avec les valeurs par défaut
-                    loadProjects();
-                });
-        }
-
-        // Charger la liste des projets avec leurs statuts
-        function loadProjects() {
-            fetch('/projects_with_status')
-                .then(response => response.json())
-                .then(projects => {
-                    const projectsList = document.getElementById('projectsList');
-                    if (projects.length === 0) {
-                        projectsList.innerHTML = '<p style="text-align: center; color: #666;">Aucun projet créé pour le moment</p>';
-                    } else {
-                        // Mettre à jour le compteur
-                        document.getElementById('projectsCount').textContent = `${projects.length} site${projects.length > 1 ? 's' : ''}`;
-                        
-                        projectsList.innerHTML = projects.map(project => 
-                            `<div class="project-item">
-                                <div class="project-header">
-                                    <div class="project-name">
-                                        <span>🚀 ${project.name}</span>
-                                    </div>
-                                    <span class="project-status ${project.status}">${project.status === 'active' ? 'Active' : 'Inactive'}</span>
-                                </div>
-                                <div class="control-buttons">
-                                    <button class="control-btn start" onclick="startProject('${project.name}')" title="Démarrer tous les conteneurs">
-                                        ▶️ Start
-                                    </button>
-                                    <button class="control-btn stop" onclick="stopProject('${project.name}')" title="Arrêter tous les conteneurs">
-                                        ⏹️ Stop
-                                    </button>
-                                </div>
-                                <div class="project-info">
-                                    <div class="project-urls">
-                                        <div class="url-card" onclick="openProjectSite('${serverInfo.server_ip}', ${project.port || 8080})">
-                                            <div class="url-card-header">
-                                                <span class="url-card-title">🌐 WordPress</span>
-                                            </div>
-                                            <div class="url-card-url">http://${serverInfo.server_ip}:${project.port || 8080}</div>
-                                        </div>
-                                        ${project.pma_port ? `
-                                        <div class="url-card" onclick="openProjectSite('${serverInfo.server_ip}', ${project.pma_port})">
-                                            <div class="url-card-header">
-                                                <span class="url-card-title">🔧 phpMyAdmin</span>
-                                            </div>
-                                            <div class="url-card-url">http://${serverInfo.server_ip}:${project.pma_port}</div>
-                                        </div>` : ''}
-                                        ${project.mailpit_port ? `
-                                        <div class="url-card" onclick="openProjectSite('${serverInfo.server_ip}', ${project.mailpit_port})">
-                                            <div class="url-card-header">
-                                                <span class="url-card-title">📧 Mailpit</span>
-                                            </div>
-                                            <div class="url-card-url">http://${serverInfo.server_ip}:${project.mailpit_port}</div>
-                                        </div>` : ''}
-                                        ${project.nextjs_port ? `
-                                        <div class="url-card" onclick="openProjectSite('${serverInfo.server_ip}', ${project.nextjs_port})">
-                                            <div class="url-card-header">
-                                                <span class="url-card-title">⚡ Next.js</span>
-                                            </div>
-                                            <div class="url-card-url">http://${serverInfo.server_ip}:${project.nextjs_port}</div>
-                                        </div>` : ''}
-                                    </div>
-                                    <div class="project-actions">
-                                        <button class="action-btn secondary" onclick="openEditHostnameModal('${project.name}', '${project.hostname || project.name + '.local'}')" title="Éditer l'hostname">
-                                            ✏️ Éditer
-                                        </button>
-                                        <button class="action-btn warning" onclick="openUpdateDbModal('${project.name}')" title="Mettre à jour la base de données">
-                                            🔄 Mettre à jour DB
-                                        </button>
-                                        <button class="action-btn danger" onclick="openDeleteProjectModal('${project.name}')" title="Supprimer le projet">
-                                            🗑️ Supprimer
-                                        </button>
-                                    </div>
-                                    <div class="nextjs-actions">
-                                        ${project.nextjs_port ? `
-                                        <button class="nextjs-btn remove" onclick="removeNextjs('${project.name}')" title="Supprimer Next.js">
-                                            🗑️ Supprimer Next.js
-                                        </button>` : `
-                                        <button class="nextjs-btn add" onclick="addNextjs('${project.name}')" title="Ajouter Next.js">
-                                            ⚡ Ajouter Next.js
-                                        </button>`}
-                                    </div>
-                                </div>
-                            </div>`
-                        ).join('');
-                    }
-                })
-                .catch(error => {
-                    console.error('Erreur lors du chargement des projets:', error);
-                });
-        }
-
-        // Ouvrir le site du projet
-        function openProjectSite(hostname, port = 8080) {
-            // Ouvrir le site avec l'hostname personnalisé sur le port spécifique
-            const siteUrl = `http://${hostname}:${port}`;
-            window.open(siteUrl, '_blank');
-        }
-
-        // Démarrer un projet
-        function startProject(projectName) {
-            if (confirm(`Démarrer tous les conteneurs du projet "${projectName}" ?`)) {
-                fetch(`/start_project/${projectName}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert(`✅ ${data.message}`);
-                        loadProjects(); // Recharger les projets
-                    } else {
-                        alert(`❌ ${data.message}`);
-                    }
-                })
-                .catch(error => {
-                    console.error('Erreur:', error);
-                    alert('❌ Erreur lors du démarrage du projet');
-                });
-            }
-        }
-
-        // Arrêter un projet
-        function stopProject(projectName) {
-            if (confirm(`Arrêter tous les conteneurs du projet "${projectName}" ?`)) {
-                fetch(`/stop_project/${projectName}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert(`✅ ${data.message}`);
-                        loadProjects(); // Recharger les projets
-                    } else {
-                        alert(`❌ ${data.message}`);
-                    }
-                })
-                .catch(error => {
-                    console.error('Erreur:', error);
-                    alert('❌ Erreur lors de l\'arrêt du projet');
-                });
-            }
-        }
-
-        // Ajouter Next.js à un projet
-        function addNextjs(projectName) {
-            if (confirm(`Ajouter Next.js au projet "${projectName}" ?`)) {
-                fetch(`/add_nextjs/${projectName}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert(`✅ ${data.message}`);
-                        loadProjects(); // Recharger les projets
-                    } else {
-                        alert(`❌ ${data.message}`);
-                    }
-                })
-                .catch(error => {
-                    console.error('Erreur:', error);
-                    alert('❌ Erreur lors de l\'ajout de Next.js');
-                });
-            }
-        }
-
-        // Supprimer Next.js d'un projet
-        function removeNextjs(projectName) {
-            if (confirm(`Supprimer Next.js du projet "${projectName}" ?\n\nCela va :\n- Arrêter le conteneur Next.js\n- Supprimer la configuration Next.js\n- Conserver le dossier nextjs/`)) {
-                fetch(`/remove_nextjs/${projectName}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert(`✅ ${data.message}`);
-                        loadProjects(); // Recharger les projets
-                    } else {
-                        alert(`❌ ${data.message}`);
-                    }
-                })
-                .catch(error => {
-                    console.error('Erreur:', error);
-                    alert('❌ Erreur lors de la suppression de Next.js');
-                });
-            }
-        }
-
-        // Ouvrir le modal de mise à jour de la base de données
-        function openUpdateDbModal(projectName) {
-            document.getElementById('updateDbProjectName').textContent = projectName;
-            document.getElementById('updateDbModal').style.display = 'flex';
-        }
-
-        // Ouvrir le modal de suppression de projet
-        function openDeleteProjectModal(projectName) {
-            document.getElementById('deleteProjectName').textContent = projectName;
-            document.getElementById('deleteConfirmation').value = '';
-            document.getElementById('confirmDeleteProject').disabled = true;
-            document.getElementById('deleteProjectModal').style.display = 'flex';
-        }
-
-        // Ouvrir le modal d'édition d'hostname
-        function openEditHostnameModal(projectName, currentHostname) {
-            document.getElementById('editHostnameProjectName').textContent = projectName;
-            document.getElementById('currentHostname').textContent = currentHostname;
-            document.getElementById('new_hostname').value = currentHostname;
-            document.getElementById('editHostnameModal').style.display = 'flex';
-        }
-
-        // Ouvrir le modal d'ajout de site
-        function openAddSiteModal() {
-            document.getElementById('addSiteModal').style.display = 'flex';
-            // Réinitialiser le formulaire
-            document.getElementById('projectForm').reset();
-            document.getElementById('wp_migrate_label').textContent = '📁 Sélectionner l\'archive ou laissez vide pour un site propre';
-            document.getElementById('wp_migrate_label').classList.remove('has-file');
-            document.getElementById('loading').classList.remove('show');
-            document.getElementById('submitBtn').disabled = false;
-            document.getElementById('submitBtn').textContent = '🚀 Créer le projet WordPress';
-        }
-
-        // Fermer le modal d'ajout de site
-        function closeAddSiteModal() {
-            document.getElementById('addSiteModal').style.display = 'none';
-        }
-
-        // Fermer les modals
-        function closeModals() {
-            document.getElementById('updateDbModal').style.display = 'none';
-            document.getElementById('deleteProjectModal').style.display = 'none';
-            document.getElementById('editHostnameModal').style.display = 'none';
-            document.getElementById('addSiteModal').style.display = 'none';
-        }
-
-        // Gestionnaire pour le fichier de base de données
-        document.getElementById('new_db_file').addEventListener('change', function(e) {
-            const label = document.getElementById('new_db_label');
-            const fileName = e.target.files[0] ? e.target.files[0].name : '';
-            if (fileName) {
-                label.textContent = `✅ ${fileName}`;
-                label.classList.add('has-file');
-            } else {
-                label.textContent = '📄 Sélectionner le nouveau fichier de base de données';
-                label.classList.remove('has-file');
-            }
-        });
-
-        // Gestionnaire pour la confirmation de suppression
-        document.getElementById('deleteConfirmation').addEventListener('input', function(e) {
-            const projectName = document.getElementById('deleteProjectName').textContent;
-            const confirmButton = document.getElementById('confirmDeleteProject');
-            if (e.target.value === projectName) {
-                confirmButton.disabled = false;
-            } else {
-                confirmButton.disabled = true;
-            }
-        });
-
-        // Gestionnaire pour le formulaire de mise à jour de la base de données
-        document.getElementById('updateDbForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const projectName = document.getElementById('updateDbProjectName').textContent;
-            const fileInput = document.getElementById('new_db_file');
-            const file = fileInput.files[0];
-            
-            if (!file) {
-                alert('Veuillez sélectionner un fichier de base de données');
-                return;
-            }
-            
-            const formData = new FormData();
-            formData.append('db_file', file);
-            
-            // Afficher le loading
-            const submitButton = e.target.querySelector('button[type="submit"]');
-            const originalText = submitButton.textContent;
-            submitButton.textContent = 'Mise à jour en cours...';
-            submitButton.disabled = true;
-            
-            fetch(`/update_database/${projectName}`, {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert('✅ Base de données mise à jour avec succès !');
-                    closeModals();
-                    loadProjects();
-                } else {
-                    alert('❌ Erreur: ' + data.message);
-                }
-            })
-            .catch(error => {
-                console.error('Erreur:', error);
-                alert('❌ Erreur lors de la mise à jour de la base de données');
-            })
-            .finally(() => {
-                submitButton.textContent = originalText;
-                submitButton.disabled = false;
-            });
-        });
-
-        // Gestionnaire pour la suppression de projet
-        document.getElementById('confirmDeleteProject').addEventListener('click', function() {
-            const projectName = document.getElementById('deleteProjectName').textContent;
-            
-            // Afficher le loading
-            this.textContent = 'Suppression en cours...';
-            this.disabled = true;
-            
-            fetch(`/delete_project/${projectName}`, {
-                method: 'DELETE'
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert('✅ Projet supprimé avec succès !');
-                    closeModals();
-                    loadProjects();
-                } else {
-                    alert('❌ Erreur: ' + data.message);
-                }
-            })
-            .catch(error => {
-                console.error('Erreur:', error);
-                alert('❌ Erreur lors de la suppression du projet');
-            })
-            .finally(() => {
-                this.textContent = '🗑️ Supprimer définitivement';
-                this.disabled = false;
-            });
-        });
-
-        // Gestionnaire pour l'édition d'hostname
-        document.getElementById('editHostnameForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const projectName = document.getElementById('editHostnameProjectName').textContent;
-            const newHostname = document.getElementById('new_hostname').value.trim();
-            
-            if (!newHostname) {
-                alert('Veuillez saisir un hostname valide');
-                return;
-            }
-            
-            // Validation du hostname
-            if (!/^[a-zA-Z0-9.-]+$/.test(newHostname)) {
-                alert('Le hostname ne peut contenir que des lettres, chiffres, points et tirets');
-                return;
-            }
-            
-            const submitButton = e.target.querySelector('button[type="submit"]');
-            const originalText = submitButton.textContent;
-            submitButton.textContent = 'Mise à jour en cours...';
-            submitButton.disabled = true;
-            
-            fetch(`/edit_hostname/${projectName}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    new_hostname: newHostname
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert('✅ Hostname mis à jour avec succès ! Le site est maintenant accessible sur : ' + newHostname);
-                    closeModals();
-                    loadProjects();
-                } else {
-                    alert('❌ Erreur: ' + data.message);
-                }
-            })
-            .catch(error => {
-                console.error('Erreur:', error);
-                alert('❌ Erreur lors de la mise à jour de l\'hostname');
-            })
-            .finally(() => {
-                submitButton.textContent = originalText;
-                submitButton.disabled = false;
-            });
-        });
-
-        // Gestionnaires pour fermer les modals
-        document.getElementById('closeUpdateDb').addEventListener('click', closeModals);
-        document.getElementById('closeDeleteProject').addEventListener('click', closeModals);
-        document.getElementById('closeEditHostname').addEventListener('click', closeModals);
-        document.getElementById('closeAddSite').addEventListener('click', closeModals);
-        document.getElementById('cancelUpdateDb').addEventListener('click', closeModals);
-        document.getElementById('cancelDeleteProject').addEventListener('click', closeModals);
-        document.getElementById('cancelEditHostname').addEventListener('click', closeModals);
-
-        // Fermer les modals en cliquant en dehors
-        window.addEventListener('click', function(e) {
-            if (e.target.classList.contains('modal')) {
-                closeModals();
-            }
-        });
-
-        // Charger les infos serveur et les projets au démarrage
-        loadServerInfo();
-    </script>
-</body>
-</html> 
+function showError(message) {
+    // Créer un toast d'erreur
+    const toast = document.createElement('div');
+    toast.className = 'toast align-items-center text-white bg-danger border-0';
+    toast.setAttribute('role', 'alert');
+    toast.style.position = 'fixed';
+    toast.style.top = '20px';
+    toast.style.right = '20px';
+    toast.style.zIndex = '9999';
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                ${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    `;
+    
+    document.body.appendChild(toast);
+    const bsToast = new bootstrap.Toast(toast);
+    bsToast.show();
+    
+    toast.addEventListener('hidden.bs.toast', () => {
+        document.body.removeChild(toast);
+    });
+}
+</script>
+{% endblock %} 

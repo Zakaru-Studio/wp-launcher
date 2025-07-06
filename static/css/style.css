@@ -1,0 +1,1215 @@
+/* ============================================
+   WordPress Launcher - Thème Dark Ultra Moderne
+   ============================================ */
+
+/* Variables CSS pour thème dark */
+:root {
+    --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --secondary-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    --success-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    --warning-gradient: linear-gradient(135deg, #ffeaa7 0%, #fab1a0 100%);
+    --danger-gradient: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+    --info-gradient: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+    
+    /* Couleurs dark theme */
+    --bg-primary: #0a0a0f;
+    --bg-secondary: #1a1a2e;
+    --bg-tertiary: #16213e;
+    --bg-dark-card: #1e1e2e;
+    --bg-darker-card: #0f1419;
+    
+    --glass-bg: rgba(255, 255, 255, 0.03);
+    --glass-bg-hover: rgba(255, 255, 255, 0.08);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --glass-border-hover: rgba(255, 255, 255, 0.2);
+    
+    --text-primary: #ffffff;
+    --text-secondary: #e1e5e9;
+    --text-muted: #8b949e;
+    --text-disabled: #6c757d;
+    
+    --shadow-soft: 0 8px 32px rgba(0, 0, 0, 0.3);
+    --shadow-medium: 0 15px 35px rgba(0, 0, 0, 0.4);
+    --shadow-strong: 0 25px 50px rgba(0, 0, 0, 0.6);
+    --shadow-glow: 0 0 20px rgba(102, 126, 234, 0.3);
+    
+    --border-radius: 16px;
+    --border-radius-small: 8px;
+    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Reset et base dark */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: radial-gradient(ellipse at top, #1a1a2e 0%, #0a0a0f 100%);
+    color: var(--text-primary);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.6;
+    min-height: 100vh;
+    position: relative;
+    overflow-x: hidden;
+}
+
+/* Effet de particules dark en arrière-plan */
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: 
+        radial-gradient(circle at 20% 80%, rgba(102, 126, 234, 0.05) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(245, 87, 108, 0.05) 0%, transparent 50%),
+        radial-gradient(circle at 40% 40%, rgba(79, 172, 254, 0.05) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: -1;
+}
+
+/* Container principal */
+.container-fluid {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+/* Header amélioré avec justify-content space-between */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem 2rem;
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--glass-border);
+    margin-bottom: 2rem;
+    position: sticky;
+    top: 0;
+    z-index: 99;
+    border-radius: 0 0 var(--border-radius) var(--border-radius);
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+}
+
+.header-title {
+    font-size: 1.8rem;
+    font-weight: 700;
+    background: var(--primary-gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin: 0;
+    text-shadow: 0 0 20px rgba(102, 126, 234, 0.3);
+    letter-spacing: -0.5px;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+}
+
+/* Barre de recherche améliorée */
+.search-bar {
+    position: relative;
+    display: flex;
+    align-items: center;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--border-radius-small);
+    padding: 0.5rem 1rem;
+    min-width: 250px;
+    width:400px;
+    max-width: 600px;
+    transition: var(--transition);
+}
+
+.search-bar:focus-within {
+    border-color: var(--glass-border-hover);
+    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+}
+
+.search-icon {
+    color: var(--text-muted);
+    margin-right: 0.75rem;
+    font-size: 0.9rem;
+}
+
+.search-bar input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    padding: 0.25rem 0;
+}
+
+.search-bar input::placeholder {
+    color: var(--text-muted);
+}
+
+.clear-search {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0.25rem;
+    margin-left: 0.5rem;
+    border-radius: 4px;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+}
+
+.clear-search:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+/* Bouton créer un projet - design dark */
+.create-project-btn {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    width: 70px;
+    height: 70px;
+    border-radius: 50%;
+    background: var(--primary-gradient);
+    border: none;
+    color: white;
+    font-size: 1.5rem;
+    box-shadow: var(--shadow-medium), 0 0 20px rgba(102, 126, 234, 0.3);
+    transition: var(--transition);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.create-project-btn:hover {
+    transform: scale(1.1) rotate(90deg);
+    box-shadow: var(--shadow-strong), 0 0 30px rgba(102, 126, 234, 0.5);
+}
+
+.create-project-btn:active {
+    transform: scale(0.95);
+}
+
+/* Stats cards plus compactes et cliquables */
+.stats-section {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+    margin-top: 0;
+}
+
+.stat-card {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--border-radius);
+    padding: 1.5rem;
+    text-align: center;
+    transition: var(--transition);
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--primary-gradient);
+}
+
+.stat-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-medium);
+    background: var(--glass-bg-hover);
+    border-color: var(--glass-border-hover);
+}
+
+.stat-card.active {
+    border-color: rgba(102, 126, 234, 0.5);
+    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+}
+
+.stat-card .stat-number {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+}
+
+.stat-card .stat-label {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 0.25rem;
+}
+
+.stat-card .stat-subtitle {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    opacity: 0.7;
+    margin-bottom: 0;
+}
+
+/* Indicateur de filtre actif */
+.filter-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--border-radius-small);
+    padding: 0.75rem 1rem;
+    margin-bottom: 1.5rem;
+    text-align: center;
+    animation: slideIn 0.3s ease-out;
+}
+
+.filter-text {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-right: 0.75rem;
+}
+
+.clear-filter-btn {
+    background: var(--danger-gradient);
+    border: none;
+    color: white;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: var(--transition);
+    font-size: 0.75rem;
+}
+
+.clear-filter-btn:hover {
+    transform: scale(1.1);
+}
+
+/* Projects grid ultra moderne dark */
+.projects-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+}
+
+.project-item {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--border-radius);
+    padding: 2rem;
+    transition: var(--transition);
+    position: relative;
+    overflow: hidden;
+}
+
+.project-item::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: var(--primary-gradient);
+    transform: translateX(-100%);
+    transition: var(--transition);
+}
+
+.project-item:hover::before {
+    transform: translateX(0);
+}
+
+.project-item:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-medium);
+    border-color: rgba(102, 126, 234, 0.3);
+    background: var(--glass-bg-hover);
+}
+
+.project-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1.5rem;
+}
+
+.project-title {
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.project-subtitle {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.project-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 500;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+
+.status-dot.active {
+    background: #00f2fe;
+    box-shadow: 0 0 10px rgba(0, 242, 254, 0.5);
+}
+
+.status-dot.inactive {
+    background: var(--text-muted);
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+/* Services grid moderne dark */
+.services-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.service-card {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: var(--border-radius-small);
+    padding: 1rem;
+    text-align: center;
+    transition: var(--transition);
+    text-decoration: none;
+    color: var(--text-secondary);
+    position: relative;
+    overflow: hidden;
+}
+
+.service-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--primary-gradient);
+    transform: scaleX(0);
+    transition: var(--transition);
+}
+
+.service-card:hover::before {
+    transform: scaleX(1);
+}
+
+.service-card:hover {
+    background: rgba(255, 255, 255, 0.05);
+    transform: translateY(-2px);
+    color: var(--text-primary);
+    text-decoration: none;
+    box-shadow: var(--shadow-soft);
+}
+
+.service-icon {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+    color: #4facfe;
+}
+
+.service-name {
+    font-size: 0.9rem;
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+}
+
+.service-port {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-family: 'Fira Code', monospace;
+}
+
+/* Actions buttons ultra modernes dark */
+.project-actions {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.btn-modern {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: var(--border-radius-small);
+    font-weight: 500;
+    font-size: 0.9rem;
+    transition: var(--transition);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    position: relative;
+    overflow: hidden;
+    text-decoration: none;
+}
+
+.btn-modern::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+    transition: var(--transition);
+}
+
+.btn-modern:hover::before {
+    left: 100%;
+}
+
+.btn-modern:hover {
+    transform: translateY(-2px);
+}
+
+.btn-modern:active {
+    transform: translateY(0);
+}
+
+.btn-start {
+    background: var(--success-gradient);
+    color: white;
+    box-shadow: 0 4px 15px rgba(79, 172, 254, 0.3);
+}
+
+.btn-start:hover {
+    box-shadow: 0 6px 20px rgba(79, 172, 254, 0.4);
+}
+
+.btn-stop {
+    background: var(--danger-gradient);
+    color: white;
+    box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+}
+
+.btn-stop:hover {
+    box-shadow: 0 6px 20px rgba(255, 107, 107, 0.4);
+}
+
+.btn-secondary {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--text-primary);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.btn-danger {
+    background: var(--danger-gradient);
+    color: white;
+    box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+}
+
+.btn-danger:hover {
+    box-shadow: 0 6px 20px rgba(255, 107, 107, 0.4);
+}
+
+/* Loader moderne dark */
+.btn-modern.loading {
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+.btn-modern.loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 20px;
+    height: 20px;
+    border: 2px solid transparent;
+    border-top: 2px solid white;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: translate(-50%, -50%) rotate(0deg); }
+    100% { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+.add-site-btn {
+    background: var(--primary-gradient);
+    color: white;
+    border: none;
+    border-radius: var(--border-radius);
+    padding: 0.75rem 1.5rem;
+    font-weight: 500;
+    font-size: 0.9rem;
+    transition: var(--transition);
+    cursor: pointer;
+}
+
+/* Modal ultra moderne dark */
+.modal-content {
+    background: var(--bg-dark-card);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-strong);
+    color: var(--text-primary);
+}
+
+.modal-header {
+    background: var(--primary-gradient);
+    color: white;
+    border-radius: var(--border-radius) var(--border-radius) 0 0;
+    border: none;
+    padding: 1.5rem;
+}
+
+.modal-body {
+    padding: 2rem;
+    background: var(--bg-dark-card);
+}
+
+.modal-footer {
+    border-top: 1px solid var(--glass-border);
+    padding: 1.5rem;
+    background: var(--bg-dark-card);
+}
+
+/* Formulaire moderne dark */
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-label {
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+    display: block;
+}
+
+.form-control {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--border-radius-small);
+    padding: 0.75rem 1rem;
+    color: var(--text-primary);
+    transition: var(--transition);
+    width: 100%;
+}
+
+.form-control:focus {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(102, 126, 234, 0.5);
+    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+    outline: none;
+}
+
+.form-control::placeholder {
+    color: var(--text-muted);
+}
+
+.form-text {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin-top: 0.25rem;
+}
+
+/* Zone d'upload ultra moderne dark */
+.upload-zone {
+    background: rgba(255, 255, 255, 0.02);
+    border: 2px dashed var(--glass-border);
+    border-radius: var(--border-radius);
+    padding: 2rem;
+    text-align: center;
+    transition: var(--transition);
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+}
+
+.upload-zone::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 0;
+    height: 0;
+    background: radial-gradient(circle, rgba(102, 126, 234, 0.1) 0%, transparent 70%);
+    transition: var(--transition);
+}
+
+.upload-zone:hover::before {
+    width: 200px;
+    height: 200px;
+}
+
+.upload-zone:hover {
+    border-color: rgba(102, 126, 234, 0.5);
+    background: rgba(102, 126, 234, 0.05);
+}
+
+.upload-zone.dragover {
+    border-color: rgba(79, 172, 254, 0.8);
+    background: rgba(79, 172, 254, 0.1);
+    border-style: solid;
+}
+
+.upload-content {
+    position: relative;
+    z-index: 1;
+}
+
+.upload-content i {
+    font-size: 3rem;
+    color: rgba(102, 126, 234, 0.7);
+    margin-bottom: 1rem;
+}
+
+.upload-content p {
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.upload-content .small {
+    color: var(--text-muted);
+}
+
+.upload-types {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.upload-types .badge {
+    background: rgba(102, 126, 234, 0.2);
+    color: var(--text-primary);
+    border: 1px solid rgba(102, 126, 234, 0.3);
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+}
+
+.upload-file-info {
+    background: rgba(79, 172, 254, 0.1);
+    border: 1px solid rgba(79, 172, 254, 0.3);
+    color: var(--text-primary);
+    padding: 1rem;
+    border-radius: var(--border-radius-small);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 1rem;
+}
+
+.upload-file-info .file-name {
+    font-weight: 500;
+    word-break: break-all;
+}
+
+/* Progress bar moderne dark */
+.progress {
+    height: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+}
+
+.progress-bar {
+    background: var(--primary-gradient);
+    height: 100%;
+    transition: width 0.3s ease;
+    position: relative;
+}
+
+.progress-bar::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+
+/* Switch moderne dark */
+.form-switch .form-check-input {
+    width: 3rem;
+    height: 1.5rem;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--glass-border);
+    border-radius: 1rem;
+    cursor: pointer;
+    position: relative;
+    transition: var(--transition);
+}
+
+.form-switch .form-check-input:checked {
+    background: var(--primary-gradient);
+    border-color: transparent;
+}
+
+.form-switch .form-check-input:focus {
+    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+}
+
+/* Alertes dark */
+.alert {
+    border-radius: var(--border-radius-small);
+    border: 1px solid;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.alert-warning {
+    background: rgba(255, 234, 167, 0.1);
+    border-color: rgba(255, 234, 167, 0.3);
+    color: var(--text-primary);
+}
+
+.alert-info {
+    background: rgba(168, 237, 234, 0.1);
+    border-color: rgba(168, 237, 234, 0.3);
+    color: var(--text-primary);
+}
+
+.alert-danger {
+    background: rgba(255, 107, 107, 0.1);
+    border-color: rgba(255, 107, 107, 0.3);
+    color: var(--text-primary);
+}
+
+.alert-success {
+    background: rgba(79, 172, 254, 0.1);
+    border-color: rgba(79, 172, 254, 0.3);
+    color: var(--text-primary);
+}
+
+/* Empty state moderne dark */
+.empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    color: var(--text-muted);
+}
+
+.empty-state i {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+.empty-state h3 {
+    color: var(--text-secondary);
+    margin-bottom: 1rem;
+}
+
+.empty-state p {
+    color: var(--text-muted);
+    margin-bottom: 2rem;
+}
+
+/* Toasts dark */
+.toast {
+    background: var(--bg-dark-card);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--border-radius-small);
+    box-shadow: var(--shadow-medium);
+    color: var(--text-primary);
+}
+
+.toast.bg-success {
+    background: rgba(79, 172, 254, 0.9) !important;
+    border-color: rgba(79, 172, 254, 1);
+}
+
+.toast.bg-danger {
+    background: rgba(255, 107, 107, 0.9) !important;
+    border-color: rgba(255, 107, 107, 1);
+}
+
+/* Responsive design dark */
+@media (max-width: 768px) {
+    .container-fluid {
+        padding: 1rem;
+    }
+    
+    .header-right {
+        position: static;
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    
+    .header-title {
+        font-size: 2rem;
+    }
+    
+    .stats-section {
+        grid-template-columns: 1fr;
+        margin-top: 1rem;
+    }
+    
+    .services-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .project-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .btn-modern {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .create-project-btn {
+        bottom: 1rem;
+        right: 1rem;
+    }
+}
+
+/* Animations d'entrée */
+.fade-in {
+    animation: fadeIn 0.6s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.slide-in {
+    animation: slideIn 0.6s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Scrollbar personnalisée dark */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(102, 126, 234, 0.5);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(102, 126, 234, 0.7);
+}
+
+/* Close button dark pour modales */
+.btn-close-white {
+    filter: invert(1) grayscale(100%) brightness(200%);
+}
+
+/* Dropdown menus dark */
+.dropdown-menu {
+    background: var(--bg-dark-card);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--border-radius-small);
+    box-shadow: var(--shadow-medium);
+}
+
+.dropdown-item {
+    color: var(--text-secondary);
+    transition: var(--transition);
+}
+
+.dropdown-item:hover,
+.dropdown-item:focus {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+}
+
+/* Selection et focus dark */
+::selection {
+    background: rgba(102, 126, 234, 0.3);
+    color: var(--text-primary);
+}
+
+:focus {
+    outline: 2px solid rgba(102, 126, 234, 0.5);
+    outline-offset: 2px;
+} 
+
+/* Barre de progression sticky pour import de base de données */
+.import-progress-sticky {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1050;
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    border-top: 1px solid var(--glass-border);
+    padding: 1rem;
+    box-shadow: var(--shadow-strong);
+    animation: slideUpFromBottom 0.3s ease-out;
+}
+
+@keyframes slideUpFromBottom {
+    from {
+        transform: translateY(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.import-progress-container {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    max-width: 1200px;
+    margin: 0 auto;
+    position: relative;
+}
+
+.import-progress-header {
+    flex-shrink: 0;
+}
+
+.import-progress-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    margin-bottom: 0.25rem;
+}
+
+.import-progress-subtitle {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.import-progress-sticky .progress {
+    flex: 1;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 0;
+}
+
+.import-progress-sticky .progress-bar {
+    background: var(--primary-gradient);
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.import-progress-message {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    min-width: 200px;
+    text-align: right;
+}
+
+.btn-close-progress {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 4px;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    margin-left: 1rem;
+}
+
+.btn-close-progress:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+/* Responsive pour la barre de progression */
+@media (max-width: 768px) {
+    .import-progress-container {
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+    
+    .import-progress-header {
+        text-align: center;
+        width: 100%;
+    }
+    
+    .import-progress-message {
+        text-align: center;
+        min-width: auto;
+    }
+    
+    .btn-close-progress {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        margin: 0;
+    }
+}
+
+/* Espacement pour éviter que la barre de progression cache le contenu */
+body.import-progress-visible {
+    padding-bottom: 120px;
+}
+
+/* Toast notifications améliorés */
+.toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1100;
+}
+
+.toast {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--border-radius-small);
+    box-shadow: var(--shadow-medium);
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+    animation: slideInRight 0.3s ease-out;
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.toast.bg-success {
+    border-color: rgba(79, 172, 254, 0.3);
+}
+
+.toast.bg-danger {
+    border-color: rgba(255, 107, 107, 0.3);
+}
+
+.toast.bg-warning {
+    border-color: rgba(255, 234, 167, 0.3);
+}
+
+.toast.bg-info {
+    border-color: rgba(168, 237, 234, 0.3);
+}
+
+/* Amélioration du scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--glass-border);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--glass-border-hover);
+}
+
+/* Sélection de texte */
+::selection {
+    background: rgba(102, 126, 234, 0.3);
+    color: var(--text-primary);
+}
+
+/* Focus outline amélioré */
+:focus {
+    outline: 2px solid rgba(102, 126, 234, 0.3);
+    outline-offset: 2px;
+} 

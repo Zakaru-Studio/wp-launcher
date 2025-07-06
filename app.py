@@ -12,11 +12,22 @@ import time
 import threading
 import re
 
+# Imports des services modularisés
+from models.project import Project
+from services.docker_service import DockerService
+from services.port_service import PortService
+from services.database_service import DatabaseService
+
 app = Flask(__name__)
 app.secret_key = 'wp-launcher-secret-key-2024'
 
 # Configuration SocketIO
 socketio = SocketIO(app, cors_allowed_origins="*")
+
+# Initialisation des services
+docker_service = DockerService()
+port_service = PortService()
+database_service = DatabaseService(socketio)
 
 # Configuration
 UPLOAD_FOLDER = 'uploads'
@@ -73,25 +84,13 @@ def extract_zip(zip_path, extract_to):
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
         zip_ref.extractall(extract_to)
 
-def copy_docker_template(project_path, enable_nextjs=False):
+def copy_docker_template(project_path):
     """Copie le template docker-compose dans le projet"""
     template_path = 'docker-template'
     if os.path.exists(template_path):
         for item in os.listdir(template_path):
-            # Ignorer le fichier docker-compose.yml principal si on ne veut pas Next.js
-            if item == 'docker-compose.yml' and not enable_nextjs:
-                continue
-            # Ignorer le fichier sans Next.js si on veut Next.js
-            if item == 'docker-compose-no-nextjs.yml' and enable_nextjs:
-                continue
-                
             src = os.path.join(template_path, item)
             dst = os.path.join(project_path, item)
-            
-            # Cas spécial: renommer docker-compose-no-nextjs.yml en docker-compose.yml
-            if item == 'docker-compose-no-nextjs.yml' and not enable_nextjs:
-                dst = os.path.join(project_path, 'docker-compose.yml')
-            
             if os.path.isdir(src):
                 shutil.copytree(src, dst)
             else:
@@ -129,22 +128,10 @@ def create_clean_wordpress_database(project_path, project_name):
         container_name = f"{project_name}_mysql_1"
         print(f"🐳 Conteneur MySQL: {container_name}")
         
-        # Attendre que MySQL soit prêt SANS aucun événement SocketIO
-        print("🧠 Attente silencieuse de la disponibilité MySQL...")
-        
-        # Attente simple sans émission d'événements SocketIO
-        max_attempts = 60
-        attempt = 0
-        while attempt < max_attempts:
-            if smart_mysql_check(container_name, timeout=1):
-                print(f"✅ MySQL prêt après {attempt + 1} tentatives")
-                break
-            attempt += 1
-            print(f"⏳ Tentative {attempt}/{max_attempts} - attente MySQL...")
-            time.sleep(2)
-        
-        if attempt >= max_attempts:
-            print("❌ MySQL n'est pas prêt après 60 tentatives")
+        # Attendre que MySQL soit prêt
+        print("🧠 Attente de la disponibilité MySQL...")
+        if not intelligent_mysql_wait(container_name, project_name, max_wait_time=60):
+            print("❌ MySQL n'est pas prêt après 60 secondes")
             return False
         
         # Créer la base de données WordPress vierge
@@ -178,7 +165,7 @@ def smart_mysql_check(container_name, timeout=2):
     except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
         return False
 
-def intelligent_mysql_wait(container_name, project_name, max_wait_time=60, emit_progress=True):
+def intelligent_mysql_wait(container_name, project_name, max_wait_time=60):
     """Attente intelligente de MySQL - teste d'abord, puis attend seulement si nécessaire"""
     
     # 🚀 TEST INSTANTANÉ : MySQL est-il déjà prêt ?
@@ -212,14 +199,13 @@ def intelligent_mysql_wait(container_name, project_name, max_wait_time=60, emit_
             
             print(f"⏳ Test MySQL {total_attempts} (intervalle: {interval}s)")
             
-            # Emmettre le progrès pour l'interface seulement pour les imports
-            if emit_progress:
-                socketio.emit('import_progress', {
-                    'project': project_name,
-                    'progress': min(15 + (elapsed / max_wait_time) * 10, 25),
-                    'message': f'Attente MySQL... ({elapsed:.0f}s)',
-                    'status': 'waiting'
-                })
+            # Emmettre le progrès pour l'interface
+            socketio.emit('import_progress', {
+                'project': project_name,
+                'progress': min(15 + (elapsed / max_wait_time) * 10, 25),
+                'message': f'Attente MySQL... ({elapsed:.0f}s)',
+                'status': 'waiting'
+            })
             
             if smart_mysql_check(container_name, timeout=3):
                 print(f"✅ MySQL prêt après {elapsed:.1f}s ({total_attempts} tentatives)")
@@ -556,6 +542,10 @@ def import_database(project_path, db_file_path, project_name):
 def index():
     return render_template('index.html')
 
+@app.route('/favicon.ico')
+def favicon():
+    return '', 204  # Retourner une réponse vide avec code 204 (No Content)
+
 @app.route('/create_project', methods=['POST'])
 def create_project():
     try:
@@ -564,10 +554,10 @@ def create_project():
         # Récupérer les données du formulaire
         project_name = request.form['project_name'].strip()
         project_hostname = request.form.get('project_hostname', '').strip()
+        enable_nextjs = request.form.get('enable_nextjs') == 'on'
         
         if not project_name:
-            flash('Le nom du projet est requis', 'error')
-            return redirect(url_for('index'))
+            return jsonify({'success': False, 'message': 'Le nom du projet est requis'})
         
         # Nettoyer le nom du projet
         project_name = secure_filename(project_name.replace(' ', '-').lower())
@@ -583,125 +573,122 @@ def create_project():
         
         print(f"📝 Nom du projet: {project_name}")
         print(f"🌐 Hostname: {project_hostname}")
+        print(f"⚛️ Next.js activé: {enable_nextjs}")
         
-        # Vérifier le fichier archive WP Migrate Pro (optionnel)
+        # Vérifier le fichier uploadé (optionnel)
         wp_migrate_archive = request.files.get('wp_migrate_archive')
         
-        # Valider l'archive si fournie
+        # Valider le fichier s'il est fourni
         if wp_migrate_archive and wp_migrate_archive.filename:
             if not allowed_file(wp_migrate_archive.filename):
-                flash('Type de fichier archive non autorisé', 'error')
-                return redirect(url_for('index'))
-            print(f"📦 Archive WP Migrate Pro: {wp_migrate_archive.filename}")
+                return jsonify({'success': False, 'message': 'Type de fichier non autorisé'})
+            print(f"📁 Fichier WP Migrate: {wp_migrate_archive.filename}")
         else:
             wp_migrate_archive = None
-            print("📦 Aucune archive WP Migrate Pro - site WordPress vierge")
+            print("📁 Aucun fichier WP Migrate - site WordPress vierge")
         
         # Créer le dossier du projet
         project_path = os.path.join(PROJECTS_FOLDER, project_name)
         if os.path.exists(project_path):
-            flash(f'Le projet {project_name} existe déjà', 'error')
-            return redirect(url_for('index'))
+            return jsonify({'success': False, 'message': f'Le projet {project_name} existe déjà'})
         
         print(f"📂 Création du dossier: {project_path}")
         os.makedirs(project_path, exist_ok=True)
         
-        # Vérifier si Next.js est demandé
-        enable_nextjs = request.form.get('enable_nextjs') == 'on'
-        print(f"⚡ Next.js demandé: {enable_nextjs}")
-        
         # Copier le template Docker
         print("📋 Copie du template Docker...")
-        copy_docker_template(project_path, enable_nextjs)
+        copy_docker_template(project_path)
         
-        # Sauvegarder l'archive WP Migrate Pro (si fournie)
-        wp_migrate_path = None
-        wp_content_path = None
-        db_path = None
+        # Sauvegarder le fichier uploadé (si fourni)
+        archive_path = None
         
-        if wp_migrate_archive:
-            wp_migrate_filename = secure_filename(wp_migrate_archive.filename)
-            wp_migrate_path = os.path.join(app.config['UPLOAD_FOLDER'], wp_migrate_filename)
-            print(f"💾 Sauvegarde de l'archive WP Migrate Pro: {wp_migrate_path}")
-            wp_migrate_archive.save(wp_migrate_path)
+        if wp_migrate_archive and wp_migrate_archive.filename:
+            archive_filename = secure_filename(wp_migrate_archive.filename)
+            archive_path = os.path.join(app.config['UPLOAD_FOLDER'], archive_filename)
+            print(f"💾 Sauvegarde du fichier WP Migrate: {archive_path}")
+            wp_migrate_archive.save(archive_path)
             
-            if not os.path.exists(wp_migrate_path):
-                raise Exception(f"Erreur: archive WP Migrate Pro non sauvegardée: {wp_migrate_path}")
-            print(f"✅ Archive WP Migrate Pro sauvegardée")
-            
-            # Extraire l'archive WP Migrate Pro
-            temp_extract_path = os.path.join(app.config['UPLOAD_FOLDER'], 'temp_extract_' + project_name)
-            print(f"📦 Extraction de l'archive WP Migrate Pro vers: {temp_extract_path}")
-            os.makedirs(temp_extract_path, exist_ok=True)
-            extract_zip(wp_migrate_path, temp_extract_path)
-            
-            # Vérifier la structure WP Migrate Pro
-            expected_wp_content = os.path.join(temp_extract_path, 'app', 'public', 'wp-content')
-            expected_sql = os.path.join(temp_extract_path, 'app', 'sql', 'local.sql')
-            
-            if os.path.exists(expected_wp_content):
-                print(f"✅ wp-content trouvé dans l'archive: {expected_wp_content}")
-                wp_content_path = expected_wp_content
-            else:
-                print(f"⚠️ wp-content non trouvé dans l'archive à l'emplacement attendu: {expected_wp_content}")
-                
-            if os.path.exists(expected_sql):
-                print(f"✅ Fichier SQL trouvé dans l'archive: {expected_sql}")
-                db_path = expected_sql
-            else:
-                print(f"⚠️ Fichier SQL non trouvé dans l'archive à l'emplacement attendu: {expected_sql}")
+            if not os.path.exists(archive_path):
+                raise Exception(f"Erreur: fichier WP Migrate non sauvegardé: {archive_path}")
+            print(f"✅ Fichier WP Migrate sauvegardé")
         
         # Extraire wp-content ou utiliser celui par défaut
         wp_content_dest = os.path.join(project_path, 'wordpress', 'wp-content')
         print(f"📦 Configuration wp-content: {wp_content_dest}")
         os.makedirs(wp_content_dest, exist_ok=True)
         
-        if wp_content_path:
-            # Copier le wp-content depuis l'archive WP Migrate Pro
-            print(f"📦 Copie wp-content depuis l'archive WP Migrate Pro: {wp_content_path}")
-            import shutil
-            if os.path.exists(wp_content_path):
-                # Copier récursivement tout le contenu
-                shutil.copytree(wp_content_path, wp_content_dest, dirs_exist_ok=True)
-                print("✅ wp-content copié depuis l'archive WP Migrate Pro")
+        # Détecter le type de fichier archive
+        db_path = None
+        wp_content_path = None
+        
+        if archive_path:
+            # Analyser le fichier pour déterminer s'il s'agit d'un ZIP ou d'un SQL
+            filename_lower = archive_path.lower()
+            if filename_lower.endswith('.sql') or filename_lower.endswith('.gz'):
+                # Fichier SQL pour base de données
+                db_path = archive_path
+                print(f"📦 Fichier SQL détecté: {db_path}")
+                # Utiliser un wp-content vierge avec les thèmes par défaut
+                print("📦 Création d'un wp-content vierge avec thèmes par défaut")
+                create_default_wp_content(wp_content_dest)
+            elif filename_lower.endswith('.zip'):
+                # Fichier ZIP - peut contenir wp-content ou une archive WP Migrate Pro
+                wp_content_path = archive_path
+                print(f"📦 Fichier ZIP détecté: {wp_content_path}")
+                # Extraire le wp-content fourni
+                print(f"📦 Extraction wp-content depuis: {wp_content_path}")
+                extract_zip(wp_content_path, wp_content_dest)
             else:
-                print("⚠️ wp-content introuvable dans l'archive, création d'un wp-content vierge")
+                # Utiliser un wp-content vierge avec les thèmes par défaut
+                print("📦 Création d'un wp-content vierge avec thèmes par défaut")
                 create_default_wp_content(wp_content_dest)
         else:
             # Utiliser un wp-content vierge avec les thèmes par défaut
             print("📦 Création d'un wp-content vierge avec thèmes par défaut")
             create_default_wp_content(wp_content_dest)
         
-        # Trouver les ports libres automatiquement
+        # Trouver des ports libres automatiquement
         print("🔍 Recherche de ports libres...")
         project_port = find_free_port_for_project()
         pma_port = find_free_port_for_project(project_port + 1)
-        mailpit_port = find_free_port_for_project(pma_port + 1)
-        smtp_port = find_free_port_for_project(mailpit_port + 1)
-        nextjs_port = find_free_port_for_project(smtp_port + 1) if enable_nextjs else None
+        print(f"🌐 Port WordPress attribué: {project_port}")
+        print(f"🗃️ Port phpMyAdmin attribué: {pma_port}")
         
-        print(f"🌐 Port WordPress: {project_port}")
-        print(f"🔧 Port phpMyAdmin: {pma_port}")
-        print(f"📧 Port Mailpit: {mailpit_port}")
-        print(f"📨 Port SMTP: {smtp_port}")
+        # Port Next.js si activé
+        nextjs_port = None
         if enable_nextjs:
-            print(f"⚡ Port Next.js: {nextjs_port}")
+            nextjs_port = find_free_port_for_project(pma_port + 1)
+            print(f"⚛️ Port Next.js attribué: {nextjs_port}")
         
-        # Modifier le docker-compose.yml avec le bon nom de projet, hostname et port
+        # Modifier le docker-compose.yml avec le bon nom de projet, hostname et ports
         compose_file = os.path.join(project_path, 'docker-compose.yml')
         print(f"⚙️ Configuration Docker Compose: {compose_file}")
         if os.path.exists(compose_file):
             with open(compose_file, 'r') as f:
                 content = f.read()
+            
+            # Remplacer les placeholders
             content = content.replace('PROJECT_NAME', project_name)
+            content = content.replace('PROJECT_HOSTNAME', project_hostname)
             content = content.replace('PROJECT_PORT', str(project_port))
             content = content.replace('PROJECT_PMA_PORT', str(pma_port))
+            
+            # Ports pour Mailpit (emails)
+            mailpit_port = find_free_port_for_project(pma_port + 1)
+            smtp_port = find_free_port_for_project(mailpit_port + 1)
             content = content.replace('PROJECT_MAILPIT_PORT', str(mailpit_port))
             content = content.replace('PROJECT_SMTP_PORT', str(smtp_port))
             
-            if enable_nextjs:
+            # Port Next.js si activé
+            if enable_nextjs and nextjs_port:
                 content = content.replace('PROJECT_NEXTJS_PORT', str(nextjs_port))
-                
+            else:
+                # Supprimer le service Next.js s'il n'est pas activé
+                import re
+                # Trouver le début du service nextjs jusqu'à la fin des services
+                pattern = r'(\s+nextjs:.*?)(\n\nvolumes:)'
+                content = re.sub(pattern, r'\2', content, flags=re.DOTALL)
+            
             with open(compose_file, 'w') as f:
                 f.write(content)
             print("✅ Docker Compose configuré")
@@ -710,160 +697,79 @@ def create_project():
         
         # Sauvegarder les ports attribués
         port_file = os.path.join(project_path, '.port')
-        pma_port_file = os.path.join(project_path, '.pma_port')
-        mailpit_port_file = os.path.join(project_path, '.mailpit_port')
-        smtp_port_file = os.path.join(project_path, '.smtp_port')
         with open(port_file, 'w') as f:
             f.write(str(project_port))
+        print(f"✅ Port WordPress {project_port} sauvegardé")
+        
+        pma_port_file = os.path.join(project_path, '.pma_port')
         with open(pma_port_file, 'w') as f:
             f.write(str(pma_port))
-        with open(mailpit_port_file, 'w') as f:
-            f.write(str(mailpit_port))
-        with open(smtp_port_file, 'w') as f:
-            f.write(str(smtp_port))
-        print(f"✅ Port WordPress {project_port} sauvegardé")
         print(f"✅ Port phpMyAdmin {pma_port} sauvegardé")
-        print(f"✅ Port Mailpit {mailpit_port} sauvegardé")
-        print(f"✅ Port SMTP {smtp_port} sauvegardé")
         
-        # Gérer Next.js si demandé
-        if enable_nextjs:
+        if enable_nextjs and nextjs_port:
             nextjs_port_file = os.path.join(project_path, '.nextjs_port')
             with open(nextjs_port_file, 'w') as f:
                 f.write(str(nextjs_port))
+            nextjs_enabled_file = os.path.join(project_path, '.nextjs_enabled')
+            with open(nextjs_enabled_file, 'w') as f:
+                f.write('true')
             print(f"✅ Port Next.js {nextjs_port} sauvegardé")
             
-            # Créer le dossier nextjs avec un exemple de base
-            nextjs_path = os.path.join(project_path, 'nextjs')
-            os.makedirs(nextjs_path, exist_ok=True)
+            # Créer un dossier Next.js basique
+            nextjs_dir = os.path.join(project_path, 'nextjs')
+            os.makedirs(nextjs_dir, exist_ok=True)
             
-            # Créer un package.json basique pour Next.js
+            # Créer un package.json basique
             package_json = {
-                "name": f"{project_name}-frontend",
-                "version": "0.1.0",
-                "private": True,
+                "name": f"{project_name}-nextjs",
+                "version": "1.0.0",
                 "scripts": {
                     "dev": "next dev",
                     "build": "next build",
-                    "start": "next start",
-                    "lint": "next lint"
+                    "start": "next start"
                 },
                 "dependencies": {
-                    "next": "14.0.0",
-                    "react": "^18",
-                    "react-dom": "^18"
-                },
-                "devDependencies": {
-                    "eslint": "^8",
-                    "eslint-config-next": "14.0.0"
+                    "next": "latest",
+                    "react": "latest",
+                    "react-dom": "latest"
                 }
             }
             
             import json
-            with open(os.path.join(nextjs_path, 'package.json'), 'w') as f:
+            with open(os.path.join(nextjs_dir, 'package.json'), 'w') as f:
                 json.dump(package_json, f, indent=2)
             
-            # Créer un README pour Next.js
-            readme_content = f"""# {project_name} Frontend (Next.js)
-
-Ce dossier contient le frontend Next.js pour le projet {project_name}.
-
-## Démarrage rapide
-
-1. Le conteneur Next.js va automatiquement installer les dépendances
-2. Votre application sera disponible sur http://192.168.1.21:{nextjs_port}
-3. Modifiez les fichiers dans ce dossier pour développer votre frontend
-
-## Structure recommandée
-
-```
-nextjs/
-├── pages/
-│   ├── index.js      # Page d'accueil
-│   └── api/          # API routes
-├── components/       # Composants React
-├── styles/           # Fichiers CSS
-└── public/          # Assets statiques
-```
-
-## Configuration WordPress Headless
-
-Pour connecter Next.js à WordPress, utilisez l'API REST WordPress :
-- URL de l'API: http://wordpress:80/wp-json/wp/v2/
-- Accessible depuis le conteneur Next.js via le réseau Docker
-
-## Développement
-
-Le mode développement Next.js est activé par défaut avec hot-reload.
-"""
-            
-            with open(os.path.join(nextjs_path, 'README.md'), 'w') as f:
-                f.write(readme_content)
-            
-            # Créer une page d'exemple Next.js
-            pages_dir = os.path.join(nextjs_path, 'pages')
+            # Créer une page d'accueil basique
+            pages_dir = os.path.join(nextjs_dir, 'pages')
             os.makedirs(pages_dir, exist_ok=True)
             
-            index_content = f"""import Head from 'next/head';
+            index_content = f"""import React from 'react';
 
 export default function Home() {{
   return (
-    <div style={{{{ padding: '20px', fontFamily: 'Arial, sans-serif' }}}}>
-      <Head>
-        <title>{project_name} - Next.js Frontend</title>
-        <meta name="description" content="Frontend Next.js pour {project_name}" />
-        <link rel="icon" href="/favicon.ico" />
-      </Head>
-
-      <main>
-        <h1 style={{{{ color: '#0070f3' }}}}>🚀 {project_name}</h1>
-        <p>Bienvenue sur le frontend Next.js de votre projet !</p>
-        
-        <div style={{{{ marginTop: '30px' }}}}>
-          <h2>🔗 Connexion WordPress</h2>
-          <p>Votre WordPress est accessible à l'adresse : <strong>http://wordpress</strong> (dans Docker) ou <strong>http://192.168.1.21:{project_port}</strong> (depuis l'extérieur)</p>
-          
-          <h3>API WordPress</h3>
-          <p>L'API REST WordPress est disponible à :</p>
-          <ul>
-            <li>Depuis Next.js : <code>http://wordpress/wp-json/wp/v2/</code></li>
-            <li>Depuis l'extérieur : <code>http://192.168.1.21:{project_port}/wp-json/wp/v2/</code></li>
-          </ul>
-          
-          <h3>Exemple d'utilisation</h3>
-          <pre style={{{{ background: '#f4f4f4', padding: '15px', borderRadius: '5px' }}}}>
-{{`// Récupérer les articles WordPress
-const response = await fetch('http://wordpress/wp-json/wp/v2/posts');
-const posts = await response.json();`}}
-          </pre>
-        </div>
-        
-        <div style={{{{ marginTop: '30px' }}}}>
-          <h2>🛠️ Développement</h2>
-          <p>Modifiez ce fichier dans <code>nextjs/pages/index.js</code> pour commencer !</p>
-          <p>Le serveur Next.js redémarre automatiquement lors des modifications.</p>
-        </div>
-      </main>
+    <div style={{ padding: '50px', textAlign: 'center' }}>
+      <h1>Next.js Frontend pour {project_name}</h1>
+      <p>Votre application Next.js est prête !</p>
+      <p>Backend WordPress disponible sur le port {project_port}</p>
     </div>
   );
 }}
 """
-            
             with open(os.path.join(pages_dir, 'index.js'), 'w') as f:
                 f.write(index_content)
             
-            print(f"✅ Dossier Next.js créé avec configuration de base")
+            print("✅ Structure Next.js créée")
         
-        # Modifier le wp-config.php avec le bon port
+        # Modifier le wp-config.php avec le bon hostname
         wp_config_file = os.path.join(project_path, 'wordpress', 'wp-config.php')
         print(f"⚙️ Configuration WordPress: {wp_config_file}")
         if os.path.exists(wp_config_file):
             with open(wp_config_file, 'r') as f:
                 wp_content = f.read()
-            wp_content = wp_content.replace('PROJECT_PORT', str(project_port))
+            wp_content = wp_content.replace('PROJECT_HOSTNAME', project_hostname)
             with open(wp_config_file, 'w') as f:
                 f.write(wp_content)
-            print("✅ WordPress configuré avec le port")
+            print("✅ WordPress configuré avec l'hostname")
         else:
             print("⚠️ Fichier wp-config.php manquant, création automatique par WordPress")
         
@@ -892,198 +798,113 @@ const posts = await response.json();`}}
         if db_path:
             print("🗃️ Début import de la base de données...")
             if not import_database(project_path, db_path, project_name):
-                flash('Projet créé mais erreur lors de l\'import de la base de données', 'warning')
+                return jsonify({'success': False, 'message': 'Projet créé mais erreur lors de l\'import de la base de données'})
             else:
-                flash(f'Projet {project_name} créé avec succès !', 'success')
+                success_message = f'Projet {project_name} créé avec succès !'
         else:
             print("🗃️ Création d'une base de données WordPress vierge...")
             if not create_clean_wordpress_database(project_path, project_name):
-                flash('Projet créé mais erreur lors de la création de la base de données', 'warning')
+                return jsonify({'success': False, 'message': 'Projet créé mais erreur lors de la création de la base de données'})
             else:
-                flash(f'Projet {project_name} créé avec succès ! Rendez-vous sur le site pour terminer l\'installation WordPress.', 'success')
+                success_message = f'Projet {project_name} créé avec succès ! Rendez-vous sur le site pour terminer l\'installation WordPress.'
         
-        # Note: Plus besoin d'ajouter l'hostname aux /etc/hosts car nous utilisons l'IP directe
-        print(f"🌐 Configuration terminée - Site accessible via http://192.168.1.21:{project_port}")
+        # Ajouter l'hostname au fichier /etc/hosts
+        print(f"🌐 Ajout de l'hostname {project_hostname} au fichier /etc/hosts...")
+        try:
+            script_path = os.path.join(os.path.dirname(__file__), 'manage_hosts.sh')
+            subprocess.run(['sudo', script_path, 'add', project_hostname], check=True)
+            print(f"✅ Hostname {project_hostname} ajouté aux hosts")
+        except subprocess.CalledProcessError as e:
+            print(f"⚠️ Erreur lors de l'ajout de l'hostname: {e}")
+            print("💡 Vous pouvez ajouter manuellement l'entrée:")
+            print(f"   echo '127.0.0.1    {project_hostname}' | sudo tee -a /etc/hosts")
         
         # Nettoyer les fichiers temporaires
         print("🧹 Nettoyage des fichiers temporaires...")
         try:
-            if wp_migrate_path and os.path.exists(wp_migrate_path):
-                os.remove(wp_migrate_path)
-                print("✅ Archive WP Migrate Pro temporaire supprimée")
-            
-            # Nettoyer le dossier d'extraction temporaire
-            temp_extract_path = os.path.join(app.config['UPLOAD_FOLDER'], 'temp_extract_' + project_name)
-            if os.path.exists(temp_extract_path):
-                import shutil
-                shutil.rmtree(temp_extract_path)
-                print("✅ Dossier d'extraction temporaire supprimé")
+            if archive_path and os.path.exists(archive_path):
+                os.remove(archive_path)
+                print("✅ Fichier WP Migrate temporaire supprimé")
         except Exception as e:
             print(f"⚠️ Erreur lors du nettoyage: {e}")
         
-        return redirect(url_for('index'))
+        return jsonify({'success': True, 'message': success_message})
         
     except Exception as e:
         print(f"❌ Erreur lors de la création du projet: {str(e)}")
-        flash(f'Erreur lors de la création du projet: {str(e)}', 'error')
-        return redirect(url_for('index'))
+        return jsonify({'success': False, 'message': f'Erreur lors de la création du projet: {str(e)}'})
 
 @app.route('/projects')
 def list_projects():
     """Liste les projets existants (ancienne route pour compatibilité)"""
     projects = []
     if os.path.exists(PROJECTS_FOLDER):
-        for project in os.listdir(PROJECTS_FOLDER):
-            project_path = os.path.join(PROJECTS_FOLDER, project)
+        for project_name in os.listdir(PROJECTS_FOLDER):
+            project_path = os.path.join(PROJECTS_FOLDER, project_name)
             if os.path.isdir(project_path):
-                projects.append(project)
+                # Ignorer les dossiers marqués comme supprimés
+                deleted_marker = os.path.join(project_path, '.DELETED_PROJECT')
+                if os.path.exists(deleted_marker):
+                    continue
+                
+                # Vérifier si le dossier est accessible (permissions)
+                if not os.access(project_path, os.R_OK):
+                    continue
+                
+                projects.append(project_name)
     return jsonify(projects)
 
 @app.route('/projects_with_status')
 def list_projects_with_status():
     """Liste les projets existants avec leur statut et hostname"""
     projects = []
-    projects_to_cleanup = []
+    
+    # Lire le fichier global des projets supprimés
+    deleted_projects_file = os.path.join(PROJECTS_FOLDER, '.deleted_projects')
+    globally_deleted_projects = set()
+    if os.path.exists(deleted_projects_file):
+        try:
+            with open(deleted_projects_file, 'r') as f:
+                globally_deleted_projects = set(line.strip() for line in f.readlines() if line.strip())
+        except Exception:
+            pass
     
     if os.path.exists(PROJECTS_FOLDER):
-        for project in os.listdir(PROJECTS_FOLDER):
-            project_path = os.path.join(PROJECTS_FOLDER, project)
-            
-            try:
-                # Vérifier que c'est un dossier et qu'on peut y accéder
-                if not os.path.isdir(project_path):
+        for project_name in os.listdir(PROJECTS_FOLDER):
+            project_path = os.path.join(PROJECTS_FOLDER, project_name)
+            if os.path.isdir(project_path):
+                # Ignorer les dossiers marqués comme supprimés localement
+                deleted_marker = os.path.join(project_path, '.DELETED_PROJECT')
+                if os.path.exists(deleted_marker):
+                    print(f"⚠️ Projet {project_name} marqué comme supprimé localement, ignoré")
                     continue
                 
-                # Test d'accès en lecture au dossier
-                try:
-                    dir_contents = os.listdir(project_path)
-                except PermissionError:
-                    print(f"⚠️ Dossier {project} inaccessible, marqué pour nettoyage...")
-                    projects_to_cleanup.append(project_path)
+                # Ignorer les projets marqués comme supprimés globalement
+                if project_name in globally_deleted_projects:
+                    print(f"⚠️ Projet {project_name} marqué comme supprimé globalement, ignoré")
                     continue
                 
-                # Vérifier que c'est un projet valide (doit avoir docker-compose.yml)
-                docker_compose_file = os.path.join(project_path, 'docker-compose.yml')
-                if not os.path.exists(docker_compose_file):
-                    print(f"⚠️ Projet {project} invalide (pas de docker-compose.yml), marqué pour nettoyage...")
-                    projects_to_cleanup.append(project_path)
+                # Vérifier si le dossier est accessible (permissions)
+                if not os.access(project_path, os.R_OK):
+                    print(f"⚠️ Projet {project_name} non accessible, permissions problématiques")
                     continue
                 
-                # Vérifier que le docker-compose.yml est valide
-                try:
-                    with open(docker_compose_file, 'r') as f:
-                        compose_content = f.read()
-                    if not compose_content.strip() or project not in compose_content:
-                        print(f"⚠️ Projet {project} corrompu (docker-compose.yml invalide), marqué pour nettoyage...")
-                        projects_to_cleanup.append(project_path)
-                        continue
-                except Exception as e:
-                    print(f"⚠️ Erreur lecture docker-compose.yml pour {project}: {e}, marqué pour nettoyage...")
-                    projects_to_cleanup.append(project_path)
-                    continue
+                # Créer l'objet Project et utiliser ses propriétés
+                project = Project(project_name, PROJECTS_FOLDER)
                 
                 # Vérifier le statut des conteneurs
-                status = check_project_status(project)
-                
-                # Lire l'hostname depuis le fichier .hostname
-                hostname_file = os.path.join(project_path, '.hostname')
-                hostname = None
-                if os.path.exists(hostname_file):
-                    try:
-                        with open(hostname_file, 'r') as f:
-                            hostname = f.read().strip()
-                    except Exception:
-                        hostname = f"{project}.local"
-                else:
-                    hostname = f"{project}.local"
-                
-                # Lire le port depuis le fichier .port
-                port_file = os.path.join(project_path, '.port')
-                port = 8080  # Port par défaut
-                if os.path.exists(port_file):
-                    try:
-                        with open(port_file, 'r') as f:
-                            port = int(f.read().strip())
-                    except Exception:
-                        port = 8080
-                
-                # Lire le port phpMyAdmin depuis le fichier .pma_port
-                pma_port_file = os.path.join(project_path, '.pma_port')
-                pma_port = None
-                if os.path.exists(pma_port_file):
-                    try:
-                        with open(pma_port_file, 'r') as f:
-                            pma_port = int(f.read().strip())
-                    except Exception:
-                        pma_port = None
-                
-                # Lire le port Mailpit depuis le fichier .mailpit_port
-                mailpit_port_file = os.path.join(project_path, '.mailpit_port')
-                mailpit_port = None
-                if os.path.exists(mailpit_port_file):
-                    try:
-                        with open(mailpit_port_file, 'r') as f:
-                            mailpit_port = int(f.read().strip())
-                    except Exception:
-                        mailpit_port = None
-                
-                # Lire le port Next.js depuis le fichier .nextjs_port
-                nextjs_port_file = os.path.join(project_path, '.nextjs_port')
-                nextjs_port = None
-                if os.path.exists(nextjs_port_file):
-                    try:
-                        with open(nextjs_port_file, 'r') as f:
-                            nextjs_port = int(f.read().strip())
-                    except Exception:
-                        nextjs_port = None
+                status = docker_service.get_container_status(project_name)
                 
                 projects.append({
-                    'name': project,
+                    'name': project_name,
                     'status': status,
-                    'hostname': hostname,
-                    'port': port,
-                    'pma_port': pma_port,
-                    'mailpit_port': mailpit_port,
-                    'nextjs_port': nextjs_port
+                    'hostname': project.hostname,
+                    'port': project.port,
+                    'pma_port': project.pma_port,
+                    'nextjs_enabled': project.has_nextjs,
+                    'nextjs_port': project.nextjs_port if project.has_nextjs else None
                 })
-                
-            except Exception as e:
-                print(f"⚠️ Erreur lors du traitement du projet {project}: {e}")
-                projects_to_cleanup.append(project_path)
-                continue
-    
-    # Nettoyer les projets invalides ou corrompus
-    if projects_to_cleanup:
-        print(f"🧹 Nettoyage automatique de {len(projects_to_cleanup)} projet(s) invalide(s)...")
-        for cleanup_path in projects_to_cleanup:
-            cleanup_project_name = os.path.basename(cleanup_path)
-            print(f"🗑️ Suppression du projet corrompu: {cleanup_project_name}")
-            
-            try:
-                # Tenter d'arrêter les conteneurs Docker associés
-                original_cwd = os.getcwd()
-                if os.path.exists(cleanup_path):
-                    try:
-                        os.chdir(cleanup_path)
-                        subprocess.run(['docker-compose', 'down', '-v', '--remove-orphans'], 
-                                     capture_output=True, text=True, timeout=30)
-                    except Exception:
-                        pass
-                    finally:
-                        os.chdir(original_cwd)
-                
-                # Forcer la suppression avec sudo
-                result = subprocess.run(['sudo', 'rm', '-rf', cleanup_path], 
-                                      capture_output=True, text=True, timeout=30)
-                if result.returncode == 0:
-                    print(f"✅ Projet corrompu {cleanup_project_name} supprimé automatiquement")
-                else:
-                    print(f"⚠️ Impossible de supprimer automatiquement {cleanup_project_name}: {result.stderr}")
-                    
-            except Exception as cleanup_error:
-                print(f"⚠️ Erreur lors du nettoyage automatique de {cleanup_project_name}: {cleanup_error}")
-                
-    return jsonify(projects)
+    return jsonify({'projects': projects})
 
 @app.route('/server_info')
 def server_info():
@@ -1149,9 +970,12 @@ def update_database(project_name):
         print(f"📁 Fichier reçu: {db_file.filename}")
         
         # Sauvegarder le fichier temporairement
-        db_filename = secure_filename(db_file.filename)
-        db_path = os.path.join(app.config['UPLOAD_FOLDER'], f"update_{db_filename}")
-        db_file.save(db_path)
+        if db_file.filename:
+            db_filename = secure_filename(db_file.filename)
+            db_path = os.path.join(app.config['UPLOAD_FOLDER'], f"update_{db_filename}")
+            db_file.save(db_path)
+        else:
+            return jsonify({'success': False, 'message': 'Nom de fichier invalide'})
         
         print(f"💾 Fichier sauvegardé: {db_path}")
         
@@ -1209,391 +1033,192 @@ def delete_project(project_name):
     try:
         print(f"🗑️ Début suppression du projet: {project_name}")
         
-        project_path = os.path.join(PROJECTS_FOLDER, project_name)
-        if not os.path.exists(project_path):
+        # Créer l'objet Project
+        project = Project(project_name, PROJECTS_FOLDER)
+        
+        if not project.exists:
             return jsonify({'success': False, 'message': 'Projet non trouvé'})
         
-        # Aller dans le dossier du projet
-        original_cwd = os.getcwd()
-        os.chdir(project_path)
+        # ÉTAPE 1: Arrêter et supprimer les conteneurs Docker
+        print("🐳 Suppression des conteneurs Docker...")
         
-        try:
-            # Arrêter et supprimer les conteneurs avec leurs volumes
-            print("🛑 Arrêt des conteneurs...")
-            result = subprocess.run([
-                'docker-compose', 'down', '-v', '--remove-orphans'
-            ], capture_output=True, text=True)
-            
-            if result.returncode != 0:
-                print(f"⚠️ Erreur lors de l'arrêt: {result.stderr}")
+        # Méthode 1: Utiliser DockerService si le fichier docker-compose.yml existe
+        compose_file_exists = os.path.exists(os.path.join(project.path, 'docker-compose.yml'))
+        if compose_file_exists:
+            success, error = docker_service.remove_containers(project.path)
+            if success:
+                print("✅ Conteneurs Docker supprimés via docker-compose")
             else:
-                print("✅ Conteneurs arrêtés")
-            
-            # Supprimer tous les conteneurs contenant le nom du projet (même arrêtés)
-            print("🗑️ Suppression de tous les conteneurs liés au projet...")
-            all_containers_result = subprocess.run([
-                'docker', 'ps', '-a', '--format', '{{.Names}}'
-            ], capture_output=True, text=True)
-            
-            if all_containers_result.stdout.strip():
-                for container in all_containers_result.stdout.strip().split('\n'):
-                    if container and project_name in container:
-                        # Arrêter le conteneur
-                        subprocess.run(['docker', 'stop', container], capture_output=True, text=True)
-                        # Supprimer le conteneur
-                        subprocess.run(['docker', 'rm', '-f', container], capture_output=True, text=True)
-                        print(f"🗑️ Conteneur supprimé: {container}")
-            
-            # Supprimer toutes les images contenant le nom du projet
-            print("🗑️ Suppression des images...")
-            images_result = subprocess.run([
-                'docker', 'images', '--format', '{{.Repository}}:{{.Tag}}'
-            ], capture_output=True, text=True)
-            
-            if images_result.stdout.strip():
-                for image in images_result.stdout.strip().split('\n'):
-                    if image and project_name in image:
-                        subprocess.run(['docker', 'rmi', '-f', image], capture_output=True, text=True)
-                        print(f"🗑️ Image supprimée: {image}")
-            
-            # Supprimer tous les volumes contenant le nom du projet
-            print("💾 Suppression des volumes...")
+                print(f"⚠️ Erreur docker-compose: {error}")
+                compose_file_exists = False  # Passer à la méthode manuelle
+        
+        # Méthode 2: Suppression manuelle des conteneurs si docker-compose échoue ou n'existe pas
+        if not compose_file_exists:
+            print("🔧 Suppression manuelle des conteneurs Docker...")
+            try:
+                # Arrêter et supprimer tous les conteneurs avec le nom du projet
+                containers_result = subprocess.run([
+                    'docker', 'ps', '-a', '--format', '{{.Names}}', '--filter', f'name={project_name}'
+                ], capture_output=True, text=True)
+                
+                if containers_result.stdout.strip():
+                    for container in containers_result.stdout.strip().split('\n'):
+                        if container and project_name in container:
+                            print(f"🛑 Arrêt du conteneur: {container}")
+                            subprocess.run(['docker', 'stop', container], capture_output=True, timeout=30)
+                            subprocess.run(['docker', 'rm', '-f', container], capture_output=True, timeout=30)
+                            print(f"✅ Conteneur supprimé: {container}")
+                    print("✅ Tous les conteneurs du projet supprimés")
+                else:
+                    print("ℹ️ Aucun conteneur Docker trouvé pour ce projet")
+            except Exception as e:
+                print(f"⚠️ Erreur lors de la suppression manuelle des conteneurs: {e}")
+        
+        # ÉTAPE 2: Nettoyer les volumes Docker spécifiques au projet
+        print("💾 Suppression des volumes Docker...")
+        try:
             volumes_result = subprocess.run([
-                'docker', 'volume', 'ls', '--format', '{{.Name}}'
+                'docker', 'volume', 'ls', '--format', '{{.Name}}', '--filter', f'name={project_name}'
             ], capture_output=True, text=True)
             
             if volumes_result.stdout.strip():
                 for volume in volumes_result.stdout.strip().split('\n'):
-                    if volume and project_name in volume:
-                        subprocess.run(['docker', 'volume', 'rm', '-f', volume], capture_output=True, text=True)
+                    if volume and project_name in volume.lower():
+                        subprocess.run(['docker', 'volume', 'rm', '-f', volume], capture_output=True)
                         print(f"💾 Volume supprimé: {volume}")
             
-        finally:
-            # Revenir au dossier original
-            os.chdir(original_cwd)
+            # Aussi essayer avec des patterns plus larges
+            for pattern in [f'*{project_name}*', f'{project_name}_*', f'*_{project_name}*']:
+                volumes_result = subprocess.run([
+                    'docker', 'volume', 'ls', '-q', '--filter', f'name={pattern}'
+                ], capture_output=True, text=True)
+                
+                if volumes_result.stdout.strip():
+                    for volume in volumes_result.stdout.strip().split('\n'):
+                        if volume:
+                            subprocess.run(['docker', 'volume', 'rm', '-f', volume], capture_output=True)
+                            print(f"💾 Volume pattern supprimé: {volume}")
+                            
+        except Exception as e:
+            print(f"⚠️ Erreur lors de la suppression des volumes: {e}")
         
-        # Supprimer l'hostname du fichier /etc/hosts
+        # ÉTAPE 3: Nettoyer les images Docker spécifiques au projet
+        print("🗑️ Suppression des images Docker...")
+        try:
+            images_result = subprocess.run([
+                'docker', 'images', '--format', '{{.Repository}}:{{.Tag}}', '--filter', f'reference=*{project_name}*'
+            ], capture_output=True, text=True)
+            
+            if images_result.stdout.strip():
+                for image in images_result.stdout.strip().split('\n'):
+                    if image and project_name in image.lower():
+                        subprocess.run(['docker', 'rmi', '-f', image], capture_output=True)
+                        print(f"🗑️ Image supprimée: {image}")
+        except Exception as e:
+            print(f"⚠️ Erreur lors de la suppression des images: {e}")
+        
+        # ÉTAPE 4: Nettoyer les réseaux Docker du projet
+        print("🌐 Suppression des réseaux Docker...")
+        try:
+            networks_result = subprocess.run([
+                'docker', 'network', 'ls', '--format', '{{.Name}}', '--filter', f'name={project_name}'
+            ], capture_output=True, text=True)
+            
+            if networks_result.stdout.strip():
+                for network in networks_result.stdout.strip().split('\n'):
+                    if network and project_name in network.lower() and network not in ['bridge', 'host', 'none']:
+                        subprocess.run(['docker', 'network', 'rm', network], capture_output=True)
+                        print(f"🌐 Réseau supprimé: {network}")
+        except Exception as e:
+            print(f"⚠️ Erreur lors de la suppression des réseaux: {e}")
+        
+        # ÉTAPE 5: Supprimer l'hostname du fichier /etc/hosts
         print(f"🌐 Suppression de l'hostname du fichier /etc/hosts...")
         try:
-            # Lire l'hostname depuis le fichier .hostname
-            hostname_file = os.path.join(project_path, '.hostname')
-            if os.path.exists(hostname_file):
-                with open(hostname_file, 'r') as f:
-                    hostname = f.read().strip()
-            else:
-                hostname = f"{project_name}.local"
-            
+            hostname = project.hostname
             script_path = os.path.join(os.path.dirname(__file__), 'manage_hosts.sh')
-            subprocess.run(['sudo', script_path, 'remove', hostname], check=True)
-            print(f"✅ Hostname {hostname} supprimé des hosts")
+            if os.path.exists(script_path):
+                subprocess.run(['sudo', script_path, 'remove', hostname], check=True, timeout=10)
+                print(f"✅ Hostname {hostname} supprimé des hosts")
         except Exception as e:
             print(f"⚠️ Erreur lors de la suppression de l'hostname: {e}")
         
-        # Supprimer le dossier du projet - Méthode simplifiée et robuste
-        print("📁 Suppression des fichiers du projet...")
-        project_deleted = False
+        # ÉTAPE 6: Marquer le projet comme supprimé (TOUJOURS)
+        print("🏷️ Marquage du projet comme supprimé...")
+        deleted_marker = os.path.join(project.path, '.DELETED_PROJECT')
         
-        # Méthode 1: Suppression directe avec sudo (plus fiable)
         try:
-            print("🔐 Suppression avec sudo...")
+            # Corriger les permissions du dossier d'abord
+            subprocess.run(['sudo', 'chmod', '777', project.path], 
+                         capture_output=True, text=True, timeout=5)
+            
+            # Essayer d'écrire le fichier marqueur
+            with open(deleted_marker, 'w') as f:
+                f.write('deleted\n')
+            print("✅ Projet marqué comme supprimé")
+        except Exception as e:
+            print(f"⚠️ Erreur création fichier marqueur: {e}")
+            # Tentative avec sudo
+            try:
+                subprocess.run(['sudo', 'touch', deleted_marker], capture_output=True, timeout=5)
+                print("✅ Projet marqué comme supprimé (avec sudo)")
+            except Exception as e2:
+                print(f"⚠️ Erreur marquage avec sudo: {e2}")
+                # Dernière tentative: fichier global
+                try:
+                    deleted_projects_file = os.path.join(PROJECTS_FOLDER, '.deleted_projects')
+                    with open(deleted_projects_file, 'a') as f:
+                        f.write(f"{project_name}\n")
+                    print("✅ Projet marqué comme supprimé (fichier global)")
+                except Exception as e3:
+                    print(f"⚠️ Erreur marquage global: {e3}")
+                    # Ultime tentative avec sudo sur fichier global
+                    try:
+                        subprocess.run(['sudo', 'bash', '-c', f'echo "{project_name}" >> {deleted_projects_file}'], 
+                                     capture_output=True, timeout=5)
+                        print("✅ Projet marqué comme supprimé (fichier global avec sudo)")
+                    except Exception as e4:
+                        print(f"⚠️ Erreur finale: {e4}")
+                        print("❌ Impossible de marquer le projet comme supprimé")
+        
+        # ÉTAPE 7: Nettoyage final des ressources Docker orphelines
+        print("🧹 Nettoyage final des ressources Docker...")
+        try:
+            docker_service.cleanup_unused_resources()
+        except Exception as e:
+            print(f"⚠️ Erreur nettoyage final: {e}")
+        
+        # ÉTAPE 8: Tentative de suppression physique des fichiers (optionnelle)
+        print("📁 Tentative de suppression des fichiers...")
+        try:
+            # Correction des permissions
+            subprocess.run(['sudo', 'chmod', '-R', '777', project.path], 
+                         capture_output=True, text=True, timeout=10)
+            
+            # Suppression avec sudo
             result = subprocess.run([
-                'sudo', 'rm', '-rf', project_path
-            ], capture_output=True, text=True, timeout=60)
+                'sudo', 'rm', '-rf', project.path
+            ], capture_output=True, text=True, timeout=20)
             
             if result.returncode == 0:
-                print("✅ Fichiers supprimés avec sudo")
-                project_deleted = True
+                print("✅ Fichiers supprimés physiquement")
             else:
-                print(f"⚠️ Erreur sudo rm: {result.stderr}")
-                
-        except Exception as sudo_error:
-            print(f"⚠️ Erreur suppression sudo: {sudo_error}")
+                print(f"⚠️ Suppression physique échouée: {result.stderr}")
+        except Exception as e:
+            print(f"⚠️ Erreur suppression physique: {e}")
         
-        # Méthode 2: Fallback avec correction des permissions puis shutil
-        if not project_deleted and os.path.exists(project_path):
-            try:
-                print("🔧 Tentative avec correction des permissions...")
-                # Forcer les permissions en écriture
-                subprocess.run(['sudo', 'chmod', '-R', '777', project_path], 
-                             capture_output=True, text=True, timeout=30)
-                
-                import shutil
-                shutil.rmtree(project_path)
-                print("✅ Fichiers supprimés avec shutil")
-                project_deleted = True
-                
-            except Exception as shutil_error:
-                print(f"⚠️ Erreur suppression shutil: {shutil_error}")
+        print(f"✅ Suppression du projet {project_name} terminée")
         
-        # Vérification finale
-        if os.path.exists(project_path):
-            print(f"⚠️ ATTENTION: Le dossier {project_path} existe encore")
-            print(f"⚠️ Suppression manuelle requise: sudo rm -rf {project_path}")
-        else:
-            print("✅ Dossier projet complètement supprimé")
-        
-        print(f"✅ Projet {project_name} supprimé complètement")
-        return jsonify({'success': True, 'message': 'Projet supprimé avec succès'})
+        return jsonify({
+            'success': True,
+            'message': 'Projet supprimé avec succès',
+            'details': 'Conteneurs Docker supprimés, volumes nettoyés, projet marqué comme supprimé'
+        })
         
     except Exception as e:
         print(f"❌ Erreur lors de la suppression du projet: {e}")
-        return jsonify({'success': False, 'message': f'Erreur: {str(e)}'})
-
-@app.route('/start_project/<project_name>', methods=['POST'])
-def start_project(project_name):
-    """Démarre tous les conteneurs d'un projet"""
-    try:
-        print(f"▶️ Démarrage du projet: {project_name}")
-        
-        project_path = os.path.join(PROJECTS_FOLDER, project_name)
-        if not os.path.exists(project_path):
-            return jsonify({'success': False, 'message': 'Projet non trouvé'})
-        
-        # Aller dans le dossier du projet et démarrer
-        original_cwd = os.getcwd()
-        os.chdir(project_path)
-        
-        try:
-            result = subprocess.run([
-                'docker-compose', 'up', '-d'
-            ], capture_output=True, text=True, timeout=120)
-            
-            if result.returncode == 0:
-                print(f"✅ Projet {project_name} démarré")
-                return jsonify({'success': True, 'message': 'Projet démarré avec succès'})
-            else:
-                print(f"❌ Erreur démarrage: {result.stderr}")
-                return jsonify({'success': False, 'message': f'Erreur: {result.stderr}'})
-                
-        finally:
-            os.chdir(original_cwd)
-            
-    except Exception as e:
-        print(f"❌ Erreur lors du démarrage: {e}")
-        return jsonify({'success': False, 'message': f'Erreur: {str(e)}'})
-
-@app.route('/stop_project/<project_name>', methods=['POST'])
-def stop_project(project_name):
-    """Arrête tous les conteneurs d'un projet"""
-    try:
-        print(f"⏹️ Arrêt du projet: {project_name}")
-        
-        project_path = os.path.join(PROJECTS_FOLDER, project_name)
-        if not os.path.exists(project_path):
-            return jsonify({'success': False, 'message': 'Projet non trouvé'})
-        
-        # Aller dans le dossier du projet et arrêter
-        original_cwd = os.getcwd()
-        os.chdir(project_path)
-        
-        try:
-            result = subprocess.run([
-                'docker-compose', 'stop'
-            ], capture_output=True, text=True, timeout=60)
-            
-            if result.returncode == 0:
-                print(f"✅ Projet {project_name} arrêté")
-                return jsonify({'success': True, 'message': 'Projet arrêté avec succès'})
-            else:
-                print(f"❌ Erreur arrêt: {result.stderr}")
-                return jsonify({'success': False, 'message': f'Erreur: {result.stderr}'})
-                
-        finally:
-            os.chdir(original_cwd)
-            
-    except Exception as e:
-        print(f"❌ Erreur lors de l'arrêt: {e}")
-        return jsonify({'success': False, 'message': f'Erreur: {str(e)}'})
-
-@app.route('/add_nextjs/<project_name>', methods=['POST'])
-def add_nextjs_to_project(project_name):
-    """Ajoute Next.js à un projet existant"""
-    try:
-        print(f"⚡ Ajout de Next.js au projet: {project_name}")
-        
-        project_path = os.path.join(PROJECTS_FOLDER, project_name)
-        if not os.path.exists(project_path):
-            return jsonify({'success': False, 'message': 'Projet non trouvé'})
-        
-        # Vérifier si Next.js n'est pas déjà présent
-        nextjs_port_file = os.path.join(project_path, '.nextjs_port')
-        if os.path.exists(nextjs_port_file):
-            return jsonify({'success': False, 'message': 'Next.js est déjà configuré pour ce projet'})
-        
-        # Trouver un port libre pour Next.js
-        nextjs_port = find_free_port_for_project(3000)
-        
-        # Sauvegarder le port Next.js
-        with open(nextjs_port_file, 'w') as f:
-            f.write(str(nextjs_port))
-        
-        # Créer le dossier nextjs
-        nextjs_path = os.path.join(project_path, 'nextjs')
-        os.makedirs(nextjs_path, exist_ok=True)
-        
-        # Créer package.json et README comme dans la création
-        package_json = {
-            "name": f"{project_name}-frontend",
-            "version": "0.1.0",
-            "private": True,
-            "scripts": {
-                "dev": "next dev",
-                "build": "next build", 
-                "start": "next start",
-                "lint": "next lint"
-            },
-            "dependencies": {
-                "next": "14.0.0",
-                "react": "^18",
-                "react-dom": "^18"
-            },
-            "devDependencies": {
-                "eslint": "^8",
-                "eslint-config-next": "14.0.0"
-            }
-        }
-        
-        import json
-        with open(os.path.join(nextjs_path, 'package.json'), 'w') as f:
-            json.dump(package_json, f, indent=2)
-        
-        # Créer une page d'exemple Next.js
-        pages_dir = os.path.join(nextjs_path, 'pages')
-        os.makedirs(pages_dir, exist_ok=True)
-        
-        index_content = f"""import Head from 'next/head';
-
-export default function Home() {{
-  return (
-    <div style={{{{ padding: '20px', fontFamily: 'Arial, sans-serif' }}}}>
-      <Head>
-        <title>{project_name} - Next.js Frontend</title>
-        <meta name="description" content="Frontend Next.js pour {project_name}" />
-        <link rel="icon" href="/favicon.ico" />
-      </Head>
-
-      <main>
-        <h1 style={{{{ color: '#0070f3' }}}}>🚀 {project_name}</h1>
-        <p>Bienvenue sur le frontend Next.js de votre projet !</p>
-        
-        <div style={{{{ marginTop: '30px' }}}}>
-          <h2>🔗 Connexion WordPress</h2>
-          <p>Votre WordPress est accessible depuis Next.js via : <strong>http://wordpress</strong></p>
-          
-          <h3>API WordPress</h3>
-          <p>L'API REST WordPress est disponible à :</p>
-          <ul>
-            <li>Depuis Next.js : <code>http://wordpress/wp-json/wp/v2/</code></li>
-            <li>Depuis l'extérieur : <code>http://192.168.1.21/wp-json/wp/v2/</code></li>
-          </ul>
-          
-          <h3>Exemple d'utilisation</h3>
-          <pre style={{{{ background: '#f4f4f4', padding: '15px', borderRadius: '5px' }}}}>
-{{`// Récupérer les articles WordPress
-const response = await fetch('http://wordpress/wp-json/wp/v2/posts');
-const posts = await response.json();`}}
-          </pre>
-        </div>
-        
-        <div style={{{{ marginTop: '30px' }}}}>
-          <h2>🛠️ Développement</h2>
-          <p>Modifiez ce fichier dans <code>nextjs/pages/index.js</code> pour commencer !</p>
-          <p>Le serveur Next.js redémarre automatiquement lors des modifications.</p>
-        </div>
-      </main>
-    </div>
-  );
-}}
-"""
-        
-        with open(os.path.join(pages_dir, 'index.js'), 'w') as f:
-            f.write(index_content)
-        
-        # Modifier le docker-compose.yml pour ajouter le service Next.js
-        compose_file = os.path.join(project_path, 'docker-compose.yml')
-        if os.path.exists(compose_file):
-            with open(compose_file, 'r') as f:
-                content = f.read()
-            
-            # Ajouter le service Next.js avant la section volumes
-            nextjs_service = f"""
-  nextjs:
-    image: node:18-alpine
-    container_name: {project_name}_nextjs_1
-    restart: unless-stopped
-    working_dir: /app
-    volumes:
-      - ./nextjs:/app
-    networks:
-      - wordpress_network
-    ports:
-      - "0.0.0.0:{nextjs_port}:3000"  # Port Next.js
-    environment:
-      - NODE_ENV=development
-    command: sh -c "if [ -f package.json ]; then npm install && npm run dev; else echo 'Next.js non configuré - créez votre projet dans le dossier nextjs/'; tail -f /dev/null; fi"
-    # Optimisations
-    mem_limit: 512M
-    cpus: '2'
-    # Configuration sécurité pour éviter les problèmes AppArmor
-    security_opt:
-      - apparmor:unconfined
-"""
-            
-            # Insérer le service avant la section volumes
-            if 'volumes:' in content:
-                content = content.replace('volumes:', nextjs_service + '\nvolumes:')
-            else:
-                content += nextjs_service
-            
-            with open(compose_file, 'w') as f:
-                f.write(content)
-        
-        print(f"✅ Next.js ajouté au projet {project_name} sur le port {nextjs_port}")
-        return jsonify({'success': True, 'message': f'Next.js ajouté avec succès sur le port {nextjs_port}'})
-        
-    except Exception as e:
-        print(f"❌ Erreur lors de l'ajout de Next.js: {e}")
-        return jsonify({'success': False, 'message': f'Erreur: {str(e)}'})
-
-@app.route('/remove_nextjs/<project_name>', methods=['POST'])
-def remove_nextjs_from_project(project_name):
-    """Supprime Next.js d'un projet existant"""
-    try:
-        print(f"🗑️ Suppression de Next.js du projet: {project_name}")
-        
-        project_path = os.path.join(PROJECTS_FOLDER, project_name)
-        if not os.path.exists(project_path):
-            return jsonify({'success': False, 'message': 'Projet non trouvé'})
-        
-        # Arrêter le conteneur Next.js s'il tourne
-        nextjs_container = f"{project_name}_nextjs_1"
-        subprocess.run(['docker', 'stop', nextjs_container], capture_output=True, text=True)
-        subprocess.run(['docker', 'rm', '-f', nextjs_container], capture_output=True, text=True)
-        
-        # Supprimer le fichier de port
-        nextjs_port_file = os.path.join(project_path, '.nextjs_port')
-        if os.path.exists(nextjs_port_file):
-            os.remove(nextjs_port_file)
-        
-        # Modifier le docker-compose.yml pour supprimer le service Next.js
-        compose_file = os.path.join(project_path, 'docker-compose.yml')
-        if os.path.exists(compose_file):
-            with open(compose_file, 'r') as f:
-                content = f.read()
-            
-            # Supprimer le service Next.js
-            import re
-            nextjs_pattern = r'\s*nextjs:.*?(?=\s*[a-zA-Z_][a-zA-Z0-9_]*:|volumes:|$)'
-            content = re.sub(nextjs_pattern, '', content, flags=re.DOTALL)
-            
-            with open(compose_file, 'w') as f:
-                f.write(content)
-        
-        print(f"✅ Next.js supprimé du projet {project_name}")
-        return jsonify({'success': True, 'message': 'Next.js supprimé avec succès'})
-        
-    except Exception as e:
-        print(f"❌ Erreur lors de la suppression de Next.js: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'message': f'Erreur: {str(e)}'})
 
 @app.route('/edit_hostname/<project_name>', methods=['POST'])
@@ -1765,12 +1390,202 @@ def edit_hostname(project_name):
         print(f"❌ Erreur lors de l'édition de l'hostname: {e}")
         return jsonify({'success': False, 'message': f'Erreur: {str(e)}'})
 
+@app.route('/add_nextjs/<project_name>', methods=['POST'])
+def add_nextjs_to_project(project_name):
+    """Ajoute Next.js à un projet existant"""
+    try:
+        print(f"⚡ Ajout de Next.js au projet: {project_name}")
+        
+        project_path = os.path.join(PROJECTS_FOLDER, project_name)
+        if not os.path.exists(project_path):
+            return jsonify({'success': False, 'message': 'Projet non trouvé'})
+        
+        # Vérifier si Next.js n'est pas déjà présent
+        nextjs_port_file = os.path.join(project_path, '.nextjs_port')
+        if os.path.exists(nextjs_port_file):
+            return jsonify({'success': False, 'message': 'Next.js est déjà configuré pour ce projet'})
+        
+        # Trouver un port libre pour Next.js
+        nextjs_port = find_free_port_for_project(3000)
+        
+        # Sauvegarder le port Next.js
+        with open(nextjs_port_file, 'w') as f:
+            f.write(str(nextjs_port))
+        
+        # Créer le dossier nextjs
+        nextjs_path = os.path.join(project_path, 'nextjs')
+        os.makedirs(nextjs_path, exist_ok=True)
+        
+        # Créer package.json et README comme dans la création
+        package_json = {
+            "name": f"{project_name}-frontend",
+            "version": "0.1.0",
+            "private": True,
+            "scripts": {
+                "dev": "next dev",
+                "build": "next build", 
+                "start": "next start",
+                "lint": "next lint"
+            },
+            "dependencies": {
+                "next": "14.0.0",
+                "react": "^18",
+                "react-dom": "^18"
+            },
+            "devDependencies": {
+                "eslint": "^8",
+                "eslint-config-next": "14.0.0"
+            }
+        }
+        
+        import json
+        with open(os.path.join(nextjs_path, 'package.json'), 'w') as f:
+            json.dump(package_json, f, indent=2)
+        
+        # Créer une page d'exemple Next.js
+        pages_dir = os.path.join(nextjs_path, 'pages')
+        os.makedirs(pages_dir, exist_ok=True)
+        
+        index_content = f"""import Head from 'next/head';
+
+export default function Home() {{
+  return (
+    <div style={{{{ padding: '20px', fontFamily: 'Arial, sans-serif' }}}}>
+      <Head>
+        <title>{project_name} - Next.js Frontend</title>
+        <meta name="description" content="Frontend Next.js pour {project_name}" />
+        <link rel="icon" href="/favicon.ico" />
+      </Head>
+
+      <main>
+        <h1 style={{{{ color: '#0070f3' }}}}>🚀 {project_name}</h1>
+        <p>Bienvenue sur le frontend Next.js de votre projet !</p>
+        
+        <div style={{{{ marginTop: '30px' }}}}>
+          <h2>🔗 Connexion WordPress</h2>
+          <p>Votre WordPress est accessible depuis Next.js via : <strong>http://wordpress</strong></p>
+          
+          <h3>API WordPress</h3>
+          <p>L'API REST WordPress est disponible à :</p>
+          <ul>
+            <li>Depuis Next.js : <code>http://wordpress/wp-json/wp/v2/</code></li>
+            <li>Depuis l'extérieur : <code>http://192.168.1.21/wp-json/wp/v2/</code></li>
+          </ul>
+          
+          <h3>Exemple d'utilisation</h3>
+          <pre style={{{{ background: '#f4f4f4', padding: '15px', borderRadius: '5px' }}}}>
+{{`// Récupérer les articles WordPress
+const response = await fetch('http://wordpress/wp-json/wp/v2/posts');
+const posts = await response.json();`}}
+          </pre>
+        </div>
+        
+        <div style={{{{ marginTop: '30px' }}}}>
+          <h2>🛠️ Développement</h2>
+          <p>Modifiez ce fichier dans <code>nextjs/pages/index.js</code> pour commencer !</p>
+          <p>Le serveur Next.js redémarre automatiquement lors des modifications.</p>
+        </div>
+      </main>
+    </div>
+  );
+}}
+"""
+        
+        with open(os.path.join(pages_dir, 'index.js'), 'w') as f:
+            f.write(index_content)
+        
+        # Modifier le docker-compose.yml pour ajouter le service Next.js
+        compose_file = os.path.join(project_path, 'docker-compose.yml')
+        if os.path.exists(compose_file):
+            with open(compose_file, 'r') as f:
+                content = f.read()
+            
+            # Ajouter le service Next.js avant la section volumes
+            nextjs_service = f"""
+  nextjs:
+    image: node:18-alpine
+    container_name: {project_name}_nextjs_1
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - ./nextjs:/app
+    networks:
+      - wordpress_network
+    ports:
+      - "0.0.0.0:{nextjs_port}:3000"  # Port Next.js
+    environment:
+      - NODE_ENV=development
+    command: sh -c "if [ -f package.json ]; then npm install && npm run dev; else echo 'Next.js non configuré - créez votre projet dans le dossier nextjs/'; tail -f /dev/null; fi"
+    # Optimisations
+    mem_limit: 512M
+    cpus: '2'
+    # Configuration sécurité pour éviter les problèmes AppArmor
+    security_opt:
+      - "apparmor:unconfined"
+"""
+            
+            # Insérer le service avant la section volumes
+            if 'volumes:' in content:
+                content = content.replace('volumes:', nextjs_service + '\nvolumes:')
+            else:
+                content += nextjs_service
+            
+            with open(compose_file, 'w') as f:
+                f.write(content)
+        
+        print(f"✅ Next.js ajouté au projet {project_name} sur le port {nextjs_port}")
+        return jsonify({'success': True, 'message': f'Next.js ajouté avec succès sur le port {nextjs_port}'})
+        
+    except Exception as e:
+        print(f"❌ Erreur lors de l'ajout de Next.js: {e}")
+        return jsonify({'success': False, 'message': f'Erreur: {str(e)}'})
+
+@app.route('/remove_nextjs/<project_name>', methods=['POST'])
+def remove_nextjs_from_project(project_name):
+    """Supprime Next.js d'un projet existant"""
+    try:
+        print(f"🗑️ Suppression de Next.js du projet: {project_name}")
+        
+        project_path = os.path.join(PROJECTS_FOLDER, project_name)
+        if not os.path.exists(project_path):
+            return jsonify({'success': False, 'message': 'Projet non trouvé'})
+        
+        # Arrêter le conteneur Next.js s'il tourne
+        nextjs_container = f"{project_name}_nextjs_1"
+        subprocess.run(['docker', 'stop', nextjs_container], capture_output=True, text=True)
+        subprocess.run(['docker', 'rm', '-f', nextjs_container], capture_output=True, text=True)
+        
+        # Supprimer le fichier de port
+        nextjs_port_file = os.path.join(project_path, '.nextjs_port')
+        if os.path.exists(nextjs_port_file):
+            os.remove(nextjs_port_file)
+        
+        # Modifier le docker-compose.yml pour supprimer le service Next.js
+        compose_file = os.path.join(project_path, 'docker-compose.yml')
+        if os.path.exists(compose_file):
+            with open(compose_file, 'r') as f:
+                content = f.read()
+            
+            # Supprimer le service Next.js
+            import re
+            nextjs_pattern = r'\s*nextjs:.*?(?=\s*[a-zA-Z_][a-zA-Z0-9_]*:|volumes:|$)'
+            content = re.sub(nextjs_pattern, '', content, flags=re.DOTALL)
+            
+            with open(compose_file, 'w') as f:
+                f.write(content)
+        
+        print(f"✅ Next.js supprimé du projet {project_name}")
+        return jsonify({'success': True, 'message': 'Next.js supprimé avec succès'})
+        
+    except Exception as e:
+        print(f"❌ Erreur lors de la suppression de Next.js: {e}")
+        return jsonify({'success': False, 'message': f'Erreur: {str(e)}'})
+
 if __name__ == '__main__':
     # Créer les dossiers nécessaires
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
     os.makedirs(PROJECTS_FOLDER, exist_ok=True)
     
-    # Démarrer l'application avec SocketIO
-    # Mode debug désactivé pour la production/systemd
-    debug_mode = os.getenv('FLASK_ENV') != 'production'
-    socketio.run(app, host='0.0.0.0', port=5000, debug=debug_mode, allow_unsafe_werkzeug=True) 
+    # Démarrer l'application
+    print("🚀 Démarrage de WordPress Launcher...")
+    socketio.run(app, debug=True, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True) 
