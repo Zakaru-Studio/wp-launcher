@@ -392,6 +392,14 @@ function createProjectHTML(project) {
             url: `http://192.168.1.21:${project.pma_port}`,
             port: project.pma_port
         });
+        if (project.mailpit_port) {
+            services.push({
+                name: 'Mailpit',
+                icon: 'fas fa-envelope',
+                url: `http://192.168.1.21:${project.mailpit_port}`,
+                port: project.mailpit_port
+            });
+        }
         if (project.nextjs_enabled && project.nextjs_port) {
             services.push({
                 name: 'Next.js',
@@ -596,6 +604,9 @@ function initCreateProjectForm() {
         submitButton.classList.add('loading');
         submitButton.disabled = true;
         
+        // Afficher le loader de création
+        showProjectCreationLoader(projectName);
+        
         // Envoyer la requête
         fetch('/create_project', {
             method: 'POST',
@@ -624,6 +635,7 @@ function initCreateProjectForm() {
         .finally(() => {
             submitButton.classList.remove('loading');
             submitButton.disabled = false;
+            hideProjectCreationLoader();
         });
     });
     
@@ -650,6 +662,92 @@ function showImportProgress() {
     if (progressDiv) {
         progressDiv.classList.remove('d-none');
         document.body.classList.add('import-progress-visible');
+    }
+}
+
+// Fonction pour afficher le loader de création de projet
+function showProjectCreationLoader(projectName) {
+    // Créer le loader overlay
+    const loaderOverlay = document.createElement('div');
+    loaderOverlay.id = 'project-creation-loader';
+    loaderOverlay.className = 'creation-loader-overlay';
+    loaderOverlay.innerHTML = `
+        <div class="creation-loader-content">
+            <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <h4 class="mt-3 text-primary">Création du projet</h4>
+            <p class="text-muted mb-0">Projet : <strong>${projectName}</strong></p>
+            <p class="text-muted">Configuration Docker, allocation des ports...</p>
+        </div>
+    `;
+    
+    // Ajouter les styles CSS
+    const style = document.createElement('style');
+    style.textContent = `
+        .creation-loader-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 10, 15, 0.9);
+            backdrop-filter: blur(10px);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .creation-loader-content {
+            text-align: center;
+            padding: 2rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+    `;
+    
+    document.head.appendChild(style);
+    document.body.appendChild(loaderOverlay);
+}
+
+// Fonction pour masquer le loader de création
+function hideProjectCreationLoader() {
+    const loader = document.getElementById('project-creation-loader');
+    if (loader) {
+        loader.remove();
+    }
+}
+
+// Fonction pour afficher le loader d'action projet (start/stop)
+function showProjectActionLoader(projectName, action) {
+    const actionText = action === 'start' ? 'Démarrage' : 'Arrêt';
+    
+    // Créer le loader overlay
+    const loaderOverlay = document.createElement('div');
+    loaderOverlay.id = 'project-action-loader';
+    loaderOverlay.className = 'creation-loader-overlay';
+    loaderOverlay.innerHTML = `
+        <div class="creation-loader-content">
+            <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <h4 class="mt-3 text-primary">${actionText} du projet</h4>
+            <p class="text-muted mb-0">Projet : <strong>${projectName}</strong></p>
+            <p class="text-muted">Configuration des conteneurs Docker...</p>
+        </div>
+    `;
+    
+    document.body.appendChild(loaderOverlay);
+}
+
+// Fonction pour masquer le loader d'action
+function hideProjectActionLoader() {
+    const loader = document.getElementById('project-action-loader');
+    if (loader) {
+        loader.remove();
     }
 }
 

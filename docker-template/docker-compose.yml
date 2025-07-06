@@ -16,21 +16,20 @@ services:
     networks:
       - wordpress_network
     command: --default-authentication-plugin=mysql_native_password
-    # Optimisations haute performance Intel 285K + 35GB RAM
-    mem_limit: 16g
-    cpus: '16'
-    ulimits:
-      nproc: 100000
-      nofile:
-        soft: 100000
-        hard: 100000
-    sysctls:
-      - net.core.somaxconn=65535
-      - net.ipv4.tcp_max_syn_backlog=65535
+    # Allocations raisonnables pour Docker
+    mem_limit: 1g
+    cpus: '2'
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "wordpress", "-pwordpress"]
+      timeout: 20s
+      retries: 10
+      interval: 10s
+      start_period: 60s
 
   wordpress:
     depends_on:
-      - mysql
+      mysql:
+        condition: service_healthy
     image: wordpress:latest
     container_name: PROJECT_NAME_wordpress_1
     restart: unless-stopped
@@ -50,18 +49,14 @@ services:
       - wordpress_network
     ports:
       - "0.0.0.0:PROJECT_PORT:80"  # Port exposé sur toutes les interfaces
-    # Optimisations haute performance
-    mem_limit: 4g
-    cpus: '8'
-    ulimits:
-      nproc: 100000
-      nofile:
-        soft: 100000
-        hard: 100000
+    # Allocations raisonnables pour Docker
+    mem_limit: 1g
+    cpus: '2'
 
   phpmyadmin:
     depends_on:
-      - mysql
+      mysql:
+        condition: service_healthy
     image: phpmyadmin/phpmyadmin:latest
     container_name: PROJECT_NAME_phpmyadmin_1
     restart: unless-stopped
@@ -76,9 +71,9 @@ services:
       - wordpress_network
     ports:
       - "0.0.0.0:PROJECT_PMA_PORT:80"  # Port phpMyAdmin
-    # Optimisations
-    mem_limit: 512M
-    cpus: '2'
+    # Allocations raisonnables
+    mem_limit: 256M
+    cpus: '1'
 
   mailpit:
     image: axllent/mailpit:latest
@@ -92,12 +87,9 @@ services:
     ports:
       - "0.0.0.0:PROJECT_MAILPIT_PORT:8025"  # Port interface web Mailpit
       - "0.0.0.0:PROJECT_SMTP_PORT:1025"     # Port SMTP Mailpit
-    # Optimisations
-    mem_limit: 256M
-    cpus: '1'
-    # Configuration sécurité pour éviter les problèmes AppArmor
-    security_opt:
-      - "apparmor:unconfined"
+    # Allocations légères
+    mem_limit: 128M
+    cpus: '0.5'
 
   nextjs:
     image: node:18-alpine
@@ -113,12 +105,9 @@ services:
     environment:
       - NODE_ENV=development
     command: sh -c "if [ -f package.json ]; then npm install && npm run dev; else echo 'Next.js non configuré - créez votre projet dans le dossier nextjs/'; tail -f /dev/null; fi"
-    # Optimisations
+    # Allocations modérées
     mem_limit: 512M
-    cpus: '2'
-    # Configuration sécurité pour éviter les problèmes AppArmor
-    security_opt:
-      - "apparmor:unconfined"
+    cpus: '1'
 
 volumes:
   mysql_data:

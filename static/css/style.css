@@ -652,7 +652,10 @@ body::before {
     border-color: rgba(102, 126, 234, 0.5);
     box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
     outline: none;
+    color: var(--text-primary);
 }
+
+
 
 .form-control::placeholder {
     color: var(--text-muted);
@@ -756,6 +759,18 @@ body::before {
 .upload-file-info .file-name {
     font-weight: 500;
     word-break: break-all;
+}
+
+.upload-zone.upload-complete{
+    background: rgba(79, 172, 254, 0.1);
+    border: 1px solid rgba(79, 172, 254, 0.3);
+    color: var(--text-primary);
+    padding: 1rem;
+    border-radius: var(--border-radius-small);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 1rem;
 }
 
 /* Progress bar moderne dark */

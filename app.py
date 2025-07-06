@@ -587,251 +587,137 @@ def create_project():
             wp_migrate_archive = None
             print("📁 Aucun fichier WP Migrate - site WordPress vierge")
         
-        # Créer le dossier du projet
-        project_path = os.path.join(PROJECTS_FOLDER, project_name)
-        if os.path.exists(project_path):
+        # ÉTAPE 1: Créer l'objet Project et vérifier s'il existe déjà
+        project = Project(project_name, PROJECTS_FOLDER)
+        if project.exists:
             return jsonify({'success': False, 'message': f'Le projet {project_name} existe déjà'})
         
-        print(f"📂 Création du dossier: {project_path}")
-        os.makedirs(project_path, exist_ok=True)
+        # ÉTAPE 2: Créer le répertoire du projet
+        print(f"📂 Création du dossier: {project.path}")
+        project.create_directory()
         
-        # Copier le template Docker
-        print("📋 Copie du template Docker...")
-        copy_docker_template(project_path)
+        # ÉTAPE 3: Allouer les ports pour le projet
+        print("🔍 Allocation des ports...")
+        ports = port_service.allocate_ports_for_project(enable_nextjs)
+        print(f"🌐 Ports alloués: {ports}")
         
-        # Sauvegarder le fichier uploadé (si fourni)
-        archive_path = None
+        # ÉTAPE 4: Configurer les ports du projet
+        project.port = ports['wordpress']
+        project.pma_port = ports['phpmyadmin']
+        project.mailpit_port = ports['mailpit']
+        project.smtp_port = ports['smtp']
+        if enable_nextjs:
+            project.nextjs_port = ports['nextjs']
+        
+        # ÉTAPE 5: Définir l'hostname
+        project.hostname = project_hostname
+        
+        # ÉTAPE 6: Copier et configurer Docker
+        print("📋 Configuration Docker...")
+        docker_service.copy_template(project.path, enable_nextjs)
+        docker_service.configure_compose_file(project.path, project_name, ports, enable_nextjs)
+        print("✅ Configuration Docker terminée")
+        
+        # ÉTAPE 7: Traiter le fichier uploadé
+        wp_content_path = None
+        db_path = None
+        temp_extract_path = None
         
         if wp_migrate_archive and wp_migrate_archive.filename:
+            # Sauvegarder le fichier temporairement
             archive_filename = secure_filename(wp_migrate_archive.filename)
             archive_path = os.path.join(app.config['UPLOAD_FOLDER'], archive_filename)
-            print(f"💾 Sauvegarde du fichier WP Migrate: {archive_path}")
             wp_migrate_archive.save(archive_path)
+            print(f"💾 Fichier sauvegardé: {archive_path}")
             
-            if not os.path.exists(archive_path):
-                raise Exception(f"Erreur: fichier WP Migrate non sauvegardé: {archive_path}")
-            print(f"✅ Fichier WP Migrate sauvegardé")
-        
-        # Extraire wp-content ou utiliser celui par défaut
-        wp_content_dest = os.path.join(project_path, 'wordpress', 'wp-content')
-        print(f"📦 Configuration wp-content: {wp_content_dest}")
-        os.makedirs(wp_content_dest, exist_ok=True)
-        
-        # Détecter le type de fichier archive
-        db_path = None
-        wp_content_path = None
-        
-        if archive_path:
-            # Analyser le fichier pour déterminer s'il s'agit d'un ZIP ou d'un SQL
+            # Analyser le type de fichier
             filename_lower = archive_path.lower()
             if filename_lower.endswith('.sql') or filename_lower.endswith('.gz'):
                 # Fichier SQL pour base de données
                 db_path = archive_path
-                print(f"📦 Fichier SQL détecté: {db_path}")
-                # Utiliser un wp-content vierge avec les thèmes par défaut
-                print("📦 Création d'un wp-content vierge avec thèmes par défaut")
-                create_default_wp_content(wp_content_dest)
+                print(f"📄 Fichier SQL détecté: {db_path}")
             elif filename_lower.endswith('.zip'):
-                # Fichier ZIP - peut contenir wp-content ou une archive WP Migrate Pro
-                wp_content_path = archive_path
-                print(f"📦 Fichier ZIP détecté: {wp_content_path}")
-                # Extraire le wp-content fourni
-                print(f"📦 Extraction wp-content depuis: {wp_content_path}")
-                extract_zip(wp_content_path, wp_content_dest)
-            else:
-                # Utiliser un wp-content vierge avec les thèmes par défaut
-                print("📦 Création d'un wp-content vierge avec thèmes par défaut")
-                create_default_wp_content(wp_content_dest)
-        else:
-            # Utiliser un wp-content vierge avec les thèmes par défaut
-            print("📦 Création d'un wp-content vierge avec thèmes par défaut")
-            create_default_wp_content(wp_content_dest)
+                # Fichier ZIP - traiter avec la méthode Project
+                print(f"📦 Archive ZIP détectée: {archive_path}")
+                archive_data = project.process_wp_migrate_archive(archive_path, app.config['UPLOAD_FOLDER'])
+                wp_content_path = archive_data['wp_content_path']
+                db_path = archive_data['db_path']
+                temp_extract_path = archive_data['temp_extract_path']
+                print(f"📦 Archive traitée - wp-content: {wp_content_path}, DB: {db_path}")
         
-        # Trouver des ports libres automatiquement
-        print("🔍 Recherche de ports libres...")
-        project_port = find_free_port_for_project()
-        pma_port = find_free_port_for_project(project_port + 1)
-        print(f"🌐 Port WordPress attribué: {project_port}")
-        print(f"🗃️ Port phpMyAdmin attribué: {pma_port}")
+        # ÉTAPE 8: Créer wp-content
+        print("📦 Configuration wp-content...")
+        project.create_wp_content(wp_content_path)
+        print("✅ wp-content configuré")
         
-        # Port Next.js si activé
-        nextjs_port = None
+        # ÉTAPE 8.5: Configurer wp-config.php
+        print("⚙️ Configuration wp-config.php...")
+        docker_service.configure_wp_config(project.path, ports)
+        print("✅ wp-config.php configuré")
+        
+        # ÉTAPE 9: Configurer Next.js si activé
         if enable_nextjs:
-            nextjs_port = find_free_port_for_project(pma_port + 1)
-            print(f"⚛️ Port Next.js attribué: {nextjs_port}")
+            print("⚛️ Configuration Next.js...")
+            project.setup_nextjs()
+            print("✅ Next.js configuré")
         
-        # Modifier le docker-compose.yml avec le bon nom de projet, hostname et ports
-        compose_file = os.path.join(project_path, 'docker-compose.yml')
-        print(f"⚙️ Configuration Docker Compose: {compose_file}")
-        if os.path.exists(compose_file):
-            with open(compose_file, 'r') as f:
-                content = f.read()
-            
-            # Remplacer les placeholders
-            content = content.replace('PROJECT_NAME', project_name)
-            content = content.replace('PROJECT_HOSTNAME', project_hostname)
-            content = content.replace('PROJECT_PORT', str(project_port))
-            content = content.replace('PROJECT_PMA_PORT', str(pma_port))
-            
-            # Ports pour Mailpit (emails)
-            mailpit_port = find_free_port_for_project(pma_port + 1)
-            smtp_port = find_free_port_for_project(mailpit_port + 1)
-            content = content.replace('PROJECT_MAILPIT_PORT', str(mailpit_port))
-            content = content.replace('PROJECT_SMTP_PORT', str(smtp_port))
-            
-            # Port Next.js si activé
-            if enable_nextjs and nextjs_port:
-                content = content.replace('PROJECT_NEXTJS_PORT', str(nextjs_port))
-            else:
-                # Supprimer le service Next.js s'il n'est pas activé
-                import re
-                # Trouver le début du service nextjs jusqu'à la fin des services
-                pattern = r'(\s+nextjs:.*?)(\n\nvolumes:)'
-                content = re.sub(pattern, r'\2', content, flags=re.DOTALL)
-            
-            with open(compose_file, 'w') as f:
-                f.write(content)
-            print("✅ Docker Compose configuré")
-        else:
-            raise Exception("Fichier docker-compose.yml manquant")
+        # ÉTAPE 10: Démarrer les conteneurs Docker
+        print("🐳 Démarrage des conteneurs Docker...")
+        success, error = docker_service.start_containers(project.path)
+        if not success:
+            raise Exception(f"Erreur lors du démarrage des conteneurs: {error}")
+        print("✅ Conteneurs Docker démarrés")
         
-        # Sauvegarder les ports attribués
-        port_file = os.path.join(project_path, '.port')
-        with open(port_file, 'w') as f:
-            f.write(str(project_port))
-        print(f"✅ Port WordPress {project_port} sauvegardé")
+        # ÉTAPE 11: Attendre que les services soient prêts
+        print("⏳ Attente du démarrage des services...")
+        time.sleep(5)  # Attendre un peu avant de vérifier MySQL
         
-        pma_port_file = os.path.join(project_path, '.pma_port')
-        with open(pma_port_file, 'w') as f:
-            f.write(str(pma_port))
-        print(f"✅ Port phpMyAdmin {pma_port} sauvegardé")
-        
-        if enable_nextjs and nextjs_port:
-            nextjs_port_file = os.path.join(project_path, '.nextjs_port')
-            with open(nextjs_port_file, 'w') as f:
-                f.write(str(nextjs_port))
-            nextjs_enabled_file = os.path.join(project_path, '.nextjs_enabled')
-            with open(nextjs_enabled_file, 'w') as f:
-                f.write('true')
-            print(f"✅ Port Next.js {nextjs_port} sauvegardé")
-            
-            # Créer un dossier Next.js basique
-            nextjs_dir = os.path.join(project_path, 'nextjs')
-            os.makedirs(nextjs_dir, exist_ok=True)
-            
-            # Créer un package.json basique
-            package_json = {
-                "name": f"{project_name}-nextjs",
-                "version": "1.0.0",
-                "scripts": {
-                    "dev": "next dev",
-                    "build": "next build",
-                    "start": "next start"
-                },
-                "dependencies": {
-                    "next": "latest",
-                    "react": "latest",
-                    "react-dom": "latest"
-                }
-            }
-            
-            import json
-            with open(os.path.join(nextjs_dir, 'package.json'), 'w') as f:
-                json.dump(package_json, f, indent=2)
-            
-            # Créer une page d'accueil basique
-            pages_dir = os.path.join(nextjs_dir, 'pages')
-            os.makedirs(pages_dir, exist_ok=True)
-            
-            index_content = f"""import React from 'react';
-
-export default function Home() {{
-  return (
-    <div style={{ padding: '50px', textAlign: 'center' }}>
-      <h1>Next.js Frontend pour {project_name}</h1>
-      <p>Votre application Next.js est prête !</p>
-      <p>Backend WordPress disponible sur le port {project_port}</p>
-    </div>
-  );
-}}
-"""
-            with open(os.path.join(pages_dir, 'index.js'), 'w') as f:
-                f.write(index_content)
-            
-            print("✅ Structure Next.js créée")
-        
-        # Modifier le wp-config.php avec le bon hostname
-        wp_config_file = os.path.join(project_path, 'wordpress', 'wp-config.php')
-        print(f"⚙️ Configuration WordPress: {wp_config_file}")
-        if os.path.exists(wp_config_file):
-            with open(wp_config_file, 'r') as f:
-                wp_content = f.read()
-            wp_content = wp_content.replace('PROJECT_HOSTNAME', project_hostname)
-            with open(wp_config_file, 'w') as f:
-                f.write(wp_content)
-            print("✅ WordPress configuré avec l'hostname")
-        else:
-            print("⚠️ Fichier wp-config.php manquant, création automatique par WordPress")
-        
-        # Sauvegarder l'hostname dans un fichier de configuration
-        hostname_file = os.path.join(project_path, '.hostname')
-        with open(hostname_file, 'w') as f:
-            f.write(project_hostname)
-        print(f"✅ Hostname sauvegardé: {project_hostname}")
-        
-        # Lancer Docker Compose
-        print("🐳 Lancement de Docker Compose...")
-        result = subprocess.run([
-            'docker-compose', 'up', '-d'
-        ], capture_output=True, text=True, cwd=project_path)
-        
-        if result.returncode != 0:
-            raise Exception(f"Erreur Docker Compose: {result.stderr}")
-        
-        print("✅ Conteneurs Docker lancés")
-        
-        # Attendre un peu que les conteneurs se lancent
-        print("⏳ Attente du démarrage des conteneurs...")
-        time.sleep(45)
-        
-        # Importer la base de données ou créer une base vierge
+        # ÉTAPE 12: Configurer la base de données
         if db_path:
-            print("🗃️ Début import de la base de données...")
-            if not import_database(project_path, db_path, project_name):
+            print("🗃️ Import de la base de données...")
+            # Utiliser DatabaseService pour l'import
+            success = database_service.import_database(project.path, db_path, project_name)
+            if not success:
                 return jsonify({'success': False, 'message': 'Projet créé mais erreur lors de l\'import de la base de données'})
-            else:
-                success_message = f'Projet {project_name} créé avec succès !'
+            success_message = f'Projet {project_name} créé avec succès !'
         else:
             print("🗃️ Création d'une base de données WordPress vierge...")
-            if not create_clean_wordpress_database(project_path, project_name):
+            # Utiliser DatabaseService pour créer une base vierge
+            success = database_service.create_clean_database(project.path, project_name)
+            if not success:
                 return jsonify({'success': False, 'message': 'Projet créé mais erreur lors de la création de la base de données'})
-            else:
-                success_message = f'Projet {project_name} créé avec succès ! Rendez-vous sur le site pour terminer l\'installation WordPress.'
+            success_message = f'Projet {project_name} créé avec succès ! Rendez-vous sur le site pour terminer l\'installation WordPress.'
         
-        # Ajouter l'hostname au fichier /etc/hosts
+        # ÉTAPE 13: Ajouter l'hostname au fichier /etc/hosts
         print(f"🌐 Ajout de l'hostname {project_hostname} au fichier /etc/hosts...")
         try:
             script_path = os.path.join(os.path.dirname(__file__), 'manage_hosts.sh')
-            subprocess.run(['sudo', script_path, 'add', project_hostname], check=True)
-            print(f"✅ Hostname {project_hostname} ajouté aux hosts")
-        except subprocess.CalledProcessError as e:
+            if os.path.exists(script_path):
+                subprocess.run(['sudo', script_path, 'add', project_hostname], check=True, timeout=10)
+                print(f"✅ Hostname {project_hostname} ajouté aux hosts")
+        except Exception as e:
             print(f"⚠️ Erreur lors de l'ajout de l'hostname: {e}")
             print("💡 Vous pouvez ajouter manuellement l'entrée:")
             print(f"   echo '127.0.0.1    {project_hostname}' | sudo tee -a /etc/hosts")
         
-        # Nettoyer les fichiers temporaires
+        # ÉTAPE 14: Nettoyer les fichiers temporaires
         print("🧹 Nettoyage des fichiers temporaires...")
-        try:
-            if archive_path and os.path.exists(archive_path):
-                os.remove(archive_path)
-                print("✅ Fichier WP Migrate temporaire supprimé")
-        except Exception as e:
-            print(f"⚠️ Erreur lors du nettoyage: {e}")
+        temp_files = []
+        if wp_migrate_archive and wp_migrate_archive.filename:
+            temp_files.append(archive_path)
+        if temp_extract_path:
+            temp_files.append(temp_extract_path)
         
+        project.cleanup_temp_files(temp_files)
+        print("✅ Fichiers temporaires nettoyés")
+        
+        print(f"🎉 Projet {project_name} créé avec succès !")
         return jsonify({'success': True, 'message': success_message})
         
     except Exception as e:
         print(f"❌ Erreur lors de la création du projet: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'message': f'Erreur lors de la création du projet: {str(e)}'})
 
 @app.route('/projects')
@@ -901,6 +787,8 @@ def list_projects_with_status():
                     'hostname': project.hostname,
                     'port': project.port,
                     'pma_port': project.pma_port,
+                    'mailpit_port': project.mailpit_port,
+                    'smtp_port': project.smtp_port,
                     'nextjs_enabled': project.has_nextjs,
                     'nextjs_port': project.nextjs_port if project.has_nextjs else None
                 })

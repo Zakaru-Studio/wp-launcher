@@ -62,6 +62,23 @@ class DockerService:
         with open(compose_file, 'w') as f:
             f.write(content)
     
+    def configure_wp_config(self, project_path, ports):
+        """Configure le fichier wp-config.php avec les bons paramètres"""
+        wp_config_file = os.path.join(project_path, 'wordpress', 'wp-config.php')
+        
+        if not os.path.exists(wp_config_file):
+            # Le fichier wp-config.php sera créé par WordPress automatiquement
+            return
+        
+        with open(wp_config_file, 'r') as f:
+            content = f.read()
+        
+        # Remplacer les placeholders
+        content = content.replace('PROJECT_PORT', str(ports['wordpress']))
+        
+        with open(wp_config_file, 'w') as f:
+            f.write(content)
+    
     def start_containers(self, project_path, timeout=120):
         """Démarre les conteneurs d'un projet"""
         original_cwd = os.getcwd()
