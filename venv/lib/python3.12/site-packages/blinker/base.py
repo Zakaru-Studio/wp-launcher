@@ -12,13 +12,13 @@ from __future__ import annotations
 import typing as t
 from collections import defaultdict
 from contextlib import contextmanager
+from inspect import iscoroutinefunction
 from warnings import warn
 from weakref import WeakValueDictionary
 
 from blinker._utilities import annotatable_weakref
 from blinker._utilities import hashable_identity
 from blinker._utilities import IdentityType
-from blinker._utilities import is_coroutine_function
 from blinker._utilities import lazy_property
 from blinker._utilities import reference
 from blinker._utilities import symbol
@@ -39,6 +39,10 @@ ANY = symbol("ANY")
 ANY.__doc__ = 'Token for "any sender".'
 ANY_ID = 0
 
+# NOTE: We need a reference to cast for use in weakref callbacks otherwise
+#       t.cast may have already been set to None during finalization.
+cast = t.cast
+
 
 class Signal:
     """A notification emitter."""
@@ -46,6 +50,8 @@ class Signal:
     #: An :obj:`ANY` convenience synonym, allows ``Signal.ANY``
     #: without an additional import.
     ANY = ANY
+
+    set_class: type[set] = set
 
     @lazy_property
     def receiver_connected(self) -> Signal:
@@ -99,8 +105,12 @@ class Signal:
         #: any receivers are connected to the signal.
         self.receivers: dict[IdentityType, t.Callable | annotatable_weakref] = {}
         self.is_muted = False
-        self._by_receiver: dict[IdentityType, set[IdentityType]] = defaultdict(set)
-        self._by_sender: dict[IdentityType, set[IdentityType]] = defaultdict(set)
+        self._by_receiver: dict[IdentityType, set[IdentityType]] = defaultdict(
+            self.set_class
+        )
+        self._by_sender: dict[IdentityType, set[IdentityType]] = defaultdict(
+            self.set_class
+        )
         self._weak_senders: dict[IdentityType, annotatable_weakref] = {}
 
     def connect(
@@ -290,7 +300,7 @@ class Signal:
         sender = self._extract_sender(sender)
         results = []
         for receiver in self.receivers_for(sender):
-            if is_coroutine_function(receiver):
+            if iscoroutinefunction(receiver):
                 if _async_wrapper is None:
                     raise RuntimeError("Cannot send to a coroutine function")
                 receiver = _async_wrapper(receiver)
@@ -322,7 +332,7 @@ class Signal:
         sender = self._extract_sender(sender)
         results = []
         for receiver in self.receivers_for(sender):
-            if not is_coroutine_function(receiver):
+            if not iscoroutinefunction(receiver):
                 if _sync_wrapper is None:
                     raise RuntimeError("Cannot send to a non-coroutine function")
                 receiver = _sync_wrapper(receiver)
@@ -427,11 +437,11 @@ class Signal:
 
     def _cleanup_receiver(self, receiver_ref: annotatable_weakref) -> None:
         """Disconnect a receiver from all senders."""
-        self._disconnect(t.cast(IdentityType, receiver_ref.receiver_id), ANY_ID)
+        self._disconnect(cast(IdentityType, receiver_ref.receiver_id), ANY_ID)
 
     def _cleanup_sender(self, sender_ref: annotatable_weakref) -> None:
         """Disconnect all receivers from a sender."""
-        sender_id = t.cast(IdentityType, sender_ref.sender_id)
+        sender_id = cast(IdentityType, sender_ref.sender_id)
         assert sender_id != ANY_ID
         self._weak_senders.pop(sender_id, None)
         for receiver_id in self._by_sender.pop(sender_id, ()):
@@ -502,7 +512,7 @@ class NamedSignal(Signal):
 
     def __repr__(self) -> str:
         base = Signal.__repr__(self)
-        return f"{base[:-1]}; {self.name!r}>"
+        return f"{base[:-1]}; {self.name!r}>"  # noqa: E702
 
 
 class Namespace(dict):

@@ -12,14 +12,14 @@ define('DB_CHARSET', 'utf8mb4');
 define('DB_COLLATE', '');
 
 // Clés de sécurité WordPress
-define('AUTH_KEY',         'put your unique phrase here');
-define('SECURE_AUTH_KEY',  'put your unique phrase here');
-define('LOGGED_IN_KEY',    'put your unique phrase here');
-define('NONCE_KEY',        'put your unique phrase here');
-define('AUTH_SALT',        'put your unique phrase here');
+define('AUTH_KEY', 'put your unique phrase here');
+define('SECURE_AUTH_KEY', 'put your unique phrase here');
+define('LOGGED_IN_KEY', 'put your unique phrase here');
+define('NONCE_KEY', 'put your unique phrase here');
+define('AUTH_SALT', 'put your unique phrase here');
 define('SECURE_AUTH_SALT', 'put your unique phrase here');
-define('LOGGED_IN_SALT',   'put your unique phrase here');
-define('NONCE_SALT',       'put your unique phrase here');
+define('LOGGED_IN_SALT', 'put your unique phrase here');
+define('NONCE_SALT', 'put your unique phrase here');
 
 // Préfixe des tables WordPress
 $table_prefix = 'wp_';
@@ -28,8 +28,8 @@ $table_prefix = 'wp_';
 define('WP_DEBUG', false);
 
 // Configuration des URLs
-define('WP_HOME', 'http://PROJECT_HOSTNAME:8080');
-define('WP_SITEURL', 'http://PROJECT_HOSTNAME:8080');
+define('WP_HOME', 'http://192.168.1.21:PROJECT_PORT');
+define('WP_SITEURL', 'http://192.168.1.21:PROJECT_PORT');
 
 // Configuration des fichiers
 define('DISALLOW_FILE_EDIT', false);
@@ -78,7 +78,7 @@ if (!defined('ABSPATH')) {
 
 // Configuration des chemins
 define('WP_CONTENT_DIR', ABSPATH . 'wp-content');
-define('WP_CONTENT_URL', 'http://PROJECT_HOSTNAME:8080/wp-content');
+define('WP_CONTENT_URL', 'http://192.168.1.21:PROJECT_PORT/wp-content');
 
 // Chargement des réglages WordPress
-require_once ABSPATH . 'wp-settings.php'; 
+require_once ABSPATH . 'wp-settings.php';

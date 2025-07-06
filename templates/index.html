@@ -12,61 +12,60 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+            background: #000000;
+            color: #ffffff;
             min-height: 100vh;
-            padding: 20px;
+            line-height: 1.6;
         }
 
         .container {
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            padding: 40px;
-            max-width: 1200px;
-            width: 100%;
+            max-width: 1400px;
             margin: 0 auto;
+            padding: 32px 24px;
         }
 
         .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 30px;
-            padding-bottom: 20px;
-            border-bottom: 2px solid #e1e1e1;
+            margin-bottom: 48px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid #333;
         }
 
         .header-content h1 {
-            color: #333;
-            font-size: 2.5em;
-            margin-bottom: 5px;
-            font-weight: 700;
+            color: #ffffff;
+            font-size: 2.25rem;
+            margin-bottom: 8px;
+            font-weight: 600;
+            letter-spacing: -0.025em;
         }
 
         .header-content p {
-            color: #666;
-            font-size: 1.1em;
+            color: #888888;
+            font-size: 1rem;
         }
 
         .add-site-btn {
             padding: 12px 24px;
-            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-            color: white;
+            background: #ffffff;
+            color: #000000;
             border: none;
-            border-radius: 10px;
-            font-size: 1em;
-            font-weight: 600;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 500;
             cursor: pointer;
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            transition: all 0.2s ease;
             display: flex;
             align-items: center;
             gap: 8px;
+            height: 40px;
         }
 
         .add-site-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(40, 167, 69, 0.3);
+            background: #f5f5f5;
+            transform: translateY(-1px);
         }
 
         .form-group {
@@ -188,176 +187,210 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
+            margin-bottom: 24px;
         }
 
         .projects-header h2 {
-            color: #333;
-            font-size: 1.8em;
+            color: #ffffff;
+            font-size: 1.5rem;
             font-weight: 600;
+            letter-spacing: -0.025em;
         }
 
         .projects-count {
-            color: #666;
-            font-size: 0.9em;
-            background: #f8f9fa;
-            padding: 4px 12px;
-            border-radius: 20px;
+            color: #888888;
+            font-size: 0.875rem;
+            background: #111111;
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: 1px solid #333;
         }
 
         .projects-list {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-            gap: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
         }
 
         .project-item {
-            background: white;
-            padding: 20px;
-            border-radius: 15px;
-            border: 1px solid #e1e1e1;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            background: #111111;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 24px;
+            transition: all 0.2s ease;
+            width: 100%;
         }
 
         .project-item:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            border-color: #555;
+            background: #1a1a1a;
         }
 
         .project-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 15px;
+            margin-bottom: 20px;
         }
 
         .project-name {
-            font-size: 1.3em;
+            font-size: 1.25rem;
             font-weight: 600;
-            color: #333;
+            color: #ffffff;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 12px;
         }
 
         .project-status {
-            font-size: 0.85em;
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-weight: 600;
+            font-size: 0.75rem;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-weight: 500;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.05em;
         }
 
         .project-status.active {
-            background: #d4edda;
-            color: #155724;
+            background: #0070f3;
+            color: #ffffff;
         }
 
         .project-status.inactive {
-            background: #f8d7da;
-            color: #721c24;
+            background: #333;
+            color: #888;
         }
 
         .project-info {
             display: flex;
             flex-direction: column;
-            gap: 12px;
-            margin-bottom: 15px;
+            gap: 16px;
+            margin-bottom: 24px;
         }
 
-        .project-hostname {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px 15px;
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        .project-urls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 16px;
+        }
+
+        .url-card {
+            background: #000000;
+            border: 1px solid #333;
             border-radius: 8px;
-            border-left: 4px solid #28a745;
+            padding: 16px;
+            transition: all 0.2s ease;
+            cursor: pointer;
         }
-        
-        .hostname-info {
+
+        .url-card:hover {
+            border-color: #0070f3;
+            background: #0a0a0a;
+        }
+
+        .url-card-header {
             display: flex;
-            flex-direction: column;
-            gap: 2px;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
         }
 
-        .hostname-text {
-            color: #495057;
-            font-family: 'Courier New', monospace;
-            font-size: 0.9em;
-            font-weight: 600;
+        .url-card-title {
+            color: #ffffff;
+            font-size: 0.875rem;
+            font-weight: 500;
         }
 
-        .hostname-ip {
-            color: #6c757d;
-            font-family: 'Courier New', monospace;
-            font-size: 0.8em;
+        .url-card-url {
+            color: #0070f3;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+            font-size: 0.75rem;
+            word-break: break-all;
         }
 
         .project-actions {
             display: flex;
-            gap: 8px;
-            justify-content: center;
+            gap: 12px;
+            justify-content: flex-end;
+            flex-wrap: wrap;
         }
 
-        .btn-action {
-            padding: 6px 12px;
-            border: none;
-            border-radius: 6px;
-            font-size: 0.9em;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-decoration: none;
+        .action-btn {
             display: inline-flex;
             align-items: center;
-            gap: 4px;
+            gap: 8px;
+            padding: 8px 16px;
+            border: 1px solid #333;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            background: #000000;
+            color: #ffffff;
+            height: 36px;
         }
 
-        .btn-primary {
-            background: #007bff;
-            color: white;
+        .action-btn:hover {
+            border-color: #555;
+            background: #111111;
+            transform: translateY(-1px);
         }
 
-        .btn-primary:hover {
-            background: #0056b3;
+        .action-btn.primary {
+            background: #0070f3;
+            border-color: #0070f3;
+            color: #ffffff;
         }
 
-        .btn-warning {
-            background: #ffc107;
-            color: #212529;
+        .action-btn.primary:hover {
+            background: #0051cc;
+            border-color: #0051cc;
         }
 
-        .btn-warning:hover {
-            background: #e0a800;
+        .action-btn.success {
+            background: #00d924;
+            border-color: #00d924;
+            color: #000000;
         }
 
-        .btn-danger {
-            background: #dc3545;
-            color: white;
+        .action-btn.success:hover {
+            background: #00b01f;
+            border-color: #00b01f;
         }
 
-        .btn-danger:hover {
-            background: #c82333;
+        .action-btn.warning {
+            background: #f5a623;
+            border-color: #f5a623;
+            color: #000000;
         }
 
-        .btn-cancel {
-            background: #6c757d;
-            color: white;
+        .action-btn.warning:hover {
+            background: #d9941c;
+            border-color: #d9941c;
         }
 
-        .btn-cancel:hover {
-            background: #5a6268;
+        .action-btn.danger {
+            background: #e00;
+            border-color: #e00;
+            color: #ffffff;
         }
 
-        .btn-info {
-            background: #17a2b8;
-            color: white;
+        .action-btn.danger:hover {
+            background: #c00;
+            border-color: #c00;
         }
 
-        .btn-info:hover {
-            background: #138496;
+        .action-btn.secondary {
+            background: #333;
+            border-color: #333;
+            color: #ffffff;
+        }
+
+        .action-btn.secondary:hover {
+            background: #555;
+            border-color: #555;
         }
 
         /* Styles pour les modals */
@@ -375,47 +408,52 @@
         }
 
         .modal-content {
-            background-color: white;
-            border-radius: 15px;
+            background-color: #111111;
+            border: 1px solid #333;
+            border-radius: 12px;
             width: 90%;
             max-width: 500px;
             max-height: 90vh;
             overflow-y: auto;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8);
         }
 
         .modal-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 20px;
-            border-bottom: 1px solid #dee2e6;
+            padding: 24px;
+            border-bottom: 1px solid #333;
         }
 
         .modal-header h3 {
             margin: 0;
-            color: #333;
+            color: #ffffff;
+            font-size: 1.25rem;
+            font-weight: 600;
         }
 
         .close {
-            font-size: 28px;
+            font-size: 24px;
             font-weight: bold;
             cursor: pointer;
-            color: #aaa;
-            transition: color 0.3s ease;
+            color: #888;
+            transition: color 0.2s ease;
         }
 
         .close:hover {
-            color: #333;
+            color: #ffffff;
         }
 
         .modal-body {
-            padding: 20px;
+            padding: 24px;
+            color: #ffffff;
         }
 
         .modal-body p {
             margin-bottom: 15px;
-            line-height: 1.5;
+            line-height: 1.6;
+            color: #cccccc;
         }
 
         .modal-body ul {
@@ -425,6 +463,36 @@
 
         .modal-body li {
             margin-bottom: 8px;
+            color: #cccccc;
+        }
+
+        .modal-body label {
+            color: #ffffff;
+            font-weight: 500;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .modal-body input,
+        .modal-body select,
+        .modal-body textarea {
+            background: #000000;
+            border: 1px solid #333;
+            color: #ffffff;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 0.875rem;
+        }
+
+        .modal-body input:focus,
+        .modal-body select:focus,
+        .modal-body textarea:focus {
+            outline: none;
+            border-color: #0070f3;
+        }
+
+        .modal-body input::placeholder {
+            color: #666;
         }
 
         .confirmation-input {
@@ -434,15 +502,23 @@
         .confirmation-input label {
             display: block;
             margin-bottom: 8px;
-            font-weight: 600;
+            font-weight: 500;
+            color: #ffffff;
         }
 
         .confirmation-input input {
             width: 100%;
-            padding: 10px;
-            border: 2px solid #e1e1e1;
+            padding: 12px;
+            border: 1px solid #333;
             border-radius: 8px;
             font-size: 1em;
+            background: #000000;
+            color: #ffffff;
+        }
+
+        .confirmation-input input:focus {
+            outline: none;
+            border-color: #0070f3;
         }
 
         .modal-actions {
@@ -453,12 +529,40 @@
         }
 
         .modal-actions button {
-            padding: 10px 20px;
-            border: none;
+            padding: 12px 24px;
+            border: 1px solid #333;
             border-radius: 8px;
-            font-size: 1em;
+            font-size: 0.875rem;
+            font-weight: 500;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
+            background: #000000;
+            color: #ffffff;
+        }
+
+        .modal-actions button:hover {
+            border-color: #555;
+            background: #111111;
+        }
+
+        .modal-actions button.primary {
+            background: #0070f3;
+            border-color: #0070f3;
+        }
+
+        .modal-actions button.primary:hover {
+            background: #0051cc;
+            border-color: #0051cc;
+        }
+
+        .modal-actions button.danger {
+            background: #e00;
+            border-color: #e00;
+        }
+
+        .modal-actions button.danger:hover {
+            background: #c00;
+            border-color: #c00;
         }
 
         .loading {
@@ -490,6 +594,118 @@
             font-size: 0.9em;
             color: #666;
             margin-top: 5px;
+        }
+        
+        .checkbox-wrapper {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .checkbox-input {
+            width: 18px;
+            height: 18px;
+            margin-right: 12px;
+            accent-color: #0070f3;
+            cursor: pointer;
+        }
+        
+        .checkbox-label {
+            color: #ffffff;
+            font-size: 1rem;
+            cursor: pointer;
+            user-select: none;
+            margin-bottom: 0;
+        }
+        
+        .checkbox-label:hover {
+            color: #0070f3;
+        }
+        
+        .control-buttons {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        
+        .control-btn {
+            padding: 6px 12px;
+            border: 1px solid #333;
+            border-radius: 6px;
+            background: #1a1a1a;
+            color: #ffffff;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .control-btn:hover {
+            background: #333;
+            transform: translateY(-1px);
+        }
+        
+        .control-btn.start {
+            border-color: #28a745;
+            color: #28a745;
+        }
+        
+        .control-btn.start:hover {
+            background: #28a745;
+            color: #ffffff;
+        }
+        
+        .control-btn.stop {
+            border-color: #dc3545;
+            color: #dc3545;
+        }
+        
+        .control-btn.stop:hover {
+            background: #dc3545;
+            color: #ffffff;
+        }
+        
+        .nextjs-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        
+        .nextjs-btn {
+            padding: 4px 8px;
+            border: 1px solid #333;
+            border-radius: 4px;
+            background: #1a1a1a;
+            color: #ffffff;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .nextjs-btn:hover {
+            background: #333;
+        }
+        
+        .nextjs-btn.add {
+            border-color: #0070f3;
+            color: #0070f3;
+        }
+        
+        .nextjs-btn.add:hover {
+            background: #0070f3;
+            color: #ffffff;
+        }
+        
+        .nextjs-btn.remove {
+            border-color: #dc3545;
+            color: #dc3545;
+        }
+        
+        .nextjs-btn.remove:hover {
+            background: #dc3545;
+            color: #ffffff;
         }
 
         @media (max-width: 768px) {
@@ -565,30 +781,31 @@
                         </div>
 
                         <div class="form-group">
-                            <label for="wp_content_file">📦 Archive wp-content (.zip) - <span style="color: #28a745;">OPTIONNEL</span></label>
+                            <label for="wp_migrate_archive">📦 Archive WP Migrate Pro (.zip) - <span style="color: #28a745;">OPTIONNEL</span></label>
                             <div class="file-input-wrapper">
-                                <input type="file" id="wp_content_file" name="wp_content_file" accept=".zip">
-                                <label for="wp_content_file" class="file-input-label" id="wp_content_label">
+                                <input type="file" id="wp_migrate_archive" name="wp_migrate_archive" accept=".zip">
+                                <label for="wp_migrate_archive" class="file-input-label" id="wp_migrate_label">
                                     📁 Sélectionner l'archive ou laissez vide pour un site propre
                                 </label>
                             </div>
                             <div class="help-text">
-                                <strong>📦 Avec archive :</strong> Restaure vos plugins, thèmes et uploads existants<br>
+                                <strong>📦 Avec archive WP Migrate Pro :</strong> Restaure automatiquement votre wp-content et base de données<br>
+                                <strong>📁 Structure attendue :</strong> <code>app/public/wp-content/</code> et <code>app/sql/local.sql</code><br>
                                 <strong>🆕 Sans archive :</strong> Crée un site WordPress neuf avec les thèmes par défaut
                             </div>
                         </div>
 
                         <div class="form-group">
-                            <label for="db_file">🗃️ Base de données (.sql ou .zip) - <span style="color: #28a745;">OPTIONNEL</span></label>
-                            <div class="file-input-wrapper">
-                                <input type="file" id="db_file" name="db_file" accept=".sql,.zip">
-                                <label for="db_file" class="file-input-label" id="db_label">
-                                    📄 Sélectionner le fichier ou laissez vide pour une DB vierge
+                            <div class="checkbox-wrapper">
+                                <input type="checkbox" id="enable_nextjs" name="enable_nextjs" class="checkbox-input">
+                                <label for="enable_nextjs" class="checkbox-label">
+                                    ⚡ Inclure Next.js (Frontend headless)
                                 </label>
                             </div>
                             <div class="help-text">
-                                <strong>🗃️ Avec BDD :</strong> Importe vos données existantes (articles, pages, utilisateurs)<br>
-                                <strong>🆕 Sans BDD :</strong> Crée une base WordPress vide prête pour l'installation
+                                <strong>⚡ Next.js inclus :</strong> Ajoute un service Next.js pour développer un frontend React<br>
+                                <strong>🔗 WordPress Headless :</strong> Utilisez l'API REST WordPress comme backend<br>
+                                <strong>📁 Structure :</strong> Un dossier <code>nextjs/</code> avec package.json sera créé
                             </div>
                         </div>
 
@@ -800,27 +1017,15 @@
             }
         });
 
-        // Gestion des labels de fichiers
-        document.getElementById('wp_content_file').addEventListener('change', function(e) {
-            const label = document.getElementById('wp_content_label');
+        // Gestion du label du fichier WP Migrate Pro
+        document.getElementById('wp_migrate_archive').addEventListener('change', function(e) {
+            const label = document.getElementById('wp_migrate_label');
             const fileName = e.target.files[0] ? e.target.files[0].name : '';
             if (fileName) {
                 label.textContent = `✅ ${fileName}`;
                 label.classList.add('has-file');
             } else {
                 label.textContent = '📁 Sélectionner l\'archive ou laissez vide pour un site propre';
-                label.classList.remove('has-file');
-            }
-        });
-
-        document.getElementById('db_file').addEventListener('change', function(e) {
-            const label = document.getElementById('db_label');
-            const fileName = e.target.files[0] ? e.target.files[0].name : '';
-            if (fileName) {
-                label.textContent = `✅ ${fileName}`;
-                label.classList.add('has-file');
-            } else {
-                label.textContent = '📄 Sélectionner le fichier ou laissez vide pour une DB vierge';
                 label.classList.remove('has-file');
             }
         });
@@ -882,23 +1087,68 @@
                             `<div class="project-item">
                                 <div class="project-header">
                                     <div class="project-name">
-                                        <span>📁 ${project.name}</span>
+                                        <span>🚀 ${project.name}</span>
                                     </div>
-                                    <span class="project-status ${project.status}">${project.status === 'active' ? '🟢 Actif' : '🔴 Arrêté'}</span>
+                                    <span class="project-status ${project.status}">${project.status === 'active' ? 'Active' : 'Inactive'}</span>
+                                </div>
+                                <div class="control-buttons">
+                                    <button class="control-btn start" onclick="startProject('${project.name}')" title="Démarrer tous les conteneurs">
+                                        ▶️ Start
+                                    </button>
+                                    <button class="control-btn stop" onclick="stopProject('${project.name}')" title="Arrêter tous les conteneurs">
+                                        ⏹️ Stop
+                                    </button>
                                 </div>
                                 <div class="project-info">
-                                    <div class="project-hostname">
-                                        <div class="hostname-info">
-                                            <div class="hostname-text">🌐 ${project.hostname || project.name + '.local'}:${project.port || 8080}</div>
-                                            <div class="hostname-ip" style="font-size: 0.9em; color: #666;">💡 Accès : http://${project.hostname || project.name + '.local'}:${project.port || 8080}</div>
+                                    <div class="project-urls">
+                                        <div class="url-card" onclick="openProjectSite('${serverInfo.server_ip}', ${project.port || 8080})">
+                                            <div class="url-card-header">
+                                                <span class="url-card-title">🌐 WordPress</span>
+                                            </div>
+                                            <div class="url-card-url">http://${serverInfo.server_ip}:${project.port || 8080}</div>
                                         </div>
+                                        ${project.pma_port ? `
+                                        <div class="url-card" onclick="openProjectSite('${serverInfo.server_ip}', ${project.pma_port})">
+                                            <div class="url-card-header">
+                                                <span class="url-card-title">🔧 phpMyAdmin</span>
+                                            </div>
+                                            <div class="url-card-url">http://${serverInfo.server_ip}:${project.pma_port}</div>
+                                        </div>` : ''}
+                                        ${project.mailpit_port ? `
+                                        <div class="url-card" onclick="openProjectSite('${serverInfo.server_ip}', ${project.mailpit_port})">
+                                            <div class="url-card-header">
+                                                <span class="url-card-title">📧 Mailpit</span>
+                                            </div>
+                                            <div class="url-card-url">http://${serverInfo.server_ip}:${project.mailpit_port}</div>
+                                        </div>` : ''}
+                                        ${project.nextjs_port ? `
+                                        <div class="url-card" onclick="openProjectSite('${serverInfo.server_ip}', ${project.nextjs_port})">
+                                            <div class="url-card-header">
+                                                <span class="url-card-title">⚡ Next.js</span>
+                                            </div>
+                                            <div class="url-card-url">http://${serverInfo.server_ip}:${project.nextjs_port}</div>
+                                        </div>` : ''}
                                     </div>
-                                </div>
-                                <div class="project-actions">
-                                    <button class="btn-action btn-primary" onclick="openProjectSite('${project.hostname || project.name + '.local'}', ${project.port || 8080})">🌐 Voir le site</button>
-                                    <button class="btn-action btn-info" onclick="openEditHostnameModal('${project.name}', '${project.hostname || project.name + '.local'}')">✏️ Hostname</button>
-                                    <button class="btn-action btn-warning" onclick="openUpdateDbModal('${project.name}')">🔄 MAJ DB</button>
-                                    <button class="btn-action btn-danger" onclick="openDeleteProjectModal('${project.name}')">🗑️ Supprimer</button>
+                                    <div class="project-actions">
+                                        <button class="action-btn secondary" onclick="openEditHostnameModal('${project.name}', '${project.hostname || project.name + '.local'}')" title="Éditer l'hostname">
+                                            ✏️ Éditer
+                                        </button>
+                                        <button class="action-btn warning" onclick="openUpdateDbModal('${project.name}')" title="Mettre à jour la base de données">
+                                            🔄 Mettre à jour DB
+                                        </button>
+                                        <button class="action-btn danger" onclick="openDeleteProjectModal('${project.name}')" title="Supprimer le projet">
+                                            🗑️ Supprimer
+                                        </button>
+                                    </div>
+                                    <div class="nextjs-actions">
+                                        ${project.nextjs_port ? `
+                                        <button class="nextjs-btn remove" onclick="removeNextjs('${project.name}')" title="Supprimer Next.js">
+                                            🗑️ Supprimer Next.js
+                                        </button>` : `
+                                        <button class="nextjs-btn add" onclick="addNextjs('${project.name}')" title="Ajouter Next.js">
+                                            ⚡ Ajouter Next.js
+                                        </button>`}
+                                    </div>
                                 </div>
                             </div>`
                         ).join('');
@@ -914,6 +1164,106 @@
             // Ouvrir le site avec l'hostname personnalisé sur le port spécifique
             const siteUrl = `http://${hostname}:${port}`;
             window.open(siteUrl, '_blank');
+        }
+
+        // Démarrer un projet
+        function startProject(projectName) {
+            if (confirm(`Démarrer tous les conteneurs du projet "${projectName}" ?`)) {
+                fetch(`/start_project/${projectName}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(`✅ ${data.message}`);
+                        loadProjects(); // Recharger les projets
+                    } else {
+                        alert(`❌ ${data.message}`);
+                    }
+                })
+                .catch(error => {
+                    console.error('Erreur:', error);
+                    alert('❌ Erreur lors du démarrage du projet');
+                });
+            }
+        }
+
+        // Arrêter un projet
+        function stopProject(projectName) {
+            if (confirm(`Arrêter tous les conteneurs du projet "${projectName}" ?`)) {
+                fetch(`/stop_project/${projectName}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(`✅ ${data.message}`);
+                        loadProjects(); // Recharger les projets
+                    } else {
+                        alert(`❌ ${data.message}`);
+                    }
+                })
+                .catch(error => {
+                    console.error('Erreur:', error);
+                    alert('❌ Erreur lors de l\'arrêt du projet');
+                });
+            }
+        }
+
+        // Ajouter Next.js à un projet
+        function addNextjs(projectName) {
+            if (confirm(`Ajouter Next.js au projet "${projectName}" ?`)) {
+                fetch(`/add_nextjs/${projectName}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(`✅ ${data.message}`);
+                        loadProjects(); // Recharger les projets
+                    } else {
+                        alert(`❌ ${data.message}`);
+                    }
+                })
+                .catch(error => {
+                    console.error('Erreur:', error);
+                    alert('❌ Erreur lors de l\'ajout de Next.js');
+                });
+            }
+        }
+
+        // Supprimer Next.js d'un projet
+        function removeNextjs(projectName) {
+            if (confirm(`Supprimer Next.js du projet "${projectName}" ?\n\nCela va :\n- Arrêter le conteneur Next.js\n- Supprimer la configuration Next.js\n- Conserver le dossier nextjs/`)) {
+                fetch(`/remove_nextjs/${projectName}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(`✅ ${data.message}`);
+                        loadProjects(); // Recharger les projets
+                    } else {
+                        alert(`❌ ${data.message}`);
+                    }
+                })
+                .catch(error => {
+                    console.error('Erreur:', error);
+                    alert('❌ Erreur lors de la suppression de Next.js');
+                });
+            }
         }
 
         // Ouvrir le modal de mise à jour de la base de données
@@ -943,10 +1293,8 @@
             document.getElementById('addSiteModal').style.display = 'flex';
             // Réinitialiser le formulaire
             document.getElementById('projectForm').reset();
-            document.getElementById('wp_content_label').textContent = '📁 Sélectionner l\'archive ou laissez vide pour un site propre';
-            document.getElementById('wp_content_label').classList.remove('has-file');
-            document.getElementById('db_label').textContent = '📄 Sélectionner le fichier ou laissez vide pour une DB vierge';
-            document.getElementById('db_label').classList.remove('has-file');
+            document.getElementById('wp_migrate_label').textContent = '📁 Sélectionner l\'archive ou laissez vide pour un site propre';
+            document.getElementById('wp_migrate_label').classList.remove('has-file');
             document.getElementById('loading').classList.remove('show');
             document.getElementById('submitBtn').disabled = false;
             document.getElementById('submitBtn').textContent = '🚀 Créer le projet WordPress';

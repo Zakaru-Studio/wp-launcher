@@ -3,8 +3,12 @@
 # Script de démarrage pour WP Launcher
 # Vérifie les prérequis et lance l'application
 
+# Définir le répertoire de travail
+cd "$(dirname "$0")"
+
 echo "🚀 WP Launcher - Démarrage..."
 echo "=================================="
+echo "📂 Répertoire de travail : $(pwd)"
 
 # Vérification de Python
 if ! command -v python3 &> /dev/null; then
@@ -24,6 +28,12 @@ if ! command -v docker-compose &> /dev/null; then
     exit 1
 fi
 
+# Vérification du service Docker
+if ! systemctl is-active --quiet docker; then
+    echo "❌ Le service Docker n'est pas actif"
+    exit 1
+fi
+
 # Vérification des dépendances Python
 if [ ! -f "requirements.txt" ]; then
     echo "❌ Fichier requirements.txt manquant"
@@ -36,22 +46,54 @@ echo "✅ Prérequis vérifiés"
 if [ ! -d "venv" ]; then
     echo "🔧 Création de l'environnement virtuel..."
     python3 -m venv venv
+    if [ $? -ne 0 ]; then
+        echo "❌ Erreur lors de la création de l'environnement virtuel"
+        exit 1
+    fi
 fi
 
 # Activation de l'environnement virtuel
 echo "🐍 Activation de l'environnement virtuel..."
 source venv/bin/activate
 
-# Installation des dépendances si nécessaire
-echo "📦 Vérification des dépendances Python..."
+if [ $? -ne 0 ]; then
+    echo "❌ Erreur lors de l'activation de l'environnement virtuel"
+    exit 1
+fi
+
+# Vérification que l'environnement virtuel est actif
+if [ -z "$VIRTUAL_ENV" ]; then
+    echo "❌ L'environnement virtuel n'est pas activé"
+    exit 1
+fi
+
+echo "✅ Environnement virtuel activé : $VIRTUAL_ENV"
+
+# Mise à jour de pip
+echo "📦 Mise à jour de pip..."
+pip install --upgrade pip --quiet
+
+# Installation des dépendances
+echo "📦 Installation des dépendances Python..."
 pip install -r requirements.txt --quiet
+
+if [ $? -ne 0 ]; then
+    echo "❌ Erreur lors de l'installation des dépendances"
+    exit 1
+fi
 
 # Création des dossiers nécessaires
 echo "📁 Création des dossiers..."
 mkdir -p uploads projets
 
 # Permissions
-chmod -R 755 projets uploads
+chmod -R 755 projets uploads 2>/dev/null
+
+# Vérification que le fichier app.py existe
+if [ ! -f "app.py" ]; then
+    echo "❌ Fichier app.py manquant"
+    exit 1
+fi
 
 # Affichage des informations
 echo ""
@@ -64,4 +106,11 @@ echo ""
 
 # Démarrage de l'application
 echo "🚀 Démarrage de l'application Flask..."
-python app.py 
+
+# S'assurer que les variables d'environnement sont correctes
+export FLASK_APP=app.py
+export FLASK_ENV=production
+export PYTHONUNBUFFERED=1
+
+# Démarrer l'application
+exec python app.py

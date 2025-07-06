@@ -1,0 +1,30 @@
+[Unit]
+Description=WordPress Launcher Service
+After=network.target docker.service
+Requires=docker.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=dev-server
+Group=dev-server
+WorkingDirectory=/home/dev-server/Sites/wp-launcher
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/dev-server/Sites/wp-launcher/start.sh
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=wp-launcher
+
+# Sécurité
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/dev-server/Sites/wp-launcher
+ReadWritePaths=/tmp
+ReadWritePaths=/var/run/docker.sock
+
+[Install]
+WantedBy=multi-user.target 
