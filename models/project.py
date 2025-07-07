@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Modèle Project - Gestion des projets WordPress
+Modèle Project - Gestion des projets WordPress avec architecture séparée
 """
 
 import os
@@ -11,27 +11,39 @@ from werkzeug.utils import secure_filename
 from utils.file_utils import extract_zip
 
 class Project:
-    """Modèle pour la gestion des projets WordPress"""
+    """Modèle pour la gestion des projets WordPress avec architecture containers/projets séparée"""
     
-    def __init__(self, name, projects_folder='projets'):
+    def __init__(self, name, projects_folder='projets', containers_folder='containers'):
         self.name = name
         self.projects_folder = projects_folder
-        self.path = os.path.join(projects_folder, name)
+        self.containers_folder = containers_folder
+        self.path = os.path.join(projects_folder, name)  # Fichiers éditables
+        self.container_path = os.path.join(containers_folder, name)  # Configuration Docker
     
     @property
     def exists(self):
-        """Vérifie si le projet existe"""
-        return os.path.exists(self.path)
+        """Vérifie si le projet existe (dans projets/ ou containers/)"""
+        return os.path.exists(self.path) or os.path.exists(self.container_path)
     
     @property
     def is_valid(self):
-        """Vérifie si le projet est valide (a un docker-compose.yml)"""
-        return os.path.exists(os.path.join(self.path, 'docker-compose.yml'))
+        """Vérifie si le projet est valide (a un docker-compose.yml dans containers/)"""
+        return os.path.exists(os.path.join(self.container_path, 'docker-compose.yml'))
+    
+    @property
+    def has_wp_content(self):
+        """Vérifie si le projet a un dossier wp-content"""
+        return os.path.exists(os.path.join(self.path, 'wp-content'))
+    
+    @property
+    def has_wp_config(self):
+        """Vérifie si le projet a un fichier wp-config.php"""
+        return os.path.exists(os.path.join(self.path, 'wp-config.php'))
     
     @property
     def hostname(self):
-        """Récupère l'hostname du projet"""
-        hostname_file = os.path.join(self.path, '.hostname')
+        """Récupère l'hostname du projet depuis containers/"""
+        hostname_file = os.path.join(self.container_path, '.hostname')
         if os.path.exists(hostname_file):
             try:
                 with open(hostname_file, 'r') as f:
@@ -42,69 +54,72 @@ class Project:
     
     @hostname.setter
     def hostname(self, value):
-        """Définit l'hostname du projet"""
-        hostname_file = os.path.join(self.path, '.hostname')
+        """Définit l'hostname du projet dans containers/"""
+        os.makedirs(self.container_path, exist_ok=True)
+        hostname_file = os.path.join(self.container_path, '.hostname')
         with open(hostname_file, 'w') as f:
             f.write(value)
     
     @property
     def port(self):
-        """Récupère le port WordPress du projet"""
+        """Récupère le port WordPress du projet depuis containers/"""
         return self._get_port('.port', 8080)
     
     @port.setter
     def port(self, value):
-        """Définit le port WordPress du projet"""
+        """Définit le port WordPress du projet dans containers/"""
         self._set_port('.port', value)
     
     @property
     def pma_port(self):
-        """Récupère le port phpMyAdmin du projet"""
+        """Récupère le port phpMyAdmin du projet depuis containers/"""
         return self._get_port('.pma_port')
     
     @pma_port.setter
     def pma_port(self, value):
-        """Définit le port phpMyAdmin du projet"""
+        """Définit le port phpMyAdmin du projet dans containers/"""
         self._set_port('.pma_port', value)
     
     @property
     def mailpit_port(self):
-        """Récupère le port Mailpit du projet"""
+        """Récupère le port Mailpit du projet depuis containers/"""
         return self._get_port('.mailpit_port')
     
     @mailpit_port.setter
     def mailpit_port(self, value):
-        """Définit le port Mailpit du projet"""
+        """Définit le port Mailpit du projet dans containers/"""
         self._set_port('.mailpit_port', value)
     
     @property
     def smtp_port(self):
-        """Récupère le port SMTP du projet"""
+        """Récupère le port SMTP du projet depuis containers/"""
         return self._get_port('.smtp_port')
     
     @smtp_port.setter
     def smtp_port(self, value):
-        """Définit le port SMTP du projet"""
+        """Définit le port SMTP du projet dans containers/"""
         self._set_port('.smtp_port', value)
     
     @property
     def nextjs_port(self):
-        """Récupère le port Next.js du projet"""
+        """Récupère le port Next.js du projet depuis containers/"""
         return self._get_port('.nextjs_port')
     
     @nextjs_port.setter
     def nextjs_port(self, value):
-        """Définit le port Next.js du projet"""
+        """Définit le port Next.js du projet dans containers/"""
         self._set_port('.nextjs_port', value)
     
     @property
     def has_nextjs(self):
         """Vérifie si le projet a Next.js configuré"""
-        return os.path.exists(os.path.join(self.path, '.nextjs_port'))
+        nextjs_port_file = os.path.join(self.container_path, '.nextjs_port')
+        nextjs_dir = os.path.join(self.path, 'nextjs')
+        return os.path.exists(nextjs_port_file) and os.path.exists(nextjs_dir)
     
     def _get_port(self, port_file, default=None):
-        """Récupère un port depuis un fichier"""
-        port_path = os.path.join(self.path, port_file)
+        """Récupère un port depuis un fichier dans containers/"""
+        port_path = os.path.join(self.container_path, port_file)
         if os.path.exists(port_path):
             try:
                 with open(port_path, 'r') as f:
@@ -114,19 +129,20 @@ class Project:
         return default
     
     def _set_port(self, port_file, value):
-        """Définit un port dans un fichier"""
-        port_path = os.path.join(self.path, port_file)
+        """Définit un port dans un fichier dans containers/"""
+        os.makedirs(self.container_path, exist_ok=True)
+        port_path = os.path.join(self.container_path, port_file)
         with open(port_path, 'w') as f:
             f.write(str(value))
     
     def create_directory(self):
-        """Crée le répertoire du projet"""
-        if not self.exists:
-            os.makedirs(self.path, exist_ok=True)
+        """Crée les répertoires du projet (projets/ et containers/)"""
+        os.makedirs(self.path, exist_ok=True)
+        os.makedirs(self.container_path, exist_ok=True)
     
     def create_wp_content(self, wp_content_source=None):
-        """Crée le dossier wp-content"""
-        wp_content_dest = os.path.join(self.path, 'wordpress', 'wp-content')
+        """Crée le dossier wp-content dans projets/"""
+        wp_content_dest = os.path.join(self.path, 'wp-content')
         os.makedirs(wp_content_dest, exist_ok=True)
         
         if wp_content_source and os.path.exists(wp_content_source):
@@ -152,7 +168,7 @@ class Project:
                 f.write(index_content)
     
     def setup_nextjs(self):
-        """Configure Next.js pour le projet"""
+        """Configure Next.js pour le projet dans projets/"""
         if not self.has_nextjs:
             return False
         
@@ -262,14 +278,14 @@ const posts = await response.json();
     
     def remove_nextjs(self):
         """Supprime Next.js du projet"""
-        nextjs_port_file = os.path.join(self.path, '.nextjs_port')
+        nextjs_port_file = os.path.join(self.container_path, '.nextjs_port')
         nextjs_path = os.path.join(self.path, 'nextjs')
         
-        # Supprimer le fichier de port
+        # Supprimer le fichier de port dans containers/
         if os.path.exists(nextjs_port_file):
             os.remove(nextjs_port_file)
         
-        # Supprimer le dossier nextjs
+        # Supprimer le dossier nextjs dans projets/
         if os.path.exists(nextjs_path):
             shutil.rmtree(nextjs_path)
         
@@ -450,8 +466,11 @@ const posts = await response.json();
         return {
             'name': self.name,
             'path': self.path,
+            'container_path': self.container_path,
             'exists': self.exists,
             'is_valid': self.is_valid,
+            'has_wp_content': self.has_wp_content,
+            'has_wp_config': self.has_wp_config,
             'hostname': self.hostname,
             'port': self.port,
             'pma_port': self.pma_port,
@@ -462,38 +481,61 @@ const posts = await response.json();
         }
 
     @classmethod
-    def list_all(cls, projects_folder='projets'):
-        """Liste tous les projets valides"""
+    def list_all(cls, projects_folder='projets', containers_folder='containers'):
+        """Liste tous les projets valides avec la nouvelle architecture"""
         projects = []
         projects_to_cleanup = []
         
-        if not os.path.exists(projects_folder):
-            return projects, projects_to_cleanup
+        # Vérifier les projets dans le dossier projets/
+        project_names = set()
+        if os.path.exists(projects_folder):
+            project_names.update(os.listdir(projects_folder))
         
-        for project_name in os.listdir(projects_folder):
+        # Vérifier les projets dans le dossier containers/
+        if os.path.exists(containers_folder):
+            project_names.update(os.listdir(containers_folder))
+        
+        for project_name in project_names:
             project_path = os.path.join(projects_folder, project_name)
+            container_path = os.path.join(containers_folder, project_name)
             
             try:
-                if not os.path.isdir(project_path):
+                # Ignorer les fichiers
+                if os.path.exists(project_path) and not os.path.isdir(project_path):
+                    continue
+                if os.path.exists(container_path) and not os.path.isdir(container_path):
                     continue
                 
-                # Test d'accès en lecture au dossier
+                # Test d'accès en lecture aux dossiers
                 try:
-                    os.listdir(project_path)
+                    if os.path.exists(project_path):
+                        os.listdir(project_path)
+                    if os.path.exists(container_path):
+                        os.listdir(container_path)
                 except PermissionError:
-                    projects_to_cleanup.append(project_path)
+                    if os.path.exists(project_path):
+                        projects_to_cleanup.append(project_path)
+                    if os.path.exists(container_path):
+                        projects_to_cleanup.append(container_path)
                     continue
                 
-                project = cls(project_name, projects_folder)
+                project = cls(project_name, projects_folder, containers_folder)
                 
+                # Un projet est valide s'il a un docker-compose.yml dans containers/
                 if not project.is_valid:
-                    projects_to_cleanup.append(project_path)
+                    if os.path.exists(project_path):
+                        projects_to_cleanup.append(project_path)
+                    if os.path.exists(container_path):
+                        projects_to_cleanup.append(container_path)
                     continue
                 
                 projects.append(project)
                 
             except Exception as e:
-                projects_to_cleanup.append(project_path)
+                if os.path.exists(project_path):
+                    projects_to_cleanup.append(project_path)
+                if os.path.exists(container_path):
+                    projects_to_cleanup.append(container_path)
                 continue
         
         return projects, projects_to_cleanup 

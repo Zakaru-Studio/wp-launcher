@@ -11,8 +11,10 @@ import time
 class DockerService:
     """Service pour la gestion des conteneurs Docker"""
     
-    def __init__(self, template_path='docker-template'):
+    def __init__(self, template_path='docker-template', projects_folder='projets', containers_folder='containers'):
         self.template_path = template_path
+        self.projects_folder = projects_folder
+        self.containers_folder = containers_folder
     
     def copy_template(self, project_path, enable_nextjs=False):
         """Copie le template docker-compose dans le projet"""
@@ -39,9 +41,9 @@ class DockerService:
             else:
                 shutil.copy2(src, dst)
     
-    def configure_compose_file(self, project_path, project_name, ports, enable_nextjs=False):
+    def configure_compose_file(self, container_path, project_name, ports, enable_nextjs=False):
         """Configure le fichier docker-compose.yml avec les bons paramètres"""
-        compose_file = os.path.join(project_path, 'docker-compose.yml')
+        compose_file = os.path.join(container_path, 'docker-compose.yml')
         
         if not os.path.exists(compose_file):
             raise Exception("Fichier docker-compose.yml manquant")
@@ -51,6 +53,7 @@ class DockerService:
         
         # Remplacer les placeholders
         content = content.replace('PROJECT_NAME', project_name)
+        content = content.replace('{project_name}', project_name)
         content = content.replace('PROJECT_PORT', str(ports['wordpress']))
         content = content.replace('PROJECT_PMA_PORT', str(ports['phpmyadmin']))
         content = content.replace('PROJECT_MAILPIT_PORT', str(ports['mailpit']))
@@ -62,33 +65,56 @@ class DockerService:
         with open(compose_file, 'w') as f:
             f.write(content)
     
-    def configure_wp_config(self, project_path, ports):
+    def configure_wp_config(self, container_path, project_name, ports):
         """Configure le fichier wp-config.php avec les bons paramètres"""
-        wp_config_file = os.path.join(project_path, 'wordpress', 'wp-config.php')
+        wp_config_template = os.path.join(container_path, 'wordpress', 'wp-config.php')
+        wp_config_dest = os.path.join(self.projects_folder, project_name, 'wp-config.php')
         
-        if not os.path.exists(wp_config_file):
+        if not os.path.exists(wp_config_template):
             # Le fichier wp-config.php sera créé par WordPress automatiquement
             return
         
-        with open(wp_config_file, 'r') as f:
+        with open(wp_config_template, 'r') as f:
             content = f.read()
         
         # Remplacer les placeholders
         content = content.replace('PROJECT_PORT', str(ports['wordpress']))
+        content = content.replace('PROJECT_HOSTNAME', f'{project_name}.local')
         
-        with open(wp_config_file, 'w') as f:
+        # Créer le dossier projets s'il n'existe pas
+        os.makedirs(os.path.dirname(wp_config_dest), exist_ok=True)
+        
+        with open(wp_config_dest, 'w') as f:
             f.write(content)
     
-    def start_containers(self, project_path, timeout=120):
-        """Démarre les conteneurs d'un projet"""
+    def start_containers(self, container_path, timeout=120):
+        """Démarre les conteneurs d'un projet depuis containers/"""
         original_cwd = os.getcwd()
         try:
-            os.chdir(project_path)
+            os.chdir(container_path)
             result = subprocess.run([
                 'docker-compose', 'up', '-d'
             ], capture_output=True, text=True, timeout=timeout)
             
-            return result.returncode == 0, result.stderr if result.returncode != 0 else None
+            success = result.returncode == 0
+            
+            # Si le démarrage a réussi, corriger automatiquement les permissions
+            if success:
+                # Extraire le nom du projet depuis le chemin
+                project_name = os.path.basename(container_path)
+                print(f"🔧 [DOCKER_SERVICE] Correction automatique des permissions après démarrage pour {project_name}")
+                
+                # Attendre 3 secondes que les conteneurs se stabilisent
+                import time
+                time.sleep(3)
+                
+                # Corriger les permissions pour dev-server
+                if self.fix_dev_permissions(project_name):
+                    print(f"✅ [DOCKER_SERVICE] Permissions automatiquement corrigées pour {project_name}")
+                else:
+                    print(f"⚠️ [DOCKER_SERVICE] Impossible de corriger automatiquement les permissions pour {project_name}")
+            
+            return success, result.stderr if result.returncode != 0 else None
         except subprocess.TimeoutExpired:
             return False, "Timeout lors du démarrage des conteneurs"
         except Exception as e:
@@ -96,11 +122,11 @@ class DockerService:
         finally:
             os.chdir(original_cwd)
     
-    def stop_containers(self, project_path, timeout=60):
-        """Arrête les conteneurs d'un projet"""
+    def stop_containers(self, container_path, timeout=60):
+        """Arrête les conteneurs d'un projet depuis containers/"""
         original_cwd = os.getcwd()
         try:
-            os.chdir(project_path)
+            os.chdir(container_path)
             result = subprocess.run([
                 'docker-compose', 'stop'
             ], capture_output=True, text=True, timeout=timeout)
@@ -113,11 +139,11 @@ class DockerService:
         finally:
             os.chdir(original_cwd)
     
-    def remove_containers(self, project_path, timeout=60):
-        """Supprime complètement les conteneurs d'un projet"""
+    def remove_containers(self, container_path, timeout=60):
+        """Supprime complètement les conteneurs d'un projet depuis containers/"""
         original_cwd = os.getcwd()
         try:
-            os.chdir(project_path)
+            os.chdir(container_path)
             # Arrêter et supprimer
             result = subprocess.run([
                 'docker-compose', 'down', '-v'
@@ -281,94 +307,101 @@ class DockerService:
             print(f"Erreur lors du nettoyage Docker: {e}")
             return False 
 
-    def create_project_structure(self, project_path, enable_nextjs=False):
-        """Crée la structure de répertoires et copie les fichiers de configuration"""
+    def create_project_structure(self, container_path, project_path, enable_nextjs=False):
+        """Crée la structure de répertoires avec l'architecture containers/projets séparée"""
+        # Créer le dossier des conteneurs
+        os.makedirs(container_path, exist_ok=True)
+        
+        # Créer le dossier des fichiers éditables
         os.makedirs(project_path, exist_ok=True)
         
-        # Créer les dossiers de configuration
-        php_config_dir = os.path.join(project_path, 'php-config')
-        mysql_config_dir = os.path.join(project_path, 'mysql-config')
-        phpmyadmin_config_dir = os.path.join(project_path, 'phpmyadmin-config')
+        # Créer les dossiers de configuration dans containers/
+        php_config_dir = os.path.join(container_path, 'php-config')
+        mysql_config_dir = os.path.join(container_path, 'mysql-config')
+        phpmyadmin_config_dir = os.path.join(container_path, 'phpmyadmin-config')
         
         os.makedirs(php_config_dir, exist_ok=True)
         os.makedirs(mysql_config_dir, exist_ok=True)
         os.makedirs(phpmyadmin_config_dir, exist_ok=True)
         
-        # Copier les fichiers de configuration
+        # Copier les fichiers de configuration vers containers/
         shutil.copy2('docker-template/php-config/php.ini', php_config_dir)
         shutil.copy2('docker-template/mysql-config/mysql.cnf', mysql_config_dir)
         shutil.copy2('docker-template/phpmyadmin-config/php.ini', phpmyadmin_config_dir)
         
-        # Copier le fichier docker-compose approprié
+        # Copier le fichier docker-compose approprié vers containers/
         if enable_nextjs:
-            shutil.copy2('docker-template/docker-compose.yml', project_path)
+            shutil.copy2('docker-template/docker-compose.yml', container_path)
         else:
             shutil.copy2('docker-template/docker-compose-no-nextjs.yml', 
-                        os.path.join(project_path, 'docker-compose.yml'))
+                        os.path.join(container_path, 'docker-compose.yml'))
         
-        # Créer le dossier WordPress
-        wordpress_dir = os.path.join(project_path, 'wordpress')
+        # Créer le dossier WordPress dans containers/
+        wordpress_dir = os.path.join(container_path, 'wordpress')
         os.makedirs(wordpress_dir, exist_ok=True)
         
-        # Copier le fichier wp-config.php template
+        # Copier le fichier wp-config.php template vers containers/
         shutil.copy2('docker-template/wordpress/wp-config.php', wordpress_dir)
         
-        print("✅ [DOCKER_SERVICE] Structure de projet créée")
+        # Créer wp-content dans projets/
+        wp_content_dir = os.path.join(project_path, 'wp-content')
+        os.makedirs(wp_content_dir, exist_ok=True)
+        os.makedirs(os.path.join(wp_content_dir, 'themes'), exist_ok=True)
+        os.makedirs(os.path.join(wp_content_dir, 'plugins'), exist_ok=True)
+        os.makedirs(os.path.join(wp_content_dir, 'uploads'), exist_ok=True)
+        
+        print("✅ [DOCKER_SERVICE] Structure de projet avec architecture séparée créée")
         return True
         
     def fix_wordpress_permissions(self, project_name):
-        """Corrige les permissions WordPress pour un projet"""
+        """Corrige les permissions WordPress pour un projet avec nouvelle architecture"""
         try:
-            project_path = os.path.join('projets', project_name)
-            wordpress_path = os.path.join(project_path, 'wordpress')
+            wp_content_path = os.path.join(self.projects_folder, project_name, 'wp-content')
+            wp_config_path = os.path.join(self.projects_folder, project_name, 'wp-config.php')
             
-            if not os.path.exists(wordpress_path):
-                print(f"⚠️ [DOCKER_SERVICE] Dossier WordPress non trouvé: {wordpress_path}")
+            if not os.path.exists(wp_content_path):
+                print(f"⚠️ [DOCKER_SERVICE] Dossier wp-content non trouvé: {wp_content_path}")
                 return False
             
             print(f"🔧 [DOCKER_SERVICE] Correction des permissions WordPress pour {project_name}")
             
-            # Changer le propriétaire vers www-data
+            # Permissions pour wp-content
             result = subprocess.run([
-                'sudo', 'chown', '-R', 'www-data:www-data', wordpress_path
+                'sudo', 'chown', '-R', 'www-data:www-data', wp_content_path
             ], capture_output=True, text=True, timeout=60)
             
             if result.returncode != 0:
-                print(f"❌ [DOCKER_SERVICE] Erreur chown: {result.stderr}")
+                print(f"❌ [DOCKER_SERVICE] Erreur chown wp-content: {result.stderr}")
                 return False
             
-            # Permissions des dossiers (755)
+            # Permissions des dossiers wp-content (755)
             result = subprocess.run([
-                'sudo', 'find', wordpress_path, '-type', 'd', '-exec', 'chmod', '755', '{}', ';'
+                'sudo', 'find', wp_content_path, '-type', 'd', '-exec', 'chmod', '755', '{}', ';'
             ], capture_output=True, text=True, timeout=60)
             
             if result.returncode != 0:
-                print(f"❌ [DOCKER_SERVICE] Erreur chmod dossiers: {result.stderr}")
+                print(f"❌ [DOCKER_SERVICE] Erreur chmod dossiers wp-content: {result.stderr}")
                 return False
             
-            # Permissions des fichiers (644)
+            # Permissions des fichiers wp-content (644)
             result = subprocess.run([
-                'sudo', 'find', wordpress_path, '-type', 'f', '-exec', 'chmod', '644', '{}', ';'
+                'sudo', 'find', wp_content_path, '-type', 'f', '-exec', 'chmod', '644', '{}', ';'
             ], capture_output=True, text=True, timeout=60)
             
             if result.returncode != 0:
-                print(f"❌ [DOCKER_SERVICE] Erreur chmod fichiers: {result.stderr}")
+                print(f"❌ [DOCKER_SERVICE] Erreur chmod fichiers wp-content: {result.stderr}")
                 return False
             
-            # Permissions spéciales pour wp-content/uploads (775)
-            uploads_path = os.path.join(wordpress_path, 'wp-content', 'uploads')
-            if os.path.exists(uploads_path):
+            # Permissions pour wp-config.php s'il existe
+            if os.path.exists(wp_config_path):
                 result = subprocess.run([
-                    'sudo', 'find', uploads_path, '-type', 'd', '-exec', 'chmod', '775', '{}', ';'
-                ], capture_output=True, text=True, timeout=60)
+                    'sudo', 'chown', 'www-data:www-data', wp_config_path
+                ], capture_output=True, text=True, timeout=30)
                 
                 if result.returncode != 0:
-                    print(f"❌ [DOCKER_SERVICE] Erreur chmod uploads: {result.stderr}")
+                    print(f"❌ [DOCKER_SERVICE] Erreur chown wp-config: {result.stderr}")
                     return False
-            
-            # Permissions spéciales pour wp-config.php (600)
-            wp_config_path = os.path.join(wordpress_path, 'wp-config.php')
-            if os.path.exists(wp_config_path):
+                
                 result = subprocess.run([
                     'sudo', 'chmod', '600', wp_config_path
                 ], capture_output=True, text=True, timeout=30)
@@ -385,19 +418,14 @@ class DockerService:
             return False
     
     def fix_dev_permissions(self, project_name):
-        """Applique les permissions de développement pour wp-config.php et wp-content"""
+        """Applique les permissions de développement pour wp-config.php et wp-content avec nouvelle architecture"""
         try:
-            project_path = os.path.join('projets', project_name)
-            wordpress_path = os.path.join(project_path, 'wordpress')
-            
-            if not os.path.exists(wordpress_path):
-                print(f"⚠️ [DOCKER_SERVICE] Dossier WordPress non trouvé: {wordpress_path}")
-                return False
+            wp_content_path = os.path.join(self.projects_folder, project_name, 'wp-content')
+            wp_config_path = os.path.join(self.projects_folder, project_name, 'wp-config.php')
             
             print(f"🔧 [DOCKER_SERVICE] Application des permissions de développement pour {project_name}")
             
             # Permissions pour wp-config.php
-            wp_config_path = os.path.join(wordpress_path, 'wp-config.php')
             if os.path.exists(wp_config_path):
                 result = subprocess.run([
                     'sudo', 'chown', 'dev-server:dev-server', wp_config_path
@@ -418,7 +446,6 @@ class DockerService:
                 print(f"✅ [DOCKER_SERVICE] wp-config.php: dev-server:dev-server (644)")
             
             # Permissions pour wp-content
-            wp_content_path = os.path.join(wordpress_path, 'wp-content')
             if os.path.exists(wp_content_path):
                 result = subprocess.run([
                     'sudo', 'chown', '-R', 'dev-server:dev-server', wp_content_path

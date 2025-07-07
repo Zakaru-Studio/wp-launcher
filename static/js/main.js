@@ -33,7 +33,7 @@ function setupGlobalEvents() {
     // Gestion des erreurs JavaScript
     window.addEventListener('error', function(e) {
         console.error('Erreur JavaScript:', e.error);
-        showToast('Une erreur inattendue s\'est produite', 'error');
+        // Les erreurs JS ne créent pas de notifications - juste dans la console
     });
     
     // Confirmation avant fermeture de page si en cours de traitement
@@ -73,12 +73,12 @@ function setupSocketIO() {
     
     socket.on('disconnect', function() {
         console.log('❌ Connexion Socket.IO perdue');
-        showToast('Connexion perdue avec le serveur', 'warning');
+        // Les erreurs de connexion ne créent pas de notifications - juste dans la console
     });
     
     socket.on('error', function(error) {
         console.error('Erreur Socket.IO:', error);
-        showToast('Erreur de connexion temps réel', 'error');
+        // Les erreurs de connexion ne créent pas de notifications - juste dans la console
     });
 }
 
@@ -133,53 +133,71 @@ function hideLoader() {
 }
 
 /**
- * Affiche un toast/notification
- * @param {string} title - Titre du toast
- * @param {string} message - Message du toast
- * @param {string} type - Type de toast (success, error, warning, info)
- * @param {number} duration - Durée d'affichage en ms (0 = permanent)
+ * Affiche une notification via le gestionnaire de tâches
+ * @param {string} title - Titre de la notification
+ * @param {string} message - Message de la notification
+ * @param {string} type - Type (success, error, warning, info)
+ * @param {number} duration - Durée en ms (optionnel)
  */
 function showToast(title, message = '', type = 'info', duration = 5000) {
-    const toastContainer = document.getElementById('toast-container');
-    if (!toastContainer) {
-        const container = document.createElement('div');
-        container.id = 'toast-container';
-        container.className = 'toast-container position-fixed bottom-0 end-0 p-3';
-        container.style.zIndex = '11';
-        document.body.appendChild(container);
+    // Utiliser le gestionnaire de tâches pour les notifications
+    if (typeof taskManager !== 'undefined') {
+        const taskId = `notification_${Date.now()}`;
+        const task = taskManager.createTask(taskId, title, 'notification');
+        
+        // Mettre à jour avec le message
+        taskManager.updateTask(taskId, {
+            message: message,
+            progress: 100
+        });
+        
+        // Compléter la tâche immédiatement
+        const success = type === 'success' || type === 'info';
+        taskManager.completeTask(taskId, message, success);
+        
+        // Auto-supprimer après le délai spécifié
+        if (duration > 0) {
+            taskManager.autoRemoveNotification(taskId, duration);
+        }
+        
+        return taskId;
     }
     
-    const toastId = generateUniqueId();
-    const toast = document.createElement('div');
-    toast.id = toastId;
-    toast.className = `toast align-items-center text-white bg-${type} border-0`;
-    toast.setAttribute('role', 'alert');
-    toast.innerHTML = `
-        <div class="d-flex">
-            <div class="toast-body">
-                <strong>${title}</strong>
-                ${message ? `<div class="mt-1">${message}</div>` : ''}
-            </div>
-            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-        </div>
-    `;
-    
-    toastContainer.appendChild(toast);
-    
-    // Initialiser le toast Bootstrap
-    const bsToast = new bootstrap.Toast(toast, {
-        autohide: duration > 0,
-        delay: duration
-    });
-    
-    bsToast.show();
-    
-    // Nettoyer après fermeture
-    toast.addEventListener('hidden.bs.toast', () => {
-        toast.remove();
-    });
-    
-    return toastId;
+    // Fallback: afficher dans la console si le gestionnaire n'est pas disponible
+    console.log(`[${type.toUpperCase()}] ${title}: ${message}`);
+    return null;
+}
+
+/**
+ * Affiche une notification de succès
+ * @param {string} message - Message de succès
+ */
+function showSuccess(message) {
+    return showToast('Succès', message, 'success', 4000);
+}
+
+/**
+ * Affiche une notification d'erreur
+ * @param {string} message - Message d'erreur
+ */
+function showError(message) {
+    return showToast('Erreur', message, 'error', 6000);
+}
+
+/**
+ * Affiche une notification d'avertissement
+ * @param {string} message - Message d'avertissement
+ */
+function showWarning(message) {
+    return showToast('Attention', message, 'warning', 5000);
+}
+
+/**
+ * Affiche une notification d'information
+ * @param {string} message - Message d'information
+ */
+function showInfo(message) {
+    return showToast('Information', message, 'info', 4000);
 }
 
 /**
@@ -287,11 +305,28 @@ function validateHostname(hostname) {
 async function copyToClipboard(text) {
     try {
         await navigator.clipboard.writeText(text);
-        showToast('Copié !', 'Texte copié dans le presse-papiers', 'success', 2000);
+        console.log('✅ Texte copié dans le presse-papiers:', text);
+        
+        // Utiliser le gestionnaire de tâches pour une notification rapide
+        if (typeof taskManager !== 'undefined') {
+            const taskId = `copy_${Date.now()}`;
+            const task = taskManager.createTask(taskId, 'Copié !', 'notification');
+            taskManager.updateTask(taskId, { message: 'Texte copié dans le presse-papiers', progress: 100 });
+            taskManager.completeTask(taskId, 'Texte copié avec succès', true);
+        }
+        
         return true;
     } catch (error) {
         console.error('Erreur copie presse-papiers:', error);
-        showToast('Erreur', 'Impossible de copier dans le presse-papiers', 'error');
+        
+        // Utiliser le gestionnaire de tâches pour l'erreur
+        if (typeof taskManager !== 'undefined') {
+            const taskId = `copy_error_${Date.now()}`;
+            const task = taskManager.createTask(taskId, 'Erreur copie', 'notification');
+            taskManager.updateTask(taskId, { message: 'Impossible de copier dans le presse-papiers', progress: 100 });
+            taskManager.completeTask(taskId, 'Erreur lors de la copie', false);
+        }
+        
         return false;
     }
 }

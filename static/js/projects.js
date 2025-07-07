@@ -11,24 +11,34 @@
  * @param {string} projectName - Nom du projet
  */
 async function startProject(projectName) {
+    // Créer une tâche dans le gestionnaire
+    const task = startProjectTask(projectName, 'start');
+    if (!task) return; // Tâche déjà en cours
+
     try {
         const button = document.querySelector(`button[onclick="startProject('${projectName}')"]`);
         if (button) {
             button.classList.add('loading');
-            button.innerHTML = '';
+            button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Starting';
         }
+
+        // Mettre à jour la tâche
+        taskManager.updateTask(task.id, { 
+            message: `Démarrage des conteneurs Docker...`,
+            progress: 25
+        });
 
         const response = await makeRequest(`/start_project/${projectName}`, 'POST');
         
         if (response.success) {
-            showSuccess(`Projet ${projectName} démarré avec succès`);
+            taskManager.completeTask(task.id, `Projet ${projectName} démarré avec succès`, true);
             setTimeout(() => loadProjects(), 2000); // Recharger après 2 secondes
         } else {
-            showError(response.message || 'Erreur lors du démarrage');
+            taskManager.completeTask(task.id, response.message || 'Erreur lors du démarrage', false);
         }
     } catch (error) {
         console.error('Erreur démarrage:', error);
-        showError('Erreur lors du démarrage du projet');
+        taskManager.completeTask(task.id, 'Erreur lors du démarrage du projet', false);
     }
 }
 
@@ -37,24 +47,34 @@ async function startProject(projectName) {
  * @param {string} projectName - Nom du projet
  */
 async function stopProject(projectName) {
+    // Créer une tâche dans le gestionnaire
+    const task = startProjectTask(projectName, 'stop');
+    if (!task) return; // Tâche déjà en cours
+
     try {
         const button = document.querySelector(`button[onclick="stopProject('${projectName}')"]`);
         if (button) {
             button.classList.add('loading');
-            button.innerHTML = '';
+            button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Stopping';
         }
+
+        // Mettre à jour la tâche
+        taskManager.updateTask(task.id, { 
+            message: `Arrêt des conteneurs Docker...`,
+            progress: 25
+        });
 
         const response = await makeRequest(`/stop_project/${projectName}`, 'POST');
         
         if (response.success) {
-            showSuccess(`Projet ${projectName} arrêté avec succès`);
+            taskManager.completeTask(task.id, `Projet ${projectName} arrêté avec succès`, true);
             setTimeout(() => loadProjects(), 2000); // Recharger après 2 secondes
         } else {
-            showError(response.message || 'Erreur lors de l\'arrêt');
+            taskManager.completeTask(task.id, response.message || 'Erreur lors de l\'arrêt', false);
         }
     } catch (error) {
         console.error('Erreur arrêt:', error);
-        showError('Erreur lors de l\'arrêt du projet');
+        taskManager.completeTask(task.id, 'Erreur lors de l\'arrêt du projet', false);
     }
 }
 
@@ -78,6 +98,10 @@ function deleteProject(projectName) {
  * @param {string} projectName - Nom du projet à supprimer
  */
 async function confirmDeleteProject(projectName) {
+    // Créer une tâche dans le gestionnaire
+    const task = startDeleteTask(projectName);
+    if (!task) return; // Tâche déjà en cours
+
     try {
         // Fermer le modal de confirmation
         bootstrap.Modal.getInstance(document.getElementById('deleteModal')).hide();
@@ -117,12 +141,18 @@ async function confirmDeleteProject(projectName) {
             }
             projectElement.appendChild(overlay);
         }
+
+        // Mettre à jour la tâche
+        taskManager.updateTask(task.id, { 
+            message: `Suppression des conteneurs et fichiers...`,
+            progress: 25
+        });
         
         // Appel API pour supprimer le projet
         const response = await makeRequest(`/delete_project/${projectName}`, 'DELETE');
         
         if (response.success) {
-            showSuccess(`Projet ${projectName} supprimé avec succès`);
+            taskManager.completeTask(task.id, `Projet ${projectName} supprimé avec succès`, true);
             
             // Animation de disparition du projet
             if (projectElement) {
@@ -151,11 +181,11 @@ async function confirmDeleteProject(projectName) {
                     overlay.remove();
                 }
             }
-            showError(response.message || 'Erreur lors de la suppression');
+            taskManager.completeTask(task.id, response.message || 'Erreur lors de la suppression', false);
         }
     } catch (error) {
         console.error('Erreur suppression:', error);
-        showError('Erreur lors de la suppression du projet');
+        taskManager.completeTask(task.id, 'Erreur lors de la suppression du projet', false);
         
         // Restaurer l'état visuel en cas d'erreur
         const projectElement = document.querySelector(`[data-project="${projectName}"]`);
@@ -616,11 +646,15 @@ function resetProgressModal() {
 
 // Fonction d'import ultra-rapide
 function fastImportDatabase(projectName) {
+    // Créer une tâche dans le gestionnaire
+    const task = startDatabaseTask(projectName, 'import_db');
+    if (!task) return; // Tâche déjà en cours
+
     currentImportProject = projectName;
     
-    // Réinitialiser et afficher le modal de progrès
+    // Réinitialiser le modal de progrès mais ne plus l'afficher (utilisation du toaster)
     resetProgressModal();
-    importProgressModal.show();
+    // importProgressModal.show(); // Désactivé - utilisation du toaster uniquement
     
     // Cacher le modal d'import de fichier
     const updateModal = bootstrap.Modal.getInstance(document.getElementById('updateDbModal'));
@@ -634,12 +668,19 @@ function fastImportDatabase(projectName) {
     const file = fileInput.files[0];
     
     if (!file) {
-        showToast('Veuillez sélectionner un fichier', 'error');
+        taskManager.completeTask(task.id, 'Aucun fichier sélectionné', false);
         importProgressModal.hide();
         return;
     }
     
     formData.append('db_file', file);
+    
+    // Mettre à jour la tâche
+    taskManager.updateTask(task.id, { 
+        message: `Import de la base de données en cours...`,
+        details: `Fichier: ${file.name}`,
+        progress: 10
+    });
     
     // Envoyer la requête d'import
     fetch(`/fast_import_database/${projectName}`, {
@@ -650,6 +691,8 @@ function fastImportDatabase(projectName) {
     .then(data => {
         if (data.success) {
             console.log('✅ Import réussi:', data);
+            
+            taskManager.completeTask(task.id, 'Base de données importée avec succès', true);
             
             // Afficher les statistiques finales
             if (data.details) {
@@ -663,12 +706,12 @@ function fastImportDatabase(projectName) {
             
         } else {
             console.error('❌ Erreur import:', data.message);
-            showToast(data.message, 'error');
+            taskManager.completeTask(task.id, data.message || 'Erreur lors de l\'import', false);
         }
     })
     .catch(error => {
         console.error('❌ Erreur réseau:', error);
-        showToast('Erreur lors de l\'import: ' + error.message, 'error');
+        taskManager.completeTask(task.id, 'Erreur lors de l\'import: ' + error.message, false);
     });
 }
 
@@ -683,6 +726,56 @@ function openImportModal(projectName) {
 function updateDatabase(projectName) {
     console.log('📋 Ouverture du modal d\'import pour:', projectName);
     openImportModal(projectName);
+}
+
+/**
+ * Fonction pour exporter la base de données d'un projet
+ * @param {string} projectName - Nom du projet
+ */
+async function exportDatabase(projectName) {
+    // Créer une tâche dans le gestionnaire
+    const task = startDatabaseTask(projectName, 'export_db');
+    if (!task) return; // Tâche déjà en cours
+
+    try {
+        // Mettre à jour la tâche
+        taskManager.updateTask(task.id, { 
+            message: `Préparation de l'export de la base de données...`,
+            progress: 25
+        });
+        
+        const response = await makeRequest(`/export_database/${projectName}`, 'POST');
+        
+        if (response.success) {
+            // Mettre à jour la progression
+            taskManager.updateTask(task.id, { 
+                message: `Génération du fichier d'export...`,
+                progress: 75
+            });
+
+            // Créer un lien de téléchargement temporaire
+            const downloadUrl = response.download_url;
+            const fileName = response.filename || `${projectName}_export.sql`;
+            
+            // Créer un élément de téléchargement
+            const downloadLink = document.createElement('a');
+            downloadLink.href = downloadUrl;
+            downloadLink.download = fileName;
+            downloadLink.style.display = 'none';
+            
+            // Ajouter au DOM, cliquer et supprimer
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+            
+            taskManager.completeTask(task.id, `Base de données exportée : ${fileName}`, true);
+        } else {
+            taskManager.completeTask(task.id, response.message || 'Erreur lors de l\'export de la base de données', false);
+        }
+    } catch (error) {
+        console.error('Erreur export BDD:', error);
+        taskManager.completeTask(task.id, 'Erreur lors de l\'export de la base de données', false);
+    }
 }
 
 // Gestionnaire du formulaire d'import

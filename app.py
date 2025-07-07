@@ -4,7 +4,7 @@ import shutil
 import subprocess
 import zipfile
 import sqlite3
-from flask import Flask, request, render_template, redirect, url_for, flash, jsonify
+from flask import Flask, request, render_template, redirect, url_for, flash, jsonify, send_file
 from flask_socketio import SocketIO, emit
 from werkzeug.utils import secure_filename
 import tempfile
@@ -17,6 +17,7 @@ from models.project import Project
 from services.docker_service import DockerService
 from services.port_service import PortService
 from services.database_service import DatabaseService
+from services.fast_import_service import FastImportService
 
 app = Flask(__name__)
 app.secret_key = 'wp-launcher-secret-key-2024'
@@ -28,28 +29,40 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 docker_service = DockerService()
 port_service = PortService()
 database_service = DatabaseService(socketio)
+fast_import_service = FastImportService(socketio)
 
 # Configuration
 UPLOAD_FOLDER = 'uploads'
 PROJECTS_FOLDER = 'projets'
+CONTAINERS_FOLDER = 'containers'
 ALLOWED_EXTENSIONS = {'zip', 'sql', 'gz'}
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024 * 1024  # 5GB max
 
-def is_external_domain(hostname):
-    """
-    Vérifie si un hostname est un domaine externe valide
-    (contient un TLD comme .com, .fr, .org, etc.)
-    """
-    external_tlds = [
-        '.com', '.org', '.net', '.edu', '.gov', '.mil', '.int',
-        '.fr', '.de', '.uk', '.it', '.es', '.nl', '.be', '.ch',
-        '.ca', '.au', '.jp', '.cn', '.ru', '.br', '.in', '.mx',
-        '.io', '.co', '.me', '.biz', '.info', '.name', '.pro'
-    ]
-    hostname_lower = hostname.lower()
-    return any(hostname_lower.endswith(tld) for tld in external_tlds)
+def is_external_domain(domain):
+    """Vérifier si un domaine est un domaine externe valide"""
+    import re
+    
+    # Pattern pour valider un nom de domaine
+    domain_pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$'
+    
+    # Vérifier le format
+    if not re.match(domain_pattern, domain):
+        return False
+    
+    # Vérifier qu'il ne s'agit pas d'une IP
+    ip_pattern = r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$'
+    if re.match(ip_pattern, domain):
+        return False
+    
+    # Vérifier qu'il ne s'agit pas d'un domaine local
+    local_domains = ['.local', '.localhost', '.test', '.dev']
+    for local_tld in local_domains:
+        if domain.endswith(local_tld):
+            return False
+    
+    return True
 
 def allowed_file(filename):
     return '.' in filename and \
@@ -98,15 +111,26 @@ def extract_zip(zip_path, extract_to):
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
         zip_ref.extractall(extract_to)
 
-def copy_docker_template(project_path):
-    """Copie le template docker-compose dans le projet"""
+def copy_docker_template(project_path, enable_nextjs=False):
+    """Copie le template docker-compose dans le projet selon la configuration"""
     template_path = 'docker-template'
     if os.path.exists(template_path):
         for item in os.listdir(template_path):
             src = os.path.join(template_path, item)
             dst = os.path.join(project_path, item)
+            
+            # Gérer les fichiers docker-compose selon enable_nextjs
+            if item == 'docker-compose.yml' and not enable_nextjs:
+                continue  # Ignorer le docker-compose avec Next.js si Next.js non activé
+            if item == 'docker-compose-no-nextjs.yml':
+                if enable_nextjs:
+                    continue  # Ignorer le docker-compose sans Next.js si Next.js activé
+                else:
+                    dst = os.path.join(project_path, 'docker-compose.yml')  # Renommer
+            
             if os.path.isdir(src):
-                shutil.copytree(src, dst)
+                # Utiliser exist_ok=True pour éviter l'erreur "File exists"
+                shutil.copytree(src, dst, dirs_exist_ok=True)
             else:
                 shutil.copy2(src, dst)
 
@@ -556,7 +580,7 @@ def import_database(project_path, db_file_path, project_name):
 def index():
     return render_template('index.html')
 
-@app.route('/favicon.ico')
+@app.route('/favicon.png')
 def favicon():
     return '', 204  # Retourner une réponse vide avec code 204 (No Content)
 
@@ -619,7 +643,7 @@ def create_project():
         
         # 3. Copier le template Docker vers containers/
         print("📋 Copie du template Docker...")
-        copy_docker_template(container_path)
+        copy_docker_template(container_path, enable_nextjs)
         
         # 4. Sauvegarder le fichier uploadé (si fourni)
         archive_path = None
@@ -870,33 +894,42 @@ export default function Home() {{
         except Exception as e:
             print(f"⚠️ Erreur lors du nettoyage: {e}")
         
-        # Configuration automatique des permissions WordPress
+        # Configuration automatique des permissions pour dev-server
         print("")
-        print("🔑 Configuration automatique des permissions WordPress...")
+        print("🔑 Configuration des permissions pour dev-server...")
         try:
-            permissions_script = './setup_wordpress_permissions.sh'
-            if os.path.exists(permissions_script):
-                result = subprocess.run([
-                    'bash', permissions_script, project_name
-                ], capture_output=True, text=True, timeout=300)
-                
-                if result.returncode == 0:
-                    print("✅ Permissions WordPress configurées automatiquement")
-                    print("📋 Script de permissions exécuté avec succès")
-                    # Ajouter une note informative au message de succès
-                    success_message += "\n\n🔑 Permissions configurées automatiquement :\n"
-                    success_message += "• dev-server ajouté au groupe www-data\n"
-                    success_message += "• Accès complet aux fichiers wp-content\n"
-                    success_message += "• Scripts de maintenance créés\n"
-                    success_message += "• Reconnectez-vous SSH pour effet complet des permissions"
-                else:
-                    print(f"⚠️ Erreur lors de la configuration des permissions: {result.stderr}")
-                    success_message += "\n\n⚠️ Permissions partiellement configurées - voir logs du serveur"
+            # Utiliser le service Docker pour corriger les permissions
+            if docker_service.fix_dev_permissions(project_name):
+                print("✅ Permissions dev configurées via DockerService")
             else:
-                print("⚠️ Script de permissions non trouvé, permissions par défaut appliquées")
-                success_message += "\n\n⚠️ Utilisez ./setup_wordpress_permissions.sh pour configurer les permissions"
+                print("⚠️ Erreur lors de la configuration via DockerService, correction manuelle...")
+                # Fallback: correction manuelle
+                subprocess.run([
+                    'sudo', 'chown', '-R', 'dev-server:dev-server', editable_path
+                ], check=True, timeout=30)
+                
+                subprocess.run([
+                    'sudo', 'chmod', '-R', '755', editable_path
+                ], check=True, timeout=30)
+                
+                # Aussi corriger les permissions du dossier containers
+                subprocess.run([
+                    'sudo', 'chown', '-R', 'dev-server:dev-server', container_path
+                ], check=True, timeout=30)
+                
+                subprocess.run([
+                    'sudo', 'chmod', '-R', '755', container_path
+                ], check=True, timeout=30)
+                
+                print("✅ Permissions configurées manuellement pour dev-server")
+            
+            print("📋 dev-server a maintenant un accès complet aux fichiers du projet")
+            
         except Exception as e:
-            print(f"⚠️ Erreur lors de l'exécution du script de permissions: {e}")
+            print(f"⚠️ Erreur lors de la configuration des permissions: {e}")
+            print("💡 Vous pourrez corriger manuellement avec:")
+            print(f"   sudo chown -R dev-server:dev-server {editable_path}")
+            print(f"   sudo chmod -R 755 {editable_path}")
         
         return jsonify({'success': True, 'message': success_message})
         
@@ -1068,39 +1101,228 @@ def check_project_status(project_name):
     except Exception:
         return 'inactive'
 
-@app.route('/update_database/<project_name>', methods=['POST'])
-def update_database(project_name):
-    """Met à jour la base de données d'un projet existant"""
+@app.route('/test_upload', methods=['POST'])
+def test_upload():
+    """Endpoint de test pour débugger l'upload de fichiers"""
     try:
-        print(f"🔄 Début mise à jour DB pour le projet: {project_name}")
+        print(f"🧪 [TEST_UPLOAD] Test d'upload de fichier")
+        print(f"🔍 [TEST_UPLOAD] Request method: {request.method}")
+        print(f"🔍 [TEST_UPLOAD] Content-Type: {request.content_type}")
+        print(f"🔍 [TEST_UPLOAD] Files in request: {list(request.files.keys())}")
+        print(f"🔍 [TEST_UPLOAD] Form data: {list(request.form.keys())}")
+        
+        if 'db_file' in request.files:
+            db_file = request.files['db_file']
+            print(f"📁 [TEST_UPLOAD] Fichier trouvé: {db_file.filename}")
+            print(f"📊 [TEST_UPLOAD] Content-Type du fichier: {db_file.content_type}")
+            
+            if db_file.filename:
+                file_size = len(db_file.read())
+                db_file.seek(0)  # Remettre le pointeur au début
+                print(f"📊 [TEST_UPLOAD] Taille du fichier: {file_size} bytes")
+                
+                return jsonify({
+                    'success': True,
+                    'message': 'Test d\'upload réussi',
+                    'details': {
+                        'filename': db_file.filename,
+                        'content_type': db_file.content_type,
+                        'file_size': file_size
+                    }
+                })
+            else:
+                return jsonify({'success': False, 'message': 'Nom de fichier vide'})
+        else:
+            return jsonify({'success': False, 'message': 'Aucun fichier db_file trouvé'})
+            
+    except Exception as e:
+        print(f"❌ [TEST_UPLOAD] Exception: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Erreur: {str(e)}'})
+
+@app.route('/fast_import_database/<project_name>', methods=['POST'])
+def fast_import_database(project_name):
+    """Import ultra-rapide de base de données avec FastImportService"""
+    try:
+        print(f"🚀 [FAST_IMPORT] Début import ultra-rapide pour le projet: {project_name}")
+        print(f"🔍 [FAST_IMPORT] Request method: {request.method}")
+        print(f"🔍 [FAST_IMPORT] Content-Type: {request.content_type}")
+        print(f"🔍 [FAST_IMPORT] Files in request: {list(request.files.keys())}")
         
         # Vérifier que le projet existe
         project_path = os.path.join(PROJECTS_FOLDER, project_name)
         if not os.path.exists(project_path):
+            print(f"❌ [FAST_IMPORT] Projet non trouvé: {project_path}")
             return jsonify({'success': False, 'message': 'Projet non trouvé'})
         
         # Vérifier le fichier uploadé
         if 'db_file' not in request.files:
+            print(f"❌ [FAST_IMPORT] Aucun fichier db_file dans la requête")
             return jsonify({'success': False, 'message': 'Aucun fichier de base de données fourni'})
         
         db_file = request.files['db_file']
+        print(f"📁 [FAST_IMPORT] Fichier reçu: {db_file.filename}")
+        print(f"📊 [FAST_IMPORT] Content-Type du fichier: {db_file.content_type}")
+        
         if db_file.filename == '':
+            print(f"❌ [FAST_IMPORT] Nom de fichier vide")
             return jsonify({'success': False, 'message': 'Aucun fichier sélectionné'})
         
         if not allowed_file(db_file.filename):
+            print(f"❌ [FAST_IMPORT] Type de fichier non autorisé: {db_file.filename}")
             return jsonify({'success': False, 'message': 'Type de fichier non autorisé'})
         
-        print(f"📁 Fichier reçu: {db_file.filename}")
+        print(f"✅ [FAST_IMPORT] Fichier validé: {db_file.filename}")
+        
+        # Sauvegarder le fichier temporairement
+        if not db_file.filename:
+            return jsonify({'success': False, 'message': 'Nom de fichier manquant'})
+        db_filename = secure_filename(db_file.filename)
+        db_path = os.path.join(app.config['UPLOAD_FOLDER'], f"fast_import_{db_filename}")
+        print(f"💾 [FAST_IMPORT] Sauvegarde du fichier vers: {db_path}")
+        
+        # Créer le dossier upload s'il n'existe pas
+        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+        
+        # Sauvegarder le fichier
+        db_file.save(db_path)
+        
+        # Vérifier que le fichier a été sauvegardé
+        if os.path.exists(db_path):
+            file_size = os.path.getsize(db_path)
+            print(f"✅ [FAST_IMPORT] Fichier sauvegardé avec succès: {db_path} ({file_size} bytes)")
+        else:
+            print(f"❌ [FAST_IMPORT] Échec de la sauvegarde du fichier")
+            return jsonify({'success': False, 'message': 'Erreur lors de la sauvegarde du fichier'})
+        
+        # Vérifier que le conteneur MySQL est actif
+        mysql_container = f"{project_name}_mysql_1"
+        result = subprocess.run([
+            'docker', 'ps', '--format', '{{.Names}}'
+        ], capture_output=True, text=True)
+        
+        if mysql_container not in result.stdout:
+            print(f"❌ [FAST_IMPORT] Conteneur MySQL non actif: {mysql_container}")
+            # Nettoyer le fichier temporaire
+            try:
+                os.remove(db_path)
+            except:
+                pass
+            return jsonify({'success': False, 'message': 'Le conteneur MySQL n\'est pas actif. Veuillez d\'abord démarrer le projet.'})
+        
+        print(f"✅ [FAST_IMPORT] Conteneur MySQL actif: {mysql_container}")
+        
+        # Lancer l'import ultra-rapide avec FastImportService
+        print("🚀 [FAST_IMPORT] Démarrage de l'import avec FastImportService...")
+        
+        try:
+            import_result = fast_import_service.import_database(project_name, db_path)
+            
+            # Nettoyer le fichier temporaire
+            try:
+                os.remove(db_path)
+                print(f"🧹 [FAST_IMPORT] Fichier temporaire nettoyé: {db_path}")
+            except Exception as e:
+                print(f"⚠️ [FAST_IMPORT] Erreur lors du nettoyage: {e}")
+            
+            if import_result.get('success', False):
+                print("✅ [FAST_IMPORT] Import ultra-rapide terminé avec succès")
+                return jsonify({
+                    'success': True, 
+                    'message': 'Import ultra-rapide terminé avec succès',
+                    'details': {
+                        'method': import_result.get('method', 'FastImport'),
+                        'speed': import_result.get('speed', 'N/A'),
+                        'duration': import_result.get('duration', 'N/A'),
+                        'file_size': import_result.get('file_size', 'N/A'),
+                        'tables_imported': import_result.get('tables_imported', 'N/A')
+                    }
+                })
+            else:
+                error_message = import_result.get('error', 'Erreur lors de l\'import ultra-rapide')
+                print(f"❌ [FAST_IMPORT] Erreur import: {error_message}")
+                return jsonify({'success': False, 'message': error_message})
+                
+        except Exception as import_error:
+            print(f"❌ [FAST_IMPORT] Exception lors de l'import: {import_error}")
+            import traceback
+            traceback.print_exc()
+            
+            # Nettoyer le fichier temporaire même en cas d'erreur
+            try:
+                os.remove(db_path)
+            except:
+                pass
+                
+            return jsonify({
+                'success': False, 
+                'message': f'Erreur lors de l\'import ultra-rapide: {str(import_error)}'
+            })
+        
+    except Exception as e:
+        print(f"❌ [FAST_IMPORT] Exception générale: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Erreur: {str(e)}'})
+
+@app.route('/update_database/<project_name>', methods=['POST'])
+def update_database(project_name):
+    """Met à jour la base de données d'un projet existant"""
+    try:
+        print(f"🔄 [UPDATE_DB] Début mise à jour DB pour le projet: {project_name}")
+        print(f"🔍 [UPDATE_DB] Request method: {request.method}")
+        print(f"🔍 [UPDATE_DB] Content-Type: {request.content_type}")
+        print(f"🔍 [UPDATE_DB] Files in request: {list(request.files.keys())}")
+        
+        # Vérifier que le projet existe
+        project_path = os.path.join(PROJECTS_FOLDER, project_name)
+        if not os.path.exists(project_path):
+            print(f"❌ [UPDATE_DB] Projet non trouvé: {project_path}")
+            return jsonify({'success': False, 'message': 'Projet non trouvé'})
+        
+        # Vérifier le fichier uploadé
+        if 'db_file' not in request.files:
+            print(f"❌ [UPDATE_DB] Aucun fichier db_file dans la requête")
+            return jsonify({'success': False, 'message': 'Aucun fichier de base de données fourni'})
+        
+        db_file = request.files['db_file']
+        print(f"📁 [UPDATE_DB] Fichier reçu: {db_file.filename}")
+        print(f"📊 [UPDATE_DB] Content-Type du fichier: {db_file.content_type}")
+        print(f"📊 [UPDATE_DB] Taille du fichier: {db_file.content_length if hasattr(db_file, 'content_length') else 'N/A'} bytes")
+        
+        if db_file.filename == '':
+            print(f"❌ [UPDATE_DB] Nom de fichier vide")
+            return jsonify({'success': False, 'message': 'Aucun fichier sélectionné'})
+        
+        if not allowed_file(db_file.filename):
+            print(f"❌ [UPDATE_DB] Type de fichier non autorisé: {db_file.filename}")
+            return jsonify({'success': False, 'message': 'Type de fichier non autorisé'})
+        
+        print(f"✅ [UPDATE_DB] Fichier validé: {db_file.filename}")
         
         # Sauvegarder le fichier temporairement
         if db_file.filename:
             db_filename = secure_filename(db_file.filename)
             db_path = os.path.join(app.config['UPLOAD_FOLDER'], f"update_{db_filename}")
+            print(f"💾 [UPDATE_DB] Sauvegarde du fichier vers: {db_path}")
+            
+            # Créer le dossier upload s'il n'existe pas
+            os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+            
+            # Sauvegarder le fichier
             db_file.save(db_path)
+            
+            # Vérifier que le fichier a été sauvegardé
+            if os.path.exists(db_path):
+                file_size = os.path.getsize(db_path)
+                print(f"✅ [UPDATE_DB] Fichier sauvegardé avec succès: {db_path} ({file_size} bytes)")
+            else:
+                print(f"❌ [UPDATE_DB] Échec de la sauvegarde du fichier")
+                return jsonify({'success': False, 'message': 'Erreur lors de la sauvegarde du fichier'})
         else:
+            print(f"❌ [UPDATE_DB] Nom de fichier invalide")
             return jsonify({'success': False, 'message': 'Nom de fichier invalide'})
-        
-        print(f"💾 Fichier sauvegardé: {db_path}")
         
         # Vérifier que le conteneur MySQL est actif
         mysql_container = f"{project_name}_mysql_1"
@@ -1130,25 +1352,125 @@ def update_database(project_name):
         
         print("✅ Ancienne base de données supprimée")
         
-        # Importer la nouvelle base de données
-        print("📥 Import de la nouvelle base de données...")
-        import_success = import_database(project_path, db_path, project_name)
+        # Importer la nouvelle base de données avec le service ultra-rapide
+        print("📥 Import de la nouvelle base de données avec FastImportService...")
         
-        # Nettoyer le fichier temporaire
         try:
-            os.remove(db_path)
-        except Exception as e:
-            print(f"⚠️ Erreur lors du nettoyage: {e}")
-        
-        if import_success:
-            print("✅ Base de données mise à jour avec succès")
-            return jsonify({'success': True, 'message': 'Base de données mise à jour avec succès'})
-        else:
-            return jsonify({'success': False, 'message': 'Erreur lors de l\'import de la nouvelle base de données'})
+            import_result = fast_import_service.import_database(project_name, db_path)
+            
+            # Nettoyer le fichier temporaire
+            try:
+                os.remove(db_path)
+            except Exception as e:
+                print(f"⚠️ Erreur lors du nettoyage: {e}")
+            
+            if import_result.get('success', False):
+                print("✅ Base de données mise à jour avec succès")
+                return jsonify({
+                    'success': True, 
+                    'message': 'Base de données mise à jour avec succès',
+                    'details': {
+                        'method': import_result.get('method', 'FastImport'),
+                        'speed': import_result.get('speed', 'N/A'),
+                        'duration': import_result.get('duration', 'N/A'),
+                        'file_size': import_result.get('file_size', 'N/A'),
+                        'tables_imported': import_result.get('tables_imported', 'N/A')
+                    }
+                })
+            else:
+                error_message = import_result.get('error', 'Erreur lors de l\'import de la nouvelle base de données')
+                print(f"❌ Erreur import: {error_message}")
+                return jsonify({'success': False, 'message': error_message})
+                
+        except Exception as import_error:
+            print(f"❌ Exception lors de l'import: {import_error}")
+            print(f"📊 Taille du fichier SQL: {os.path.getsize(db_path) if os.path.exists(db_path) else 'N/A'} bytes")
+            
+            # Nettoyer le fichier temporaire même en cas d'erreur
+            try:
+                os.remove(db_path)
+            except:
+                pass
+                
+            return jsonify({
+                'success': False, 
+                'message': f'Erreur lors de l\'import: {str(import_error)}'
+            })
         
     except Exception as e:
-        print(f"❌ Erreur lors de la mise à jour de la base de données: {e}")
+        print(f"❌ [UPDATE_DB] Exception générale: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'message': f'Erreur: {str(e)}'})
+
+@app.route('/export_database/<project_name>', methods=['POST'])
+def export_database(project_name):
+    """Exporte la base de données d'un projet"""
+    try:
+        print(f"📤 Début export DB pour le projet: {project_name}")
+        
+        # Vérifier que le projet existe
+        project = Project(project_name, PROJECTS_FOLDER, CONTAINERS_FOLDER)
+        
+        if not project.exists:
+            return jsonify({'success': False, 'message': 'Projet non trouvé'})
+        
+        # Vérifier que le projet est actif
+        project_status = check_project_status(project_name)
+        if project_status != 'active':
+            return jsonify({'success': False, 'message': 'Le projet doit être démarré pour exporter la base de données'})
+        
+        # Créer le dossier d'export s'il n'existe pas
+        export_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'exports')
+        os.makedirs(export_dir, exist_ok=True)
+        
+        # Générer le nom du fichier d'export avec timestamp
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        export_filename = f"{project_name}_export_{timestamp}.sql"
+        export_path = os.path.join(export_dir, export_filename)
+        
+        # Utiliser le service de base de données pour l'export
+        success, error = database_service.export_database(project_name, export_path)
+        
+        if success:
+            # Créer l'URL de téléchargement
+            download_url = f"/download_export/{export_filename}"
+            
+            print(f"✅ Base de données exportée avec succès: {export_filename}")
+            return jsonify({
+                'success': True, 
+                'message': 'Base de données exportée avec succès',
+                'filename': export_filename,
+                'download_url': download_url
+            })
+        else:
+            print(f"❌ Erreur lors de l'export: {error}")
+            return jsonify({'success': False, 'message': f'Erreur lors de l\'export: {error}'})
+        
+    except Exception as e:
+        print(f"❌ Erreur lors de l'export de la base de données: {e}")
+        return jsonify({'success': False, 'message': f'Erreur: {str(e)}'})
+
+@app.route('/download_export/<filename>')
+def download_export(filename):
+    """Télécharge un fichier d'export de base de données"""
+    try:
+        export_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'exports')
+        file_path = os.path.join(export_dir, filename)
+        
+        if not os.path.exists(file_path):
+            return jsonify({'error': 'Fichier non trouvé'}), 404
+        
+        # Vérifier que le fichier a un nom sécurisé
+        if not filename.endswith('.sql') or '..' in filename:
+            return jsonify({'error': 'Nom de fichier invalide'}), 400
+        
+        return send_file(file_path, as_attachment=True, download_name=filename)
+        
+    except Exception as e:
+        print(f"❌ Erreur lors du téléchargement: {e}")
+        return jsonify({'error': 'Erreur lors du téléchargement'}), 500
 
 @app.route('/delete_project/<project_name>', methods=['DELETE'])
 def delete_project(project_name):
@@ -1607,13 +1929,17 @@ def start_project(project_name):
     try:
         print(f"🚀 Démarrage du projet: {project_name}")
         
-        # Vérifier que le projet existe
-        project_path = os.path.join(PROJECTS_FOLDER, project_name)
-        if not os.path.exists(project_path):
+        # Utiliser le modèle Project avec la nouvelle architecture
+        project = Project(project_name, PROJECTS_FOLDER, 'containers')
+        
+        if not project.exists:
             return jsonify({'success': False, 'message': 'Projet non trouvé'})
         
-        # Utiliser le DockerService pour démarrer les conteneurs
-        success, error = docker_service.start_containers(project_path)
+        if not project.is_valid:
+            return jsonify({'success': False, 'message': 'Projet invalide (pas de docker-compose.yml)'})
+        
+        # Utiliser le DockerService pour démarrer les conteneurs depuis containers/
+        success, error = docker_service.start_containers(project.container_path)
         
         if success:
             print(f"✅ Projet {project_name} démarré avec succès")
@@ -1632,13 +1958,17 @@ def stop_project(project_name):
     try:
         print(f"🛑 Arrêt du projet: {project_name}")
         
-        # Vérifier que le projet existe
-        project_path = os.path.join(PROJECTS_FOLDER, project_name)
-        if not os.path.exists(project_path):
+        # Utiliser le modèle Project avec la nouvelle architecture
+        project = Project(project_name, PROJECTS_FOLDER, 'containers')
+        
+        if not project.exists:
             return jsonify({'success': False, 'message': 'Projet non trouvé'})
         
-        # Utiliser le DockerService pour arrêter les conteneurs
-        success, error = docker_service.stop_containers(project_path)
+        if not project.is_valid:
+            return jsonify({'success': False, 'message': 'Projet invalide (pas de docker-compose.yml)'})
+        
+        # Utiliser le DockerService pour arrêter les conteneurs depuis containers/
+        success, error = docker_service.stop_containers(project.container_path)
         
         if success:
             print(f"✅ Projet {project_name} arrêté avec succès")
@@ -1690,8 +2020,8 @@ def add_nextjs_to_project(project_name):
             },
             "dependencies": {
                 "next": "14.0.0",
-                "react": "^18",
-                "react-dom": "^18"
+                "react": "latest",
+                "react-dom": "latest"
             },
             "devDependencies": {
                 "eslint": "^8",
@@ -1715,7 +2045,7 @@ export default function Home() {{
       <Head>
         <title>{project_name} - Next.js Frontend</title>
         <meta name="description" content="Frontend Next.js pour {project_name}" />
-        <link rel="icon" href="/favicon.ico" />
+        <link rel="icon" href="/favicon.png" />
       </Head>
 
       <main>
@@ -1911,24 +2241,65 @@ def nextjs_npm(project_name, command):
     try:
         print(f"🎯 Commande npm {command} pour {project_name}")
         
-        # Vérifier que le projet existe
-        project_path = os.path.join(PROJECTS_FOLDER, project_name)
-        if not os.path.exists(project_path):
+        # Utiliser la nouvelle architecture
+        project = Project(project_name, PROJECTS_FOLDER, CONTAINERS_FOLDER)
+        
+        if not project.exists:
             return jsonify({'success': False, 'message': 'Projet non trouvé'})
         
-        nextjs_path = os.path.join(project_path, 'nextjs')
+        # Vérifier que Next.js est configuré
+        if not project.has_nextjs:
+            return jsonify({'success': False, 'message': 'Next.js n\'est pas configuré pour ce projet. Utilisez "Ajouter Next.js" d\'abord.'})
+        
+        nextjs_path = os.path.join(project.path, 'nextjs')
         if not os.path.exists(nextjs_path):
-            return jsonify({'success': False, 'message': 'Dossier Next.js non trouvé'})
+            return jsonify({'success': False, 'message': 'Dossier Next.js non trouvé dans projets/'})
         
         nextjs_container = f"{project_name}_nextjs_1"
         
-        # Vérifier que le conteneur existe
-        result = subprocess.run([
-            'docker', 'ps', '-a', '--filter', f'name={nextjs_container}', '--format', '{{.Names}}'
+        # Vérification plus détaillée du conteneur Next.js
+        print(f"🔍 Vérification du conteneur: {nextjs_container}")
+        
+        # 1. Vérifier si le conteneur existe (running ou pas)
+        result_all = subprocess.run([
+            'docker', 'ps', '-a', '--filter', f'name={nextjs_container}', '--format', '{{.Names}} {{.Status}}'
         ], capture_output=True, text=True)
         
-        if nextjs_container not in result.stdout:
-            return jsonify({'success': False, 'message': 'Conteneur Next.js non trouvé'})
+        if nextjs_container not in result_all.stdout:
+            return jsonify({'success': False, 'message': f'Conteneur Next.js non trouvé. Le projet "{project_name}" doit être redémarré pour créer le conteneur Next.js.'})
+        
+        # 2. Vérifier si le conteneur est running
+        result_running = subprocess.run([
+            'docker', 'ps', '--filter', f'name={nextjs_container}', '--filter', 'status=running', '--format', '{{.Names}}'
+        ], capture_output=True, text=True)
+        
+        if nextjs_container not in result_running.stdout:
+            # Le conteneur existe mais n'est pas running - essayer de le démarrer
+            print(f"🔄 Conteneur {nextjs_container} existe mais n'est pas running. Tentative de démarrage...")
+            
+            start_result = subprocess.run([
+                'docker', 'start', nextjs_container
+            ], capture_output=True, text=True, timeout=30)
+            
+            if start_result.returncode == 0:
+                print(f"✅ Conteneur {nextjs_container} démarré avec succès")
+                # Attendre 3 secondes que le conteneur soit prêt
+                import time
+                time.sleep(3)
+            else:
+                print(f"❌ Impossible de démarrer le conteneur: {start_result.stderr}")
+                return jsonify({'success': False, 'message': f'Conteneur Next.js arrêté et impossible à démarrer. Erreur: {start_result.stderr}'})
+        
+        print(f"✅ Conteneur {nextjs_container} est actif")
+        
+        # Vérifier si npm run dev est déjà en cours
+        if command == 'dev':
+            dev_check = subprocess.run([
+                'docker', 'exec', nextjs_container, 'pgrep', '-f', 'npm.*dev'
+            ], capture_output=True, text=True)
+            
+            if dev_check.returncode == 0:
+                return jsonify({'success': False, 'message': 'npm run dev est déjà en cours d\'exécution'})
         
         # Commandes autorisées
         allowed_commands = {
@@ -1945,20 +2316,25 @@ def nextjs_npm(project_name, command):
         
         # Pour 'dev', il faut d'abord arrêter le processus existant
         if command == 'dev':
+            print(f"🔄 Arrêt du processus npm dev existant...")
             # Arrêter le processus npm dev existant
             subprocess.run([
                 'docker', 'exec', nextjs_container, 'pkill', '-f', 'npm.*dev'
             ], capture_output=True)
             
             # Exécuter npm run dev en arrière-plan
-            subprocess.run([
+            result = subprocess.run([
                 'docker', 'exec', '-d', nextjs_container, 'sh', '-c', 
                 f"cd /app && {' '.join(npm_command)}"
             ], capture_output=True, text=True, timeout=30)
             
-            message = f"npm run dev démarré en arrière-plan"
+            if result.returncode == 0:
+                message = f"npm run dev démarré en arrière-plan sur le port {project.nextjs_port}"
+            else:
+                return jsonify({'success': False, 'message': f'Erreur lors du démarrage: {result.stderr}'})
             
         elif command == 'install':
+            print(f"📦 Installation des dépendances npm...")
             # npm install - attendre la fin
             result = subprocess.run([
                 'docker', 'exec', nextjs_container, 'sh', '-c', 
@@ -1966,11 +2342,12 @@ def nextjs_npm(project_name, command):
             ], capture_output=True, text=True, timeout=300)  # 5 minutes max
             
             if result.returncode == 0:
-                message = "npm install terminé avec succès"
+                message = "Dépendances npm installées avec succès"
             else:
                 return jsonify({'success': False, 'message': f'Erreur npm install: {result.stderr}'})
                 
         elif command == 'build':
+            print(f"🏗️ Construction du projet Next.js...")
             # npm run build - attendre la fin
             result = subprocess.run([
                 'docker', 'exec', nextjs_container, 'sh', '-c', 
@@ -1978,7 +2355,7 @@ def nextjs_npm(project_name, command):
             ], capture_output=True, text=True, timeout=600)  # 10 minutes max
             
             if result.returncode == 0:
-                message = "npm run build terminé avec succès"
+                message = f"Projet Next.js construit avec succès sur le port {project.nextjs_port}"
             else:
                 return jsonify({'success': False, 'message': f'Erreur npm build: {result.stderr}'})
         
@@ -1989,6 +2366,287 @@ def nextjs_npm(project_name, command):
         return jsonify({'success': False, 'message': f'Timeout lors de l\'exécution de npm {command}'})
     except Exception as e:
         print(f"❌ Erreur npm {command}: {e}")
+        return jsonify({'success': False, 'message': f'Erreur: {str(e)}'})
+
+@app.route('/check_nextjs_status/<project_name>')
+def check_nextjs_status(project_name):
+    """Vérifie le statut de npm run dev pour un projet (conteneur en priorité)"""
+    try:
+        # Utiliser la nouvelle architecture
+        project = Project(project_name, PROJECTS_FOLDER, CONTAINERS_FOLDER)
+        
+        if not project.exists:
+            return jsonify({'success': False, 'dev_running': False})
+        
+        dev_running = False
+        container_running = False
+        
+        # 1. Vérifier d'abord le conteneur Next.js (priorité)
+        if project.has_nextjs:
+            nextjs_container = f"{project_name}_nextjs_1"
+            
+            # Vérifier si le conteneur est en cours d'exécution
+            result = subprocess.run([
+                'docker', 'ps', '--filter', f'name={nextjs_container}', '--filter', 'status=running', '--format', '{{.Names}}'
+            ], capture_output=True, text=True)
+            
+            if nextjs_container in result.stdout:
+                container_running = True
+                
+                # Si le conteneur tourne, npm dev est probablement en cours (sauf si on vient de le démarrer)
+                # Vérifier explicitement si npm run dev est en cours dans le conteneur
+                dev_check = subprocess.run([
+                    'docker', 'exec', nextjs_container, 'pgrep', '-f', 'npm.*dev'
+                ], capture_output=True, text=True)
+                
+                if dev_check.returncode == 0:
+                    dev_running = True
+                    print(f"✅ npm run dev détecté dans le conteneur {nextjs_container}")
+                else:
+                    # Le conteneur tourne mais npm dev n'est pas encore démarré
+                    print(f"ℹ️ Conteneur {nextjs_container} en cours mais npm dev pas encore démarré")
+            else:
+                print(f"ℹ️ Conteneur {nextjs_container} arrêté")
+        
+        # 2. Vérifier sur l'hôte seulement si le conteneur n'a pas npm dev
+        if not dev_running:
+            # Chercher des processus npm dev orphelins sur l'hôte
+            host_check = subprocess.run([
+                'pgrep', '-f', 'npm.*dev'
+            ], capture_output=True, text=True)
+            
+            if host_check.returncode == 0 and host_check.stdout.strip():
+                dev_running = True
+                print(f"⚠️ Processus npm dev orphelins détectés sur l'hôte: {host_check.stdout.strip()}")
+        
+        # 3. Vérifier les processus sudo npm dev (cas particulier)
+        if not dev_running:
+            sudo_check = subprocess.run([
+                'pgrep', '-f', 'sudo.*npm.*dev'
+            ], capture_output=True, text=True)
+            
+            if sudo_check.returncode == 0 and sudo_check.stdout.strip():
+                dev_running = True
+                print(f"⚠️ Processus sudo npm dev détectés: {sudo_check.stdout.strip()}")
+        
+        print(f"📊 Statut {project_name}: conteneur_actif={container_running}, npm_dev_actif={dev_running}")
+        
+        return jsonify({
+            'success': True, 
+            'dev_running': dev_running,
+            'container_running': container_running
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur vérification statut Next.js: {e}")
+        return jsonify({'success': False, 'dev_running': False})
+
+@app.route('/stop_nextjs_dev/<project_name>', methods=['POST'])
+def stop_nextjs_dev(project_name):
+    """Arrête npm run dev pour un projet Next.js (arrêt du conteneur)"""
+    try:
+        print(f"🛑 Arrêt de npm run dev pour {project_name}")
+        
+        # Utiliser la nouvelle architecture
+        project = Project(project_name, PROJECTS_FOLDER, CONTAINERS_FOLDER)
+        
+        if not project.exists:
+            return jsonify({'success': False, 'message': 'Projet non trouvé'})
+        
+        stopped_processes = []
+        errors = []
+        
+        # 1. Arrêter complètement le conteneur Next.js (plus efficace que de tuer le processus)
+        if project.has_nextjs:
+            nextjs_container = f"{project_name}_nextjs_1"
+            
+            print(f"🔄 Arrêt du conteneur Next.js...")
+            result = subprocess.run([
+                'docker', 'stop', nextjs_container
+            ], capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0:
+                stopped_processes.append("conteneur Next.js arrêté")
+                print(f"✅ Conteneur {nextjs_container} arrêté avec succès")
+            else:
+                # Vérifier si le conteneur existe/était déjà arrêté
+                check_result = subprocess.run([
+                    'docker', 'ps', '-a', '--filter', f'name={nextjs_container}', '--format', '{{.Names}}'
+                ], capture_output=True, text=True)
+                
+                if nextjs_container in check_result.stdout:
+                    stopped_processes.append("conteneur Next.js (déjà arrêté)")
+                else:
+                    errors.append("Conteneur Next.js non trouvé")
+        
+        # 2. Arrêter TOUS les processus npm dev sur l'hôte (au cas où il y en aurait)
+        print(f"🔄 Nettoyage des processus npm run dev sur l'hôte...")
+        
+        try:
+            result = subprocess.run([
+                'pgrep', '-f', 'npm.*dev'
+            ], capture_output=True, text=True)
+            
+            if result.returncode == 0 and result.stdout.strip():
+                pids = result.stdout.strip().split('\n')
+                print(f"📋 Processus npm dev trouvés sur l'hôte: {pids}")
+                
+                for pid in pids:
+                    if pid.strip():
+                        try:
+                            kill_result = subprocess.run([
+                                'sudo', 'kill', '-KILL', pid.strip()
+                            ], capture_output=True, text=True, timeout=5)
+                            
+                            if kill_result.returncode == 0:
+                                stopped_processes.append(f"processus hôte PID {pid.strip()}")
+                            else:
+                                errors.append(f"Impossible d'arrêter PID {pid.strip()}")
+                        except Exception as e:
+                            errors.append(f"Erreur PID {pid.strip()}: {str(e)}")
+            else:
+                print(f"ℹ️ Aucun processus npm dev trouvé sur l'hôte")
+        
+        except Exception as e:
+            errors.append(f"Erreur recherche processus: {str(e)}")
+        
+        # 3. Nettoyer les processus sudo npm dev
+        try:
+            result = subprocess.run([
+                'pgrep', '-f', 'sudo.*npm.*dev'
+            ], capture_output=True, text=True)
+            
+            if result.returncode == 0 and result.stdout.strip():
+                sudo_pids = result.stdout.strip().split('\n')
+                print(f"📋 Processus sudo npm dev trouvés: {sudo_pids}")
+                
+                for pid in sudo_pids:
+                    if pid.strip():
+                        try:
+                            kill_result = subprocess.run([
+                                'sudo', 'kill', '-KILL', pid.strip()
+                            ], capture_output=True, text=True, timeout=5)
+                            
+                            if kill_result.returncode == 0:
+                                stopped_processes.append(f"sudo PID {pid.strip()}")
+                        except Exception:
+                            pass  # Ignorer les erreurs pour les processus sudo
+        except Exception:
+            pass  # Ignorer les erreurs de recherche sudo
+        
+        # Construire le message de retour
+        if stopped_processes:
+            message = f"npm run dev arrêté: {', '.join(stopped_processes)}"
+            if errors:
+                message += f" (avertissements: {', '.join(errors)})"
+            print(f"✅ {message}")
+            return jsonify({'success': True, 'message': message})
+        elif errors:
+            message = f"Erreurs lors de l'arrêt: {', '.join(errors)}"
+            print(f"⚠️ {message}")
+            return jsonify({'success': False, 'message': message})
+        else:
+            message = "npm run dev n'était pas en cours d'exécution"
+            print(f"ℹ️ {message}")
+            return jsonify({'success': True, 'message': message})
+        
+    except Exception as e:
+        print(f"❌ Erreur arrêt npm dev: {e}")
+        return jsonify({'success': False, 'message': f'Erreur: {str(e)}'})
+
+@app.route('/configure_external_domain/<project_name>', methods=['POST'])
+def configure_external_domain(project_name):
+    """Configure un domaine externe pour un projet"""
+    try:
+        data = request.get_json()
+        external_domain = data.get('domain', '').strip()
+        
+        if not external_domain:
+            return jsonify({'success': False, 'message': 'Domaine requis'})
+        
+        # Utiliser la nouvelle architecture
+        project = Project(project_name, PROJECTS_FOLDER, CONTAINERS_FOLDER)
+        
+        if not project.exists:
+            return jsonify({'success': False, 'message': 'Projet non trouvé'})
+        
+        # Vérifier que le domaine est valide
+        if not is_external_domain(external_domain):
+            return jsonify({'success': False, 'message': 'Domaine externe invalide (doit contenir un TLD comme .com, .fr, etc.)'})
+        
+        # Sauvegarder le domaine externe
+        external_domain_file = os.path.join(project.path, '.external_domain')
+        with open(external_domain_file, 'w') as f:
+            f.write(external_domain)
+        
+        print(f"✅ Domaine externe {external_domain} configuré pour {project_name}")
+        
+        return jsonify({
+            'success': True, 
+            'message': f'Domaine externe {external_domain} configuré avec succès',
+            'domain': external_domain,
+            'next_steps': [
+                f'Exécuter: ./setup_domain.sh {external_domain} {project_name}',
+                f'Configurer DNS: {external_domain} → Votre IP publique',
+                f'Vérifier redirection box: Port 80 → 192.168.1.21:80',
+                f'Optionnel: ./setup_https.sh {external_domain} votre@email.com'
+            ]
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur configuration domaine externe: {e}")
+        return jsonify({'success': False, 'message': f'Erreur: {str(e)}'})
+
+@app.route('/start_nextjs_container/<project_name>', methods=['POST'])
+def start_nextjs_container(project_name):
+    """Redémarre le conteneur Next.js pour un projet"""
+    try:
+        print(f"🚀 Démarrage du conteneur Next.js pour {project_name}")
+        
+        # Utiliser la nouvelle architecture
+        project = Project(project_name, PROJECTS_FOLDER, CONTAINERS_FOLDER)
+        
+        if not project.exists or not project.has_nextjs:
+            return jsonify({'success': False, 'message': 'Projet Next.js non trouvé'})
+        
+        nextjs_container = f"{project_name}_nextjs_1"
+        
+        # Vérifier l'état actuel du conteneur
+        result = subprocess.run([
+            'docker', 'ps', '-a', '--filter', f'name={nextjs_container}', '--format', '{{.Names}} {{.Status}}'
+        ], capture_output=True, text=True)
+        
+        if nextjs_container not in result.stdout:
+            return jsonify({'success': False, 'message': 'Conteneur Next.js non trouvé'})
+        
+        # Démarrer le conteneur (il se redémarrera automatiquement avec npm run dev)
+        print(f"🔄 Démarrage du conteneur {nextjs_container}...")
+        result = subprocess.run([
+            'docker', 'start', nextjs_container
+        ], capture_output=True, text=True, timeout=30)
+        
+        if result.returncode == 0:
+            message = f"Conteneur Next.js démarré - npm run dev va s'initialiser automatiquement"
+            print(f"✅ {message}")
+            return jsonify({'success': True, 'message': message})
+        else:
+            # Si start échoue, essayer restart
+            print(f"🔄 Tentative de restart du conteneur...")
+            result = subprocess.run([
+                'docker', 'restart', nextjs_container
+            ], capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0:
+                message = f"Conteneur Next.js redémarré - npm run dev va s'initialiser automatiquement"
+                print(f"✅ {message}")
+                return jsonify({'success': True, 'message': message})
+            else:
+                error_msg = f"Impossible de démarrer le conteneur: {result.stderr}"
+                print(f"❌ {error_msg}")
+                return jsonify({'success': False, 'message': error_msg})
+        
+    except Exception as e:
+        print(f"❌ Erreur démarrage conteneur Next.js: {e}")
         return jsonify({'success': False, 'message': f'Erreur: {str(e)}'})
 
 if __name__ == '__main__':

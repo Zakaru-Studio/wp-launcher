@@ -5,46 +5,51 @@
 {% block content %}
 <!-- Header avec design amélioré -->
 <header class="header">
+    <div class="header-top">
         <div class="header-left">
-    <h1 class="header-title">WordPress Launcher</h1>
+            <h1 class="header-title">WordPress Launcher</h1>
+            <span class="app-version" id="app-version">v{{ git_version }}</span>
         </div>
-    <div class="header-center">
-    <div class="search-bar">
-        <i class="fas fa-search search-icon"></i>
-        <input type="text" id="search-input" placeholder="Rechercher un projet..." autocomplete="off">
-        <button class="clear-search" id="clear-search" style="display: none;" onclick="clearSearch()">
-            <i class="fas fa-times"></i>
-        </button>
-    </div> 
+        <div class="header-right">
+            <button class="add-site-btn" onclick="showCreateProjectModal()"><i class="fas fa-plus"></i> Ajouter un site</button>
+        </div>
     </div>
-    <div class="header-right">
-     <button class="add-site-btn" onclick="showCreateProjectModal()"><i class="fas fa-plus"></i> Ajouter un site</button>
+    <div class="header-bottom">
+        <div class="search-bar">
+            <i class="fas fa-search search-icon"></i>
+            <input type="text" id="search-input" placeholder="Rechercher un projet..." autocomplete="off">
+            <button class="clear-search" id="clear-search" style="display: none;" onclick="clearSearch()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <!-- Stats Section compactes comme filtres rapides -->
+        <div class="stats-section fade-in">
+            <div class="stat-card" data-filter="all" onclick="filterProjects('all')">
+                <div class="stat-number" id="total-projects">-</div>
+                <div class="stat-label">Total</div>
+                <div class="stat-subtitle">Projets</div>
+            </div>
+            <div class="stat-card" data-filter="active" onclick="filterProjects('active')">
+                <div class="stat-number" id="active-projects">-</div>
+                <div class="stat-label">Actifs</div>
+                <div class="stat-subtitle">Running</div>
+            </div>
+            <div class="stat-card" data-filter="inactive" onclick="filterProjects('inactive')">
+                <div class="stat-number" id="inactive-projects">-</div>
+                <div class="stat-label">Arrêtés</div>
+                <div class="stat-subtitle">Stopped</div>
+            </div>
+            <div class="stat-card" data-filter="nextjs" onclick="filterProjects('nextjs')">
+                <div class="stat-number" id="nextjs-projects">-</div>
+                <div class="stat-label">Next.js</div>
+                <div class="stat-subtitle">Headless</div>
+            </div>
+        </div>
+        
+      
     </div>
 </header>
 
-<!-- Stats Section cliquables -->
-<div class="stats-section fade-in">
-    <div class="stat-card" data-filter="all" onclick="filterProjects('all')">
-        <div class="stat-number" id="total-projects">-</div>
-        <div class="stat-label">Projets Total</div>
-        <div class="stat-subtitle">Tous les projets</div>
-    </div>
-    <div class="stat-card" data-filter="active" onclick="filterProjects('active')">
-        <div class="stat-number" id="active-projects">-</div>
-        <div class="stat-label">Projets Actifs</div>
-        <div class="stat-subtitle">En cours d'exécution</div>
-    </div>
-    <div class="stat-card" data-filter="inactive" onclick="filterProjects('inactive')">
-        <div class="stat-number" id="inactive-projects">-</div>
-        <div class="stat-label">Projets Arrêtés</div>
-        <div class="stat-subtitle">Actuellement arrêtés</div>
-    </div>
-    <div class="stat-card" data-filter="nextjs" onclick="filterProjects('nextjs')">
-        <div class="stat-number" id="nextjs-projects">-</div>
-        <div class="stat-label">Avec Next.js</div>
-        <div class="stat-subtitle">Frontend headless</div>
-    </div>
-</div>
 
 <!-- Indicateur de filtre actif -->
 <div class="filter-indicator" id="filter-indicator" style="display: none;">
@@ -65,10 +70,7 @@
     </div>
 </div>
 
-<!-- Bouton Flottant Créer Projet -->
-<button class="create-project-btn" onclick="showCreateProjectModal()" title="Créer un nouveau projet">
-    <i class="fas fa-plus"></i>
-</button>
+<!-- Bouton flottant retiré - création uniquement via le header -->
 
 <!-- Progress bar pour import DB -->
 <div id="import-progress" class="d-none import-progress-sticky">
@@ -115,9 +117,9 @@
                                     <i class="fas fa-tag me-1"></i>
                                     Nom du projet *
                                 </label>
-                                <input type="text" class="form-control" id="project_name" name="project_name" required 
-                                       placeholder="mon-site-wordpress" pattern="[a-zA-Z0-9-_]+" 
-                                       title="Lettres, chiffres, tirets et underscores uniquement">
+                                <input type="text" class="form-control" id="project_name" name="project_name" required
+                                    placeholder="mon-site-wordpress" pattern="[a-zA-Z0-9-_]+"
+                                    title="Lettres, chiffres, tirets et underscores uniquement">
                                 <div class="form-text">Lettres, chiffres, tirets et underscores uniquement</div>
                             </div>
 
@@ -127,15 +129,16 @@
                                     <i class="fas fa-globe me-1"></i>
                                     Hostname (optionnel)
                                 </label>
-                                <input type="text" class="form-control" id="project_hostname" name="project_hostname" 
-                                       placeholder="mon-site.local">
+                                <input type="text" class="form-control" id="project_hostname" name="project_hostname"
+                                    placeholder="mon-site.local">
                                 <div class="form-text">Sera généré automatiquement si vide</div>
                             </div>
 
                             <!-- Option Next.js -->
                             <div class="form-group">
                                 <div class="form-check form-switch">
-                                    <input class="form-check-input" type="checkbox" id="enable_nextjs" name="enable_nextjs">
+                                    <input class="form-check-input" type="checkbox" id="enable_nextjs"
+                                        name="enable_nextjs">
                                     <label class="form-check-label" for="enable_nextjs">
                                         <i class="fab fa-react me-1"></i>
                                         Activer Next.js (frontend headless)
@@ -152,8 +155,8 @@
                                     Archive WP Migrate Pro (optionnel)
                                 </label>
                                 <div class="upload-zone" id="upload-zone">
-                                    <input type="file" class="form-control" id="wp_migrate_archive" name="wp_migrate_archive" 
-                                           accept=".zip,.sql,.gz" style="display: none;">
+                                    <input type="file" class="form-control" id="wp_migrate_archive"
+                                        name="wp_migrate_archive" accept=".zip,.sql,.gz" style="display: none;">
                                     <div class="upload-content text-center">
                                         <i class="fas fa-cloud-upload-alt"></i>
                                         <p class="mb-1">Glissez-déposez votre archive</p>
@@ -172,11 +175,14 @@
                                         </button>
                                     </div>
                                 </div>
-                                <div class="form-text">Archive d'export WP Migrate Pro ou fichier SQL (jusqu'à 8GB)</div>
+                                <div class="form-text">Archive d'export WP Migrate Pro ou fichier SQL (jusqu'à 8GB)
+                                </div>
                                 <div class="alert alert-info mt-2" style="font-size: 0.85rem;">
                                     <i class="fas fa-info-circle me-1"></i>
-                                    <strong>Import automatique :</strong> Les archives WP Migrate Pro et WP Umbrella sont automatiquement traitées.
-                                    Le contenu wp-content et la base de données sont extraits et importés dans votre nouveau projet.
+                                    <strong>Import automatique :</strong> Les archives WP Migrate Pro et WP Umbrella
+                                    sont automatiquement traitées.
+                                    Le contenu wp-content et la base de données sont extraits et importés dans votre
+                                    nouveau projet.
                                 </div>
                             </div>
                         </div>
@@ -210,7 +216,8 @@
             </div>
             <div class="modal-body">
                 <p>Êtes-vous sûr de vouloir supprimer le projet <strong id="delete-project-name"></strong> ?</p>
-                <div class="alert alert-warning" style="background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); color: var(--text-primary); border-radius: 12px;">
+                <div class="alert alert-warning"
+                    style="background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); color: var(--text-primary); border-radius: 12px;">
                     <i class="fas fa-exclamation-triangle me-2"></i>
                     Cette action est irréversible. Tous les fichiers et la base de données seront supprimés.
                 </div>
@@ -270,14 +277,16 @@
             </div>
             <form id="update-db-form" enctype="multipart/form-data">
                 <div class="modal-body">
-                    <div class="alert alert-warning" style="background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); color: var(--text-primary); border-radius: 12px;">
+                    <div class="alert alert-warning"
+                        style="background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); color: var(--text-primary); border-radius: 12px;">
                         <i class="fas fa-exclamation-triangle me-2"></i>
-                        <strong>Attention :</strong> L'ancienne base de données sera complètement supprimée et remplacée par la nouvelle.
+                        <strong>Attention :</strong> L'ancienne base de données sera complètement supprimée et remplacée
+                        par la nouvelle.
                     </div>
                     <div class="form-group">
                         <label for="db-file" class="form-label">Fichier de base de données</label>
-                        <input type="file" class="form-control" id="db-file" name="db_file" 
-                               accept=".sql,.zip,.gz,.sql.gz" required>
+                        <input type="file" class="form-control" id="db-file" name="db_file"
+                            accept=".sql,.zip,.gz,.sql.gz" required>
                         <div class="form-text">Formats acceptés: SQL, ZIP (contenant un .sql), .sql.gz</div>
                         <div class="form-text text-info">
                             <i class="fas fa-rocket me-1"></i>
@@ -306,7 +315,8 @@
                     <i class="fas fa-rocket me-2"></i>
                     Import Ultra-Rapide
                 </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" id="progress-close-btn" style="display: none;"></button>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" id="progress-close-btn"
+                    style="display: none;"></button>
             </div>
             <div class="modal-body">
                 <div class="text-center mb-4">
@@ -320,21 +330,19 @@
                         <i class="fas fa-exclamation-triangle"></i>
                     </div>
                 </div>
-                
+
                 <div class="progress mb-3" style="height: 30px;">
-                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
-                         role="progressbar" 
-                         style="width: 0%;" 
-                         id="import-progress-bar">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"
+                        style="width: 0%;" id="import-progress-bar">
                         <span id="progress-percentage">0%</span>
                     </div>
                 </div>
-                
+
                 <div class="text-center">
                     <h6 id="progress-message" class="text-muted">Initialisation...</h6>
                     <div id="progress-details" class="mt-2"></div>
                 </div>
-                
+
                 <div class="mt-4" id="tables-container" style="display: none;">
                     <h6 class="text-primary">
                         <i class="fas fa-table me-2"></i>
@@ -344,7 +352,7 @@
                         <!-- Les tables importées seront ajoutées ici -->
                     </div>
                 </div>
-                
+
                 <div class="mt-4" id="import-stats" style="display: none;">
                     <div class="row text-center">
                         <div class="col-md-3">
@@ -383,153 +391,6 @@
         </div>
     </div>
 </div>
-
-<style>
-.stat-item {
-    padding: 1rem;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.05);
-}
-
-.stat-value {
-    font-size: 1.2rem;
-    font-weight: bold;
-    margin-bottom: 0.5rem;
-}
-
-.stat-label {
-    font-size: 0.9rem;
-    color: var(--text-secondary);
-}
-
-.table-imported {
-    background: rgba(40, 167, 69, 0.1);
-    border: 1px solid rgba(40, 167, 69, 0.3);
-    border-radius: 6px;
-    padding: 0.5rem;
-    margin: 0.2rem;
-    font-size: 0.9rem;
-    color: var(--text-primary);
-}
-
-.table-imported .table-name {
-    font-weight: bold;
-    color: #28a745;
-}
-
-.progress {
-    background-color: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.progress-bar {
-    background: linear-gradient(90deg, #007bff, #28a745);
-    color: white;
-    font-weight: bold;
-}
-
-/* Styles pour le toggle des projets */
-.project-header {
-    cursor: pointer;
-    user-select: none;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    transition: all 0.3s ease;
-}
-
-.project-header:hover {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 12px;
-    padding: 0.5rem;
-    margin: -0.5rem;
-}
-
-.project-header-right {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-}
-
-.project-toggle-btn {
-    background: none;
-    border: none;
-    color: var(--text-secondary);
-    font-size: 1rem;
-    padding: 0.5rem;
-    border-radius: 50%;
-    transition: all 0.3s ease;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 2rem;
-    height: 2rem;
-}
-
-.project-toggle-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--primary-color);
-    transform: scale(1.1);
-}
-
-.project-toggle-btn i {
-    transition: transform 0.3s ease;
-}
-
-.project-content {
-    overflow: hidden;
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-    max-height: 1000px;
-    opacity: 1;
-    margin-top: 1rem;
-}
-
-.project-content.collapsed {
-    max-height: 0;
-    opacity: 0;
-    margin-top: 0;
-    margin-bottom: 0;
-    padding-top: 0;
-    padding-bottom: 0;
-}
-
-/* Animation pour le chevron */
-.project-toggle-btn:hover i {
-    transform: scale(1.2);
-}
-
-/* Style pour indiquer que le header est cliquable */
-.project-header::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    border-radius: 12px;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-    pointer-events: none;
-}
-
-.project-item {
-    position: relative;
-}
-
-/* Amélioration de l'accessibilité */
-.project-header:focus-visible {
-    outline: 2px solid var(--primary-color);
-    outline-offset: 2px;
-    border-radius: 12px;
-}
-
-.project-toggle-btn:focus-visible {
-    outline: 2px solid var(--primary-color);
-    outline-offset: 2px;
-}
-</style>
 {% endblock %}
 
 {% block scripts %}
@@ -537,66 +398,66 @@
 <script src="{{ url_for('static', filename='js/upload.js') }}"></script>
 
 <script>
-// Initialisation SocketIO pour les progress bars
-const socket = io();
+    // Initialisation SocketIO pour les progress bars
+    const socket = io();
 
-// Écouter les événements de création de projet
-socket.on('project_creation', function(data) {
-    console.log('Événement création projet:', data);
-    
-    if (data.status === 'error') {
-        hideProjectCreationLoader();
-        showError(data.message);
-    } else if (data.status === 'warning') {
-        hideProjectCreationLoader();
-        showWarning(data.message);
-        loadProjects(); // Recharger la liste des projets
-    } else if (data.status === 'completed') {
-        hideProjectCreationLoader();
-        showSuccess(data.message);
-        
-        // Afficher les détails du projet créé
-        if (data.project_details) {
-            const details = data.project_details;
-            const detailsHtml = `
-                <div class="alert alert-success mt-3">
-                    <h6><i class="fas fa-check-circle me-2"></i>Projet créé avec succès !</h6>
-                    <ul class="mb-0">
-                        <li><strong>Nom:</strong> ${details.name}</li>
-                        <li><strong>Hostname:</strong> ${details.hostname}</li>
-                        <li><strong>WordPress:</strong> <a href="http://192.168.1.21:${details.wordpress_port}" target="_blank">Port ${details.wordpress_port}</a></li>
-                        <li><strong>phpMyAdmin:</strong> <a href="http://192.168.1.21:${details.phpmyadmin_port}" target="_blank">Port ${details.phpmyadmin_port}</a></li>
-                        <li><strong>Mailpit:</strong> <a href="http://192.168.1.21:${details.mailpit_port}" target="_blank">Port ${details.mailpit_port}</a></li>
-                        ${details.nextjs_enabled ? `<li><strong>Next.js:</strong> <a href="http://192.168.1.21:${details.nextjs_port}" target="_blank">Port ${details.nextjs_port}</a></li>` : ''}
-                    </ul>
-                </div>
-            `;
-            
-            // Afficher les détails dans une notification toast
-            if (typeof showToast === 'function') {
-                showToast('Projet créé !', detailsHtml, 'success', 10000);
+    // Écouter les événements de création de projet
+    socket.on('project_creation', function (data) {
+        console.log('Événement création projet:', data);
+
+        // Trouver la tâche correspondante dans le gestionnaire
+        let currentTask = null;
+        if (taskManager) {
+            for (const [taskId, task] of taskManager.tasks.entries()) {
+                if (task.type === 'create_project' && task.status === 'running') {
+                    currentTask = task;
+                    break;
+                }
             }
         }
-        
-        loadProjects(); // Recharger la liste des projets
-        
-        // Fermer le modal de création
-        const modal = bootstrap.Modal.getInstance(document.getElementById('createProjectModal'));
-        if (modal) {
-            modal.hide();
-        }
-    } else {
-        // Mettre à jour le loader avec les détails
-        updateProjectCreationLoader(data.step, data.total_steps, data.message, data.status, data.details);
-    }
-});
 
-// Fonction pour afficher le loader de création de projet
-function showProjectCreationLoader() {
-    // Créer le modal de loader s'il n'existe pas
-    let loaderModal = document.getElementById('projectCreationLoader');
-    if (!loaderModal) {
-        const loaderHtml = `
+        if (data.status === 'error') {
+            if (currentTask) {
+                taskManager.completeTask(currentTask.id, data.message, false);
+            }
+            showError(data.message);
+        } else if (data.status === 'warning') {
+            if (currentTask) {
+                taskManager.completeTask(currentTask.id, data.message, false);
+            }
+            showWarning(data.message);
+            loadProjects(); // Recharger la liste des projets
+        } else if (data.status === 'completed') {
+            if (currentTask) {
+                taskManager.completeTask(currentTask.id, data.message, true);
+            }
+
+            loadProjects(); // Recharger la liste des projets
+
+            // Fermer le modal de création
+            const modal = bootstrap.Modal.getInstance(document.getElementById('createProjectModal'));
+            if (modal) {
+                modal.hide();
+            }
+        } else {
+            // Mettre à jour la tâche en cours
+            if (currentTask && data.step && data.total_steps) {
+                const progress = Math.round((data.step / data.total_steps) * 100);
+                taskManager.updateTask(currentTask.id, {
+                    message: data.message,
+                    details: data.details ? JSON.stringify(data.details) : '',
+                    progress: progress
+                });
+            }
+        }
+    });
+
+    // Fonction pour afficher le loader de création de projet
+    function showProjectCreationLoader() {
+        // Créer le modal de loader s'il n'existe pas
+        let loaderModal = document.getElementById('projectCreationLoader');
+        if (!loaderModal) {
+            const loaderHtml = `
             <div class="modal fade" id="projectCreationLoader" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
                 <div class="modal-dialog modal-dialog-centered">
                     <div class="modal-content" style="background: rgba(26, 26, 46, 0.95); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px;">
@@ -642,564 +503,655 @@ function showProjectCreationLoader() {
                 </div>
             </div>
         `;
-        
-        document.body.insertAdjacentHTML('beforeend', loaderHtml);
-        loaderModal = document.getElementById('projectCreationLoader');
-    }
-    
-    // Afficher le modal
-    const modal = new bootstrap.Modal(loaderModal);
-    modal.show();
-}
 
-// Fonction pour mettre à jour le loader de création
-function updateProjectCreationLoader(step, totalSteps, message, status, details) {
-    const progressBar = document.getElementById('creationProgressBar');
-    const currentStepEl = document.getElementById('currentStep');
-    const totalStepsEl = document.getElementById('totalSteps');
-    const stepMessageEl = document.getElementById('stepMessage');
-    const stepDetailsEl = document.getElementById('stepDetails');
-    
-    if (progressBar && currentStepEl && totalStepsEl && stepMessageEl) {
-        // Mettre à jour la barre de progression
-        const percentage = (step / totalSteps) * 100;
-        progressBar.style.width = `${percentage}%`;
-        
-        // Mettre à jour les textes
-        currentStepEl.textContent = step;
-        totalStepsEl.textContent = totalSteps;
-        stepMessageEl.textContent = message;
-        
-        // Ajouter un indicateur de statut
-        const statusIcons = {
-            'starting': 'fas fa-play',
-            'configuring': 'fas fa-cog fa-spin',
-            'checking': 'fas fa-search',
-            'creating': 'fas fa-folder-plus',
-            'allocating': 'fas fa-network-wired',
-            'allocated': 'fas fa-check',
-            'processing': 'fas fa-cogs fa-spin',
-            'extracting': 'fas fa-file-archive',
-            'extracted': 'fas fa-check',
-            'detected': 'fas fa-file-database',
-            'starting': 'fas fa-rocket',
-            'waiting': 'fas fa-clock',
-            'database': 'fas fa-database',
-            'importing': 'fas fa-download fa-pulse',
-            'creating_db': 'fas fa-plus-circle',
-            'cleaning': 'fas fa-broom'
-        };
-        
-        const icon = statusIcons[status] || 'fas fa-cog';
-        stepMessageEl.innerHTML = `<i class="${icon} me-2"></i>${message}`;
-        
-        // Afficher les détails si disponibles
-        if (details && stepDetailsEl) {
-            if (typeof details === 'object') {
-                const detailsText = Object.entries(details)
-                    .map(([key, value]) => `${key}: ${value}`)
-                    .join(', ');
-                stepDetailsEl.textContent = detailsText;
-                stepDetailsEl.style.display = 'block';
-            } else {
-                stepDetailsEl.style.display = 'none';
+            document.body.insertAdjacentHTML('beforeend', loaderHtml);
+            loaderModal = document.getElementById('projectCreationLoader');
+        }
+
+        // Afficher le modal
+        const modal = new bootstrap.Modal(loaderModal);
+        modal.show();
+    }
+
+    // Fonction pour mettre à jour le loader de création
+    function updateProjectCreationLoader(step, totalSteps, message, status, details) {
+        const progressBar = document.getElementById('creationProgressBar');
+        const currentStepEl = document.getElementById('currentStep');
+        const totalStepsEl = document.getElementById('totalSteps');
+        const stepMessageEl = document.getElementById('stepMessage');
+        const stepDetailsEl = document.getElementById('stepDetails');
+
+        if (progressBar && currentStepEl && totalStepsEl && stepMessageEl) {
+            // Mettre à jour la barre de progression
+            const percentage = (step / totalSteps) * 100;
+            progressBar.style.width = `${percentage}%`;
+
+            // Mettre à jour les textes
+            currentStepEl.textContent = step;
+            totalStepsEl.textContent = totalSteps;
+            stepMessageEl.textContent = message;
+
+            // Ajouter un indicateur de statut
+            const statusIcons = {
+                'starting': 'fas fa-play',
+                'configuring': 'fas fa-cog fa-spin',
+                'checking': 'fas fa-search',
+                'creating': 'fas fa-folder-plus',
+                'allocating': 'fas fa-network-wired',
+                'allocated': 'fas fa-check',
+                'processing': 'fas fa-cogs fa-spin',
+                'extracting': 'fas fa-file-archive',
+                'extracted': 'fas fa-check',
+                'detected': 'fas fa-file-database',
+                'starting': 'fas fa-rocket',
+                'waiting': 'fas fa-clock',
+                'database': 'fas fa-database',
+                'importing': 'fas fa-download fa-pulse',
+                'creating_db': 'fas fa-plus-circle',
+                'cleaning': 'fas fa-broom'
+            };
+
+            const icon = statusIcons[status] || 'fas fa-cog';
+            stepMessageEl.innerHTML = `<i class="${icon} me-2"></i>${message}`;
+
+            // Afficher les détails si disponibles
+            if (details && stepDetailsEl) {
+                if (typeof details === 'object') {
+                    const detailsText = Object.entries(details)
+                        .map(([key, value]) => `${key}: ${value}`)
+                        .join(', ');
+                    stepDetailsEl.textContent = detailsText;
+                    stepDetailsEl.style.display = 'block';
+                } else {
+                    stepDetailsEl.style.display = 'none';
+                }
             }
         }
     }
-}
 
-// Fonction pour masquer le loader de création
-function hideProjectCreationLoader() {
-    const loaderModal = document.getElementById('projectCreationLoader');
-    if (loaderModal) {
-        const modal = bootstrap.Modal.getInstance(loaderModal);
-        if (modal) {
-            modal.hide();
+    // Fonction pour masquer le loader de création
+    function hideProjectCreationLoader() {
+        const loaderModal = document.getElementById('projectCreationLoader');
+        if (loaderModal) {
+            const modal = bootstrap.Modal.getInstance(loaderModal);
+            if (modal) {
+                modal.hide();
+            }
         }
     }
-}
 
-// Variables globales
-let projects = [];
+    // Variables globales
+    let projects = [];
 
-// Fonction pour afficher le modal de création
-function showCreateProjectModal() {
-    const modal = new bootstrap.Modal(document.getElementById('createProjectModal'));
-    modal.show();
-}
-
-// Fonction pour charger les projets
-async function loadProjects() {
-    try {
-        const response = await fetch('/projects_with_status');
-        const data = await response.json();
-        projects = data.projects || [];
-        
-        // Mettre à jour les données pour le filtrage
-        if (typeof updateProjectsList === 'function') {
-            updateProjectsList(projects);
-        }
-        
-        updateStats();
-        
-        // Si le système de filtrage n'est pas disponible, utiliser le rendu classique
-        if (typeof filterAndRenderProjects === 'function') {
-            filterAndRenderProjects();
-        } else {
-            renderProjects();
-        }
-    } catch (error) {
-        console.error('Erreur lors du chargement des projets:', error);
-        showError('Erreur lors du chargement des projets');
+    // Fonction pour afficher le modal de création
+    function showCreateProjectModal() {
+        const modal = new bootstrap.Modal(document.getElementById('createProjectModal'));
+        modal.show();
     }
-}
 
-// Fonction pour mettre à jour les statistiques
-function updateStats() {
-    const totalProjects = projects.length;
-    const activeProjects = projects.filter(p => p.status === 'active').length;
-    const inactiveProjects = projects.filter(p => p.status === 'inactive').length;
-    const nextjsProjects = projects.filter(p => p.nextjs_enabled).length;
-    
-    document.getElementById('total-projects').textContent = totalProjects;
-    document.getElementById('active-projects').textContent = activeProjects;
-    document.getElementById('inactive-projects').textContent = inactiveProjects;
-    document.getElementById('nextjs-projects').textContent = nextjsProjects;
-}
+    // Fonction pour charger les projets
+    async function loadProjects() {
+        try {
+            const response = await fetch('/projects_with_status');
+            const data = await response.json();
+            projects = data.projects || [];
+            
+            // Trier les projets par ordre alphabétique croissant
+            projects.sort((a, b) => a.name.localeCompare(b.name));
+            
+            // Mettre à jour les données pour le filtrage
+            if (typeof updateProjectsList === 'function') {
+                updateProjectsList(projects);
+            }
+            
+            updateStats();
+            
+            // Si le système de filtrage n'est pas disponible, utiliser le rendu classique
+            if (typeof filterAndRenderProjects === 'function') {
+                filterAndRenderProjects();
+                // Restaurer l'état des projets après le filtrage
+                setTimeout(() => restoreProjectStates(), 100);
+            } else {
+                renderProjects();
+            }
+            
+            // Vérifier le statut des boutons npm run dev après le rendu
+            setTimeout(() => checkNextjsDevStatus(), 1500);
+        } catch (error) {
+            console.error('Erreur lors du chargement des projets:', error);
+            showError('Erreur lors du chargement des projets');
+        }
+    }
 
-// Fonction pour rendre les projets (fallback si le système de filtrage n'est pas disponible)
-function renderProjects() {
-    const container = document.getElementById('projects-grid');
-    
-    if (projects.length === 0) {
-        container.innerHTML = `
-            <div class="project-item fade-in">
-                <div class="empty-state">
-                    <i class="fas fa-box-open"></i>
-                    <h3>Aucun projet pour le moment</h3>
-                    <p>Créez votre premier projet WordPress pour commencer</p>
+    // Fonction pour mettre à jour les statistiques
+    function updateStats() {
+        const totalProjects = projects.length;
+        const activeProjects = projects.filter(p => p.status === 'active').length;
+        const inactiveProjects = projects.filter(p => p.status === 'inactive').length;
+        const nextjsProjects = projects.filter(p => p.nextjs_enabled).length;
+
+        document.getElementById('total-projects').textContent = totalProjects;
+        document.getElementById('active-projects').textContent = activeProjects;
+        document.getElementById('inactive-projects').textContent = inactiveProjects;
+        document.getElementById('nextjs-projects').textContent = nextjsProjects;
+    }
+
+    // Fonction pour rendre les projets (fallback si le système de filtrage n'est pas disponible)
+    function renderProjects() {
+        const container = document.getElementById('projects-grid');
+        
+        if (projects.length === 0) {
+            container.innerHTML = `
+                <div class="project-item fade-in">
+                    <div class="empty-state">
+                        <i class="fas fa-box-open"></i>
+                        <h3>Aucun projet pour le moment</h3>
+                        <p>Créez votre premier projet WordPress pour commencer</p>
+                    </div>
                 </div>
-            </div>
-        `;
-        return;
-    }
-    
-    container.innerHTML = projects.map(project => createProjectHTML(project)).join('');
-    
-    // Ajouter les animations
-    const items = container.querySelectorAll('.project-item');
-    items.forEach((item, index) => {
-        item.style.animationDelay = `${index * 0.1}s`;
-        item.classList.add('slide-in');
-    });
-}
-
-// Fonction pour créer le HTML d'un projet
-function createProjectHTML(project) {
-    const statusClass = project.status === 'active' ? 'active' : 'inactive';
-    const statusText = project.status === 'active' ? 'Actif' : 'Arrêté';
-    
-    // Services disponibles
-    const services = [];
-    if (project.status === 'active') {
-        // WordPress via reverse proxy hostname
-        const hostname = project.hostname || `${project.name}.local`;
-        services.push({
-            name: 'WordPress',
-            icon: 'fab fa-wordpress',
-            url: `http://${hostname}`,
-            display: hostname,
-            isMain: true
+            `;
+            return;
+        }
+        
+        container.innerHTML = projects.map(project => createProjectHTML(project)).join('');
+        
+        // Ajouter les animations
+        const items = container.querySelectorAll('.project-item');
+        items.forEach((item, index) => {
+            item.style.animationDelay = `${index * 0.1}s`;
+            item.classList.add('slide-in');
         });
         
-        // Services avec ports directs
-        services.push({
-            name: 'phpMyAdmin',
-            icon: 'fas fa-database',
-            url: `http://192.168.1.21:${project.pma_port}`,
-            display: `:${project.pma_port}`,
-            isMain: false
-        });
-        if (project.mailpit_port) {
+        // Restaurer l'état des projets (collapsed/expanded)
+        setTimeout(() => restoreProjectStates(), 100);
+        
+        // Vérifier le statut des boutons npm run dev
+        setTimeout(() => checkNextjsDevStatus(), 1000);
+    }
+
+    // Fonction pour créer le HTML d'un projet
+    function createProjectHTML(project) {
+        // Services disponibles
+        const services = [];
+        if (project.status === 'active') {
+            // WordPress via reverse proxy hostname
+            const hostname = project.hostname || `${project.name}.local`;
             services.push({
-                name: 'Mailpit',
-                icon: 'fas fa-envelope',
-                url: `http://192.168.1.21:${project.mailpit_port}`,
-                display: `:${project.mailpit_port}`,
-                isMain: false
+                name: 'WordPress',
+                icon: 'fab fa-wordpress',
+                url: `http://${hostname}`,
+                display: hostname,
+                isMain: true,
+                type: 'wordpress',
+                buttons: [
+                    {
+                        text: 'Site',
+                        icon: 'fas fa-globe',
+                        class: 'btn-primary',
+                        action: `openWordPressFrontend('${project.name}')`
+                    },
+                    {
+                        text: 'Admin',
+                        icon: 'fas fa-user-shield', 
+                        class: 'btn-primary',
+                        action: `openWordPressAdmin('${project.name}')`
+                    },
+                    {
+                        text: 'Hostname',
+                        icon: 'fas fa-edit',
+                        class: 'btn-secondary',
+                        action: `editHostname('${project.name}', '${project.hostname || project.name + '.local'}')`
+                    }
+                ]
             });
+
+            // Services avec ports directs
+            services.push({
+                name: 'phpMyAdmin',
+                icon: 'fas fa-database',
+                url: `http://192.168.1.21:${project.pma_port}`,
+                display: `:${project.pma_port}`,
+                isMain: false,
+                type: 'phpmyadmin',
+                buttons: [
+                    {
+                        text: 'Import SQL',
+                        icon: 'fas fa-upload',
+                        class: 'btn-secondary',
+                        action: `updateDatabase('${project.name}')`
+                    },
+                    {
+                        text: 'Export SQL',
+                        icon: 'fas fa-download',
+                        class: 'btn-secondary',
+                        action: `exportDatabase('${project.name}')`
+                    }
+                ]
+            });
+            if (project.mailpit_port) {
+                services.push({
+                    name: 'Mailpit',
+                    icon: 'fas fa-envelope',
+                    url: `http://192.168.1.21:${project.mailpit_port}`,
+                    display: `:${project.mailpit_port}`,
+                    isMain: false,
+                    type: 'mailpit',
+                    buttons: [
+                        {
+                            text: 'Voir les e-mails',
+                            icon: 'fas fa-inbox',
+                            class: 'btn-secondary',
+                            action: `window.open('http://192.168.1.21:${project.mailpit_port}', '_blank')`,
+                            title: 'Ouvrir l\'interface Mailpit'
+                        }
+                    ]
+                });
+            }
+            if (project.nextjs_enabled && project.nextjs_port) {
+                services.push({
+                    name: 'Next.js',
+                    icon: 'fab fa-react',
+                    url: `http://192.168.1.21:${project.nextjs_port}`,
+                    display: `:${project.nextjs_port}`,
+                    isMain: false,
+                    type: 'nextjs',
+                    buttons: [
+                        {
+                            text: 'Install',
+                            icon: 'fas fa-download',
+                            class: 'btn-info',
+                            action: `runNpmCommand('${project.name}', 'install')`,
+                            title: 'Installer les dépendances'
+                        },
+                        {
+                            text: 'Run Dev',
+                            icon: 'fas fa-play',
+                            class: 'btn-success',
+                            action: `runNpmCommand('${project.name}', 'dev')`,
+                            title: 'Démarrer en mode développement'
+                        },
+                        {
+                            text: 'Build',
+                            icon: 'fas fa-hammer',
+                            class: 'btn-warning',
+                            action: `runNpmCommand('${project.name}', 'build')`,
+                            title: 'Construire pour la production'
+                        }
+                    ]
+                });
+            }
         }
-        if (project.nextjs_enabled && project.nextjs_port) {
+
+        // Ajouter Next.js même si pas actif pour permettre l'ajout
+        if (!project.nextjs_enabled) {
             services.push({
                 name: 'Next.js',
                 icon: 'fab fa-react',
-                url: `http://192.168.1.21:${project.nextjs_port}`,
-                display: `:${project.nextjs_port}`,
-                isMain: false
+                url: '#',
+                display: 'Non activé',
+                isMain: false,
+                type: 'nextjs',
+                inactive: true,
+                buttons: [
+                    {
+                        text: 'Ajouter Next.js',
+                        icon: 'fab fa-react',
+                        class: 'btn-secondary',
+                        action: `addNextjs('${project.name}')`
+                    }
+                ]
             });
         }
-    }
-    
-    const isCollapsed = getProjectCollapseState(project.name);
-    
-    return `
+
+        return `
         <div class="project-item" data-project="${project.name}">
-            <div class="project-header" onclick="toggleProjectCollapse('${project.name}')">
+            <div class="project-header" onclick="toggleProject('${project.name}')" style="cursor: pointer;">
                 <div class="project-header-info">
-                    <div class="project-title">${project.name}</div>
+                    <div class="project-title">${project.name}
+                                <button class="project-toggle-btn" onclick="event.stopPropagation(); toggleProject('${project.name}')" title="Masquer/Afficher les détails">
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                    </div>    
                     <div class="project-hostname">
                         <i class="fas fa-globe me-1"></i>
-                       <a href="http://${project.hostname || project.name + '.local'}" target="_blank"> ${project.hostname || project.name + '.local'}</a>
+                       <a href="http://${project.hostname || project.name + '.local'}" target="_blank" onclick="event.stopPropagation();"> ${project.hostname || project.name + '.local'}</a>
                     </div>
                     ${project.status === 'active' ? `
                         <div class="project-ip-port">
                             <i class="fas fa-external-link-alt me-1"></i>
-                            <a href="http://192.168.1.21:${project.port}" target="_blank" class="ip-port-link" onclick="event.stopPropagation()">
+                            <a href="http://192.168.1.21:${project.port}" target="_blank" class="ip-port-link" onclick="event.stopPropagation();">
                                 192.168.1.21:${project.port}
                             </a>
                         </div>
                     ` : ''}
+                    ${project.status === 'active' && project.nextjs_enabled && project.nextjs_port ? `
+                        <div class="project-nextjs-ip" style="display: none;">
+                            <i class="fab fa-react me-1"></i>
+                            <a href="http://192.168.1.21:${project.nextjs_port}" target="_blank" class="nextjs-ip-link" onclick="event.stopPropagation();">
+                                Next.js: 192.168.1.21:${project.nextjs_port}
+                            </a>
+                        </div>
+                    ` : ''}
                 </div>
-                <div class="project-header-right">
-                    <div class="project-status">
-                        <div class="status-dot ${statusClass}"></div>
-                        ${statusText}
-                    </div>
-                    <button class="project-toggle-btn" title="${isCollapsed ? 'Développer' : 'Réduire'}">
-                        <i class="fas fa-chevron-${isCollapsed ? 'down' : 'up'}"></i>
-                    </button>
+                <div class="project-header-right" onclick="event.stopPropagation();">
+                    ${project.status === 'active' ? `
+                        <button class="btn-modern btn-running" onclick="stopProject('${project.name}')" title="Arrêter le projet">
+                            Running
+                            <i class="fas fa-stop me-1"></i>
+                        </button>
+                    ` : `
+                        <button class="btn-modern btn-start" onclick="startProject('${project.name}')" title="Démarrer le projet">
+                            Start
+                            <i class="fas fa-play me-1"></i>
+                        </button>
+                    `}
+                              
+                      <a href="javascript:void(0)" onclick="deleteProject('${project.name}')" class="delete-link" title="Supprimer le projet">
+                            <i class="fas fa-trash me-1"></i>
+                        </a>
+          
                 </div>
             </div>
 
-            <div class="project-content ${isCollapsed ? 'collapsed' : ''}">
-                ${services.length > 0 ? `
-                    <div class="services-grid">
-                        ${services.map(service => `
-                            <a href="${service.url}" target="_blank" class="service-card ${service.isMain ? 'service-main' : ''}">
-                                <i class="${service.icon} service-icon"></i>
-                                <div class="service-name">${service.name}</div>
-                                <div class="service-port">${service.display}</div>
-                            </a>
-                        `).join('')}
-                    </div>
-                ` : ''}
-                <div class="project-wp-nextjs">
-                <!-- Boutons WordPress (Front/Back Office) -->
+            <div class="project-content" id="project-content-${project.name}">
                 ${project.status === 'active' ? `
-                 
-                <div class="wordpress-actions">
-                        <h4><i class="fab fa-wordpress me-2"></i>WordPress</h4>
-                        <div class="action-buttons">
-                            <button class="btn-modern btn-primary" onclick="openWordPressFrontend('${project.name}')">
-                                <i class="fas fa-globe me-1"></i>
-                                Site
-                            </button>
-                            <button class="btn-modern btn-primary" onclick="openWordPressAdmin('${project.name}')">
-                                <i class="fas fa-user-shield me-1"></i>
-                                Admin
-                            </button>
+                    ${services.length > 0 ? `
+                        <div class="services-grid">
+                            ${services.map(service => `
+                                <div class="service-card ${service.inactive ? 'service-inactive' : ''} service-${service.type}">
+                                    <a href="${service.inactive ? 'javascript:void(0)' : service.url}" ${service.inactive ? '' : 'target="_blank"'} class="service-link">
+                                        <i class="${service.icon} service-icon"></i>
+                                        <div class="service-name">${service.name}</div>
+                                        <div class="service-port">${service.display}</div>
+                                    </a>
+                                    ${service.buttons ? `
+                                        <div class="service-buttons">
+                                            ${service.buttons.map(button => `
+                                                <button class="btn-service ${button.class}" onclick="${button.action}" ${button.title ? `title="${button.title}"` : ''}>
+                                                    <i class="${button.icon}"></i>
+                                                    <span>${button.text}</span>
+                                                </button>
+                                            `).join('')}
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            `).join('')}
                         </div>
-                    </div>
-                ` : ''}
-                
-                <!-- Boutons Next.js -->
-                ${project.nextjs_enabled && project.status === 'active' ? `
-                    <div class="nextjs-actions">
-                        <h4><i class="fab fa-react me-2"></i>Next.js</h4>
-                        <div class="action-buttons">
-                            <button class="btn-modern btn-info" onclick="runNpmCommand('${project.name}', 'install')" title="Installer les dépendances">
-                                <i class="fas fa-download me-1"></i>
-                                npm install
-                            </button>
-                            <button class="btn-modern btn-success" onclick="runNpmCommand('${project.name}', 'dev')" title="Démarrer en mode développement">
-                                <i class="fas fa-play me-1"></i>
-                                npm run dev
-                            </button>
-                            <button class="btn-modern btn-warning" onclick="runNpmCommand('${project.name}', 'build')" title="Construire pour la production">
-                                <i class="fas fa-hammer me-1"></i>
-                                npm run build
-                            </button>
+                    ` : `
+                        <div class="empty-services">
+                            <p class="text-muted">
+                                <i class="fas fa-info-circle me-2"></i>
+                                Aucun service configuré pour ce projet.
+                            </p>
                         </div>
+                    `}
+                ` : `
+                    <div class="empty-services">
+                        <p class="text-muted">
+                            <i class="fas fa-play me-2"></i>
+                            Démarrez le projet pour voir les services disponibles.
+                        </p>
                     </div>
-                ` : ''}
-                        </div>  
-                <div class="project-actions">
-                    ${project.status === 'active' ? `
-                        <button class="btn-modern btn-stop" onclick="stopProject('${project.name}')">
-                            <i class="fas fa-stop me-1"></i>
-                            Arrêter
-                        </button>
-                    ` : `
-                        <button class="btn-modern btn-start" onclick="startProject('${project.name}')">
-                            <i class="fas fa-play me-1"></i>
-                            Démarrer
-                        </button>
-                    `}
-                    
-                    <button class="btn-modern btn-secondary" onclick="editHostname('${project.name}', '${project.hostname || project.name + '.local'}')">
-                        <i class="fas fa-edit me-1"></i>
-                        Hostname
-                    </button>
-                    
-                    <button class="btn-modern btn-secondary" onclick="updateDatabase('${project.name}')">
-                        <i class="fas fa-database me-1"></i>
-                        Import SQL
-                    </button>
-                    
-                    ${project.nextjs_enabled ? `
-                        <button class="btn-modern btn-secondary" onclick="removeNextjs('${project.name}')">
-                            <i class="fab fa-react me-1"></i>
-                            Suppr Next.js
-                        </button>
-                    ` : `
-                        <button class="btn-modern btn-secondary" onclick="addNextjs('${project.name}')">
-                            <i class="fab fa-react me-1"></i>
-                            Ajouter Next.js
-                        </button>
-                    `}
-                    
-                    <button class="btn-modern btn-danger" onclick="deleteProject('${project.name}')">
-                        <i class="fas fa-trash me-1"></i>
-                        Supprimer
-                    </button>
-                </div>
+                `}
             </div>
         </div>
     `;
-}
+    }
 
-// Fonctions pour la gestion du collapse des projets
-function getProjectCollapseState(projectName) {
-    const savedStates = JSON.parse(localStorage.getItem('wp-launcher-project-collapse-states') || '{}');
-    return savedStates[projectName] || false; // Par défaut : développé
-}
-
-function setProjectCollapseState(projectName, isCollapsed) {
-    const savedStates = JSON.parse(localStorage.getItem('wp-launcher-project-collapse-states') || '{}');
-    savedStates[projectName] = isCollapsed;
-    localStorage.setItem('wp-launcher-project-collapse-states', JSON.stringify(savedStates));
-}
-
-function toggleProjectCollapse(projectName) {
-    const projectItem = document.querySelector(`[data-project="${projectName}"]`);
-    if (!projectItem) return;
-    
-    const content = projectItem.querySelector('.project-content');
-    const toggleBtn = projectItem.querySelector('.project-toggle-btn i');
-    
-    const isCurrentlyCollapsed = content.classList.contains('collapsed');
-    const newState = !isCurrentlyCollapsed;
-    
-    // Mettre à jour l'interface
-    if (newState) {
-        content.classList.add('collapsed');
-        toggleBtn.className = 'fas fa-chevron-down';
-        projectItem.querySelector('.project-toggle-btn').title = 'Développer';
-    } else {
-        content.classList.remove('collapsed');
-        toggleBtn.className = 'fas fa-chevron-up';
-        projectItem.querySelector('.project-toggle-btn').title = 'Réduire';
+    // Fonctions de toggle/collapse des projets
+    function toggleProject(projectName) {
+        const projectContent = document.getElementById(`project-content-${projectName}`);
+        const projectItem = document.querySelector(`[data-project="${projectName}"]`);
+        const toggleBtn = projectItem.querySelector('.project-toggle-btn i');
+        
+        if (!projectContent) return;
+        
+        // Toggle la classe collapsed
+        projectContent.classList.toggle('collapsed');
+        
+        // Animer l'icône du bouton toggle
+        if (projectContent.classList.contains('collapsed')) {
+            toggleBtn.style.transform = 'rotate(0deg)';
+            // Sauvegarder l'état collapsed dans le localStorage
+            saveProjectState(projectName, 'collapsed');
+        } else {
+            toggleBtn.style.transform = 'rotate(-180deg)';
+            // Sauvegarder l'état expanded dans le localStorage
+            saveProjectState(projectName, 'expanded');
+        }
     }
     
-    // Sauvegarder l'état
-    setProjectCollapseState(projectName, newState);
-}
-
-// Fonction pour rafraîchir les projets
-function refreshProjects() {
-    loadProjects();
-}
-
-// Chargement initial
-document.addEventListener('DOMContentLoaded', function() {
-    loadProjects();
-    
-    // Rafraîchir automatiquement toutes les 30 secondes
-    setInterval(loadProjects, 30000);
-    
-    // Initialiser la gestion des fichiers
-    initFileUpload();
-    
-    // Initialiser la gestion du formulaire
-    initCreateProjectForm();
-});
-
-// Initialisation de l'upload de fichiers
-function initFileUpload() {
-    const uploadZone = document.getElementById('upload-zone');
-    const fileInput = document.getElementById('wp_migrate_archive');
-    const uploadContent = uploadZone.querySelector('.upload-content');
-    const fileInfo = uploadZone.querySelector('.upload-file-info');
-    const fileName = fileInfo.querySelector('.file-name');
-    
-    // Clic sur la zone d'upload
-    uploadZone.addEventListener('click', function() {
-        fileInput.click();
-    });
-    
-    // Changement de fichier
-    fileInput.addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (file) {
-            showFileInfo(file);
-        }
-    });
-    
-    // Drag & Drop
-    uploadZone.addEventListener('dragover', function(e) {
-        e.preventDefault();
-        uploadZone.classList.add('dragover');
-    });
-    
-    uploadZone.addEventListener('dragleave', function(e) {
-        e.preventDefault();
-        uploadZone.classList.remove('dragover');
-    });
-    
-    uploadZone.addEventListener('drop', function(e) {
-        e.preventDefault();
-        uploadZone.classList.remove('dragover');
-        
-        const files = e.dataTransfer.files;
-        if (files.length > 0) {
-            const file = files[0];
-            fileInput.files = files;
-            showFileInfo(file);
-        }
-    });
-    
-    function showFileInfo(file) {
-        const allowedTypes = ['application/zip', 'application/sql', 'application/gzip', 'application/x-gzip', 'text/plain'];
-        const allowedExtensions = ['.zip', '.sql', '.gz'];
-        
-        // Vérifier l'extension
-        const extension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
-        if (!allowedExtensions.includes(extension)) {
-            showError('Type de fichier non autorisé. Utilisez .zip, .sql ou .gz');
-            fileInput.value = '';
-            return;
-        }
-        
-        // Vérifier la taille (8GB max)
-        if (file.size > 8 * 1024 * 1024 * 1024) {
-            showError('Fichier trop volumineux. Taille maximale : 8GB');
-            fileInput.value = '';
-            return;
-        }
-        
-        // Afficher les informations du fichier
-        fileName.textContent = file.name;
-        uploadContent.classList.add('d-none');
-        fileInfo.classList.remove('d-none');
+    // Sauvegarder l'état des projets dans le localStorage
+    function saveProjectState(projectName, state) {
+        const projectStates = JSON.parse(localStorage.getItem('projectStates') || '{}');
+        projectStates[projectName] = state;
+        localStorage.setItem('projectStates', JSON.stringify(projectStates));
     }
-}
-
-// Fonction pour effacer le fichier sélectionné
-function clearFile() {
-    const fileInput = document.getElementById('wp_migrate_archive');
-    const uploadZone = document.getElementById('upload-zone');
-    const uploadContent = uploadZone.querySelector('.upload-content');
-    const fileInfo = uploadZone.querySelector('.upload-file-info');
     
-    fileInput.value = '';
-    uploadContent.classList.remove('d-none');
-    fileInfo.classList.add('d-none');
-}
+    // Restaurer l'état des projets depuis le localStorage
+    function restoreProjectStates() {
+        const projectStates = JSON.parse(localStorage.getItem('projectStates') || '{}');
+        
+        Object.entries(projectStates).forEach(([projectName, state]) => {
+            const projectContent = document.getElementById(`project-content-${projectName}`);
+            const projectItem = document.querySelector(`[data-project="${projectName}"]`);
+            const toggleBtn = projectItem?.querySelector('.project-toggle-btn i');
+            
+            if (projectContent && state === 'collapsed') {
+                projectContent.classList.add('collapsed');
+                if (toggleBtn) {
+                    toggleBtn.style.transform = 'rotate(0deg)';
+                }
+            }
+        });
+    }
 
-// Initialisation du formulaire de création de projet
-function initCreateProjectForm() {
-    const form = document.getElementById('createProjectForm');
-    
-    form.addEventListener('submit', function(e) {
-        e.preventDefault();
+    // Fonction pour rafraîchir les projets
+    function refreshProjects() {
+        loadProjects();
+    }
+
+    // Chargement initial
+    document.addEventListener('DOMContentLoaded', function() {
+        loadProjects();
         
-        const formData = new FormData(form);
-        const submitButton = form.querySelector('button[type="submit"]');
+        // Rafraîchir automatiquement toutes les 30 secondes
+        setInterval(loadProjects, 30000);
         
-        // Validation
-        const projectName = formData.get('project_name');
-        if (!projectName || !projectName.match(/^[a-zA-Z0-9-_]+$/)) {
-            showError('Le nom du projet doit contenir uniquement des lettres, chiffres, tirets et underscores');
-            return;
+        // Vérifier le statut des boutons npm run dev toutes les 10 secondes
+        setInterval(checkNextjsDevStatus, 10000);
+        
+        // Initialiser la gestion des fichiers
+        initFileUpload();
+        
+        // Initialiser la gestion du formulaire
+        initCreateProjectForm();
+    });
+
+    // Initialisation de l'upload de fichiers
+    function initFileUpload() {
+        const uploadZone = document.getElementById('upload-zone');
+        const fileInput = document.getElementById('wp_migrate_archive');
+        const uploadContent = uploadZone.querySelector('.upload-content');
+        const fileInfo = uploadZone.querySelector('.upload-file-info');
+        const fileName = fileInfo.querySelector('.file-name');
+
+        // Clic sur la zone d'upload
+        uploadZone.addEventListener('click', function () {
+            fileInput.click();
+        });
+
+        // Changement de fichier
+        fileInput.addEventListener('change', function (e) {
+            const file = e.target.files[0];
+            if (file) {
+                showFileInfo(file);
+            }
+        });
+
+        // Drag & Drop
+        uploadZone.addEventListener('dragover', function (e) {
+            e.preventDefault();
+            uploadZone.classList.add('dragover');
+        });
+
+        uploadZone.addEventListener('dragleave', function (e) {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+        });
+
+        uploadZone.addEventListener('drop', function (e) {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                const file = files[0];
+                fileInput.files = files;
+                showFileInfo(file);
+            }
+        });
+
+        function showFileInfo(file) {
+            const allowedTypes = ['application/zip', 'application/sql', 'application/gzip', 'application/x-gzip', 'text/plain'];
+            const allowedExtensions = ['.zip', '.sql', '.gz'];
+
+            // Vérifier l'extension
+            const extension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+            if (!allowedExtensions.includes(extension)) {
+                showError('Type de fichier non autorisé. Utilisez .zip, .sql ou .gz');
+                fileInput.value = '';
+                return;
+            }
+
+            // Vérifier la taille (8GB max)
+            if (file.size > 8 * 1024 * 1024 * 1024) {
+                showError('Fichier trop volumineux. Taille maximale : 8GB');
+                fileInput.value = '';
+                return;
+            }
+
+            // Afficher les informations du fichier
+            fileName.textContent = file.name;
+            uploadContent.classList.add('d-none');
+            fileInfo.classList.remove('d-none');
         }
-        
-        // Désactiver le bouton et afficher le loader
-        submitButton.classList.add('loading');
-        submitButton.disabled = true;
-        
-        // Afficher le loader de création détaillé
-        showProjectCreationLoader();
-        
-        // Envoyer la requête
-        fetch('/create_project', {
-            method: 'POST',
-            body: formData
-        })
+    }
+
+    // Fonction pour effacer le fichier sélectionné
+    function clearFile() {
+        const fileInput = document.getElementById('wp_migrate_archive');
+        const uploadZone = document.getElementById('upload-zone');
+        const uploadContent = uploadZone.querySelector('.upload-content');
+        const fileInfo = uploadZone.querySelector('.upload-file-info');
+
+        fileInput.value = '';
+        uploadContent.classList.remove('d-none');
+        fileInfo.classList.add('d-none');
+    }
+
+    // Initialisation du formulaire de création de projet
+    function initCreateProjectForm() {
+        const form = document.getElementById('createProjectForm');
+
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            const formData = new FormData(form);
+            const submitButton = form.querySelector('button[type="submit"]');
+
+            // Validation
+            const projectName = formData.get('project_name');
+            if (!projectName || !projectName.match(/^[a-zA-Z0-9-_]+$/)) {
+                showError('Le nom du projet doit contenir uniquement des lettres, chiffres, tirets et underscores');
+                return;
+            }
+
+            // Créer une tâche de création de projet
+            const task = startCreateProjectTask();
+            if (!task) return; // Tâche déjà en cours
+
+            // Désactiver le bouton et afficher le loader
+            submitButton.classList.add('loading');
+            submitButton.disabled = true;
+
+            // Mettre à jour la tâche
+            taskManager.updateTask(task.id, { 
+                message: `Création du projet "${projectName}"...`,
+                details: `Nom: ${projectName}`,
+                progress: 10
+            });
+
+            // Envoyer la requête
+            fetch('/create_project', {
+                method: 'POST',
+                body: formData
+            })
                 .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showSuccess('Projet créé avec succès !');
-                // Fermer le modal
-                const modal = bootstrap.Modal.getInstance(document.getElementById('createProjectModal'));
-                modal.hide();
-                // Réinitialiser le formulaire
-                form.reset();
-                clearFile();
-                // Recharger les projets
-                setTimeout(() => loadProjects(), 1000);
+                .then(data => {
+                    if (data.success) {
+                        taskManager.completeTask(task.id, 'Projet créé avec succès !', true);
+                        
+                        // Fermer le modal
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('createProjectModal'));
+                        modal.hide();
+                        // Réinitialiser le formulaire
+                        form.reset();
+                        clearFile();
+                        // Recharger les projets
+                        setTimeout(() => loadProjects(), 1000);
                     } else {
-                showError(data.message || 'Erreur lors de la création du projet');
+                        taskManager.completeTask(task.id, data.message || 'Erreur lors de la création du projet', false);
                     }
                 })
                 .catch(error => {
-            console.error('Erreur:', error);
-            showError('Erreur lors de la création du projet');
-        })
-        .finally(() => {
-            submitButton.classList.remove('loading');
-            submitButton.disabled = false;
-            // Le loader sera masqué automatiquement par les événements SocketIO
+                    console.error('Erreur:', error);
+                    taskManager.completeTask(task.id, 'Erreur lors de la création du projet', false);
+                })
+                .finally(() => {
+                    submitButton.classList.remove('loading');
+                    submitButton.disabled = false;
+                });
         });
-    });
-    
-    // Réinitialiser le formulaire à la fermeture du modal
-    const modal = document.getElementById('createProjectModal');
-    modal.addEventListener('hidden.bs.modal', function() {
-        form.reset();
-        clearFile();
-    });
-}
 
-// Fonction pour cacher la barre de progression
-function hideImportProgress() {
-    const progressDiv = document.getElementById('import-progress');
-    if (progressDiv) {
-        progressDiv.classList.add('d-none');
-        document.body.classList.remove('import-progress-visible');
+        // Réinitialiser le formulaire à la fermeture du modal
+        const modal = document.getElementById('createProjectModal');
+        modal.addEventListener('hidden.bs.modal', function () {
+            form.reset();
+            clearFile();
+        });
     }
-}
 
-// Fonction pour afficher la barre de progression
-function showImportProgress() {
-    const progressDiv = document.getElementById('import-progress');
-    if (progressDiv) {
-        progressDiv.classList.remove('d-none');
-        document.body.classList.add('import-progress-visible');
+    // Fonction pour cacher la barre de progression
+    function hideImportProgress() {
+        const progressDiv = document.getElementById('import-progress');
+        if (progressDiv) {
+            progressDiv.classList.add('d-none');
+            document.body.classList.remove('import-progress-visible');
+        }
     }
-}
 
-// Note: Les fonctions showProjectCreationLoader et hideProjectCreationLoader 
-// sont définies plus haut avec les événements SocketIO
+    // Fonction pour afficher la barre de progression
+    function showImportProgress() {
+        const progressDiv = document.getElementById('import-progress');
+        if (progressDiv) {
+            progressDiv.classList.remove('d-none');
+            document.body.classList.add('import-progress-visible');
+        }
+    }
 
-// Fonction pour afficher le loader d'action projet (start/stop)
-function showProjectActionLoader(projectName, action) {
-    const actionText = action === 'start' ? 'Démarrage' : 'Arrêt';
-    
-    // Créer le loader overlay
-    const loaderOverlay = document.createElement('div');
-    loaderOverlay.id = 'project-action-loader';
-    loaderOverlay.className = 'creation-loader-overlay';
-    loaderOverlay.innerHTML = `
+    // Note: Les fonctions showProjectCreationLoader et hideProjectCreationLoader 
+    // sont définies plus haut avec les événements SocketIO
+
+    // Fonction pour afficher le loader d'action projet (start/stop)
+    function showProjectActionLoader(projectName, action) {
+        const actionText = action === 'start' ? 'Démarrage' : 'Arrêt';
+
+        // Créer le loader overlay
+        const loaderOverlay = document.createElement('div');
+        loaderOverlay.id = 'project-action-loader';
+        loaderOverlay.className = 'creation-loader-overlay';
+        loaderOverlay.innerHTML = `
         <div class="creation-loader-content">
             <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
                 <span class="visually-hidden">Loading...</span>
@@ -1209,58 +1161,82 @@ function showProjectActionLoader(projectName, action) {
             <p class="text-muted">Configuration des conteneurs Docker...</p>
         </div>
     `;
-    
-    document.body.appendChild(loaderOverlay);
-}
 
-// Fonction pour masquer le loader d'action
-function hideProjectActionLoader() {
-    const loader = document.getElementById('project-action-loader');
-    if (loader) {
-        loader.remove();
+        document.body.appendChild(loaderOverlay);
     }
-}
 
-// Gestion des progress bars SocketIO (uniquement pour import DB)
-socket.on('import_progress', function(data) {
-    // Vérifier que c'est bien un import de base de données
-    if (!data.type || data.type !== 'database_import') {
-        return; // Ignorer les autres types d'événements
+    // Fonction pour masquer le loader d'action
+    function hideProjectActionLoader() {
+        const loader = document.getElementById('project-action-loader');
+        if (loader) {
+            loader.remove();
+        }
     }
-    
-    const progressDiv = document.getElementById('import-progress');
-    const progressBar = document.getElementById('progress-bar');
-    const progressMessage = document.getElementById('progress-message');
-    const progressProject = document.getElementById('progress-project-name');
-    
-    if (!progressDiv || !progressBar || !progressMessage || !progressProject) {
-        return;
-    }
-    
-    showImportProgress();
-    progressBar.style.width = data.progress + '%';
-    progressMessage.textContent = data.message;
-    progressProject.textContent = data.project;
-    
-    if (data.status === 'complete' || data.status === 'error') {
-        setTimeout(() => {
-            hideImportProgress();
-            loadProjects(); // Recharger les projets
-        }, 3000);
-    }
-});
 
-// Notifications toast
-function showSuccess(message) {
-    // Créer un toast de succès
-    const toast = document.createElement('div');
-    toast.className = 'toast align-items-center text-white bg-success border-0';
-    toast.setAttribute('role', 'alert');
-    toast.style.position = 'fixed';
-    toast.style.top = '20px';
-    toast.style.right = '20px';
-    toast.style.zIndex = '9999';
-    toast.innerHTML = `
+    // Gestion des progress bars SocketIO (uniquement pour import DB)
+    socket.on('import_progress', function (data) {
+        // Vérifier que c'est bien un import de base de données
+        if (!data.type || data.type !== 'database_import') {
+            return; // Ignorer les autres types d'événements
+        }
+
+        // Trouver la tâche correspondante dans le gestionnaire
+        let currentTask = null;
+        if (taskManager && data.project) {
+            for (const [taskId, task] of taskManager.tasks.entries()) {
+                if (task.type === 'import_db' && task.projectName === data.project && task.status === 'running') {
+                    currentTask = task;
+                    break;
+                }
+            }
+        }
+
+        // Mettre à jour la tâche si elle existe
+        if (currentTask) {
+            if (data.status === 'complete') {
+                taskManager.completeTask(currentTask.id, data.message || 'Import terminé', true);
+            } else if (data.status === 'error') {
+                taskManager.completeTask(currentTask.id, data.message || 'Erreur lors de l\'import', false);
+            } else {
+                taskManager.updateTask(currentTask.id, {
+                    message: data.message,
+                    progress: data.progress || 0
+                });
+            }
+        }
+
+        // Conserver l'affichage existant pour compatibilité
+        const progressDiv = document.getElementById('import-progress');
+        const progressBar = document.getElementById('progress-bar');
+        const progressMessage = document.getElementById('progress-message');
+        const progressProject = document.getElementById('progress-project-name');
+
+        if (progressDiv && progressBar && progressMessage && progressProject) {
+            showImportProgress();
+            progressBar.style.width = data.progress + '%';
+            progressMessage.textContent = data.message;
+            progressProject.textContent = data.project;
+
+            if (data.status === 'complete' || data.status === 'error') {
+                setTimeout(() => {
+                    hideImportProgress();
+                    loadProjects(); // Recharger les projets
+                }, 3000);
+            }
+        }
+    });
+
+    // Notifications toast
+    function showSuccess(message) {
+        // Créer un toast de succès
+        const toast = document.createElement('div');
+        toast.className = 'toast align-items-center text-white bg-success border-0';
+        toast.setAttribute('role', 'alert');
+        toast.style.position = 'fixed';
+        toast.style.top = '20px';
+        toast.style.right = '20px';
+        toast.style.zIndex = '9999';
+        toast.innerHTML = `
         <div class="d-flex">
             <div class="toast-body">
                 <i class="fas fa-check-circle me-2"></i>
@@ -1269,26 +1245,26 @@ function showSuccess(message) {
             <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
         </div>
     `;
-    
-    document.body.appendChild(toast);
-    const bsToast = new bootstrap.Toast(toast);
-    bsToast.show();
-    
-    toast.addEventListener('hidden.bs.toast', () => {
-        document.body.removeChild(toast);
-    });
-}
 
-function showError(message) {
-    // Créer un toast d'erreur
-    const toast = document.createElement('div');
-    toast.className = 'toast align-items-center text-white bg-danger border-0';
-    toast.setAttribute('role', 'alert');
-    toast.style.position = 'fixed';
-    toast.style.top = '20px';
-    toast.style.right = '20px';
-    toast.style.zIndex = '9999';
-    toast.innerHTML = `
+        document.body.appendChild(toast);
+        const bsToast = new bootstrap.Toast(toast);
+        bsToast.show();
+
+        toast.addEventListener('hidden.bs.toast', () => {
+            document.body.removeChild(toast);
+        });
+    }
+
+    function showError(message) {
+        // Créer un toast d'erreur
+        const toast = document.createElement('div');
+        toast.className = 'toast align-items-center text-white bg-danger border-0';
+        toast.setAttribute('role', 'alert');
+        toast.style.position = 'fixed';
+        toast.style.top = '20px';
+        toast.style.right = '20px';
+        toast.style.zIndex = '9999';
+        toast.innerHTML = `
         <div class="d-flex">
             <div class="toast-body">
                 <i class="fas fa-exclamation-triangle me-2"></i>
@@ -1297,35 +1273,35 @@ function showError(message) {
             <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
         </div>
     `;
-    
-    document.body.appendChild(toast);
-    const bsToast = new bootstrap.Toast(toast);
-    bsToast.show();
-    
-    toast.addEventListener('hidden.bs.toast', () => {
-        document.body.removeChild(toast);
-    });
-}
 
-// Écouter les événements de création de projet
-socket.on('project_creation', function(data) {
-    console.log('Événement création projet:', data);
-    
-    if (data.status === 'error') {
-        hideProjectCreationLoader();
-        showError(data.message);
-    } else if (data.status === 'warning') {
-        hideProjectCreationLoader();
-        showWarning(data.message);
-        loadProjects(); // Recharger la liste des projets
-    } else if (data.status === 'completed') {
-        hideProjectCreationLoader();
-        showSuccess(data.message);
-        
-        // Afficher les détails du projet créé
-        if (data.project_details) {
-            const details = data.project_details;
-            const detailsHtml = `
+        document.body.appendChild(toast);
+        const bsToast = new bootstrap.Toast(toast);
+        bsToast.show();
+
+        toast.addEventListener('hidden.bs.toast', () => {
+            document.body.removeChild(toast);
+        });
+    }
+
+    // Écouter les événements de création de projet
+    socket.on('project_creation', function (data) {
+        console.log('Événement création projet:', data);
+
+        if (data.status === 'error') {
+            hideProjectCreationLoader();
+            showError(data.message);
+        } else if (data.status === 'warning') {
+            hideProjectCreationLoader();
+            showWarning(data.message);
+            loadProjects(); // Recharger la liste des projets
+        } else if (data.status === 'completed') {
+            hideProjectCreationLoader();
+            showSuccess(data.message);
+
+            // Afficher les détails du projet créé
+            if (data.project_details) {
+                const details = data.project_details;
+                const detailsHtml = `
                 <div class="alert alert-success mt-3">
                     <h6><i class="fas fa-check-circle me-2"></i>Projet créé avec succès !</h6>
                     <ul class="mb-0">
@@ -1338,30 +1314,30 @@ socket.on('project_creation', function(data) {
                     </ul>
                 </div>
             `;
-            
-            // Afficher les détails dans une notification toast
-            showToast('Projet créé !', detailsHtml, 'success', 10000);
-        }
-        
-        loadProjects(); // Recharger la liste des projets
-        
-        // Fermer le modal de création
-        const modal = bootstrap.Modal.getInstance(document.getElementById('createProjectModal'));
-        if (modal) {
-            modal.hide();
-        }
-                } else {
-        // Mettre à jour le loader avec les détails
-        updateProjectCreationLoader(data.step, data.total_steps, data.message, data.status, data.details);
-    }
-});
 
-// Fonction pour afficher le loader de création de projet
-function showProjectCreationLoader() {
-    // Créer le modal de loader s'il n'existe pas
-    let loaderModal = document.getElementById('projectCreationLoader');
-    if (!loaderModal) {
-        const loaderHtml = `
+                // Afficher les détails dans une notification toast
+                showToast('Projet créé !', detailsHtml, 'success', 10000);
+            }
+
+            loadProjects(); // Recharger la liste des projets
+
+            // Fermer le modal de création
+            const modal = bootstrap.Modal.getInstance(document.getElementById('createProjectModal'));
+            if (modal) {
+                modal.hide();
+            }
+        } else {
+            // Mettre à jour le loader avec les détails
+            updateProjectCreationLoader(data.step, data.total_steps, data.message, data.status, data.details);
+        }
+    });
+
+    // Fonction pour afficher le loader de création de projet
+    function showProjectCreationLoader() {
+        // Créer le modal de loader s'il n'existe pas
+        let loaderModal = document.getElementById('projectCreationLoader');
+        if (!loaderModal) {
+            const loaderHtml = `
             <div class="modal fade" id="projectCreationLoader" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
                 <div class="modal-dialog modal-dialog-centered">
                     <div class="modal-content" style="background: rgba(26, 26, 46, 0.95); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px;">
@@ -1407,168 +1383,453 @@ function showProjectCreationLoader() {
                 </div>
             </div>
         `;
-        
-        document.body.insertAdjacentHTML('beforeend', loaderHtml);
-        loaderModal = document.getElementById('projectCreationLoader');
-    }
-    
-    // Afficher le modal
-    const modal = new bootstrap.Modal(loaderModal);
-    modal.show();
-}
 
-// Fonction pour mettre à jour le loader de création
-function updateProjectCreationLoader(step, totalSteps, message, status, details) {
-    const progressBar = document.getElementById('creationProgressBar');
-    const currentStepEl = document.getElementById('currentStep');
-    const totalStepsEl = document.getElementById('totalSteps');
-    const stepMessageEl = document.getElementById('stepMessage');
-    const stepDetailsEl = document.getElementById('stepDetails');
-    
-    if (progressBar && currentStepEl && totalStepsEl && stepMessageEl) {
-        // Mettre à jour la barre de progression
-        const percentage = (step / totalSteps) * 100;
-        progressBar.style.width = `${percentage}%`;
-        
-        // Mettre à jour les textes
-        currentStepEl.textContent = step;
-        totalStepsEl.textContent = totalSteps;
-        stepMessageEl.textContent = message;
-        
-        // Ajouter un indicateur de statut
-        const statusIcons = {
-            'starting': 'fas fa-play',
-            'configuring': 'fas fa-cog fa-spin',
-            'checking': 'fas fa-search',
-            'creating': 'fas fa-folder-plus',
-            'allocating': 'fas fa-network-wired',
-            'allocated': 'fas fa-check',
-            'processing': 'fas fa-cogs fa-spin',
-            'extracting': 'fas fa-file-archive',
-            'extracted': 'fas fa-check',
-            'detected': 'fas fa-file-database',
-            'starting': 'fas fa-rocket',
-            'waiting': 'fas fa-clock',
-            'database': 'fas fa-database',
-            'importing': 'fas fa-download fa-pulse',
-            'creating_db': 'fas fa-plus-circle',
-            'cleaning': 'fas fa-broom'
-        };
-        
-        const icon = statusIcons[status] || 'fas fa-cog';
-        stepMessageEl.innerHTML = `<i class="${icon} me-2"></i>${message}`;
-        
-        // Afficher les détails si disponibles
-        if (details && stepDetailsEl) {
-            if (typeof details === 'object') {
-                const detailsText = Object.entries(details)
-                    .map(([key, value]) => `${key}: ${value}`)
-                    .join(', ');
-                stepDetailsEl.textContent = detailsText;
-                stepDetailsEl.style.display = 'block';
+            document.body.insertAdjacentHTML('beforeend', loaderHtml);
+            loaderModal = document.getElementById('projectCreationLoader');
+        }
+
+        // Afficher le modal
+        const modal = new bootstrap.Modal(loaderModal);
+        modal.show();
+    }
+
+    // Fonction pour mettre à jour le loader de création
+    function updateProjectCreationLoader(step, totalSteps, message, status, details) {
+        const progressBar = document.getElementById('creationProgressBar');
+        const currentStepEl = document.getElementById('currentStep');
+        const totalStepsEl = document.getElementById('totalSteps');
+        const stepMessageEl = document.getElementById('stepMessage');
+        const stepDetailsEl = document.getElementById('stepDetails');
+
+        if (progressBar && currentStepEl && totalStepsEl && stepMessageEl) {
+            // Mettre à jour la barre de progression
+            const percentage = (step / totalSteps) * 100;
+            progressBar.style.width = `${percentage}%`;
+
+            // Mettre à jour les textes
+            currentStepEl.textContent = step;
+            totalStepsEl.textContent = totalSteps;
+            stepMessageEl.textContent = message;
+
+            // Ajouter un indicateur de statut
+            const statusIcons = {
+                'starting': 'fas fa-play',
+                'configuring': 'fas fa-cog fa-spin',
+                'checking': 'fas fa-search',
+                'creating': 'fas fa-folder-plus',
+                'allocating': 'fas fa-network-wired',
+                'allocated': 'fas fa-check',
+                'processing': 'fas fa-cogs fa-spin',
+                'extracting': 'fas fa-file-archive',
+                'extracted': 'fas fa-check',
+                'detected': 'fas fa-file-database',
+                'starting': 'fas fa-rocket',
+                'waiting': 'fas fa-clock',
+                'database': 'fas fa-database',
+                'importing': 'fas fa-download fa-pulse',
+                'creating_db': 'fas fa-plus-circle',
+                'cleaning': 'fas fa-broom'
+            };
+
+            const icon = statusIcons[status] || 'fas fa-cog';
+            stepMessageEl.innerHTML = `<i class="${icon} me-2"></i>${message}`;
+
+            // Afficher les détails si disponibles
+            if (details && stepDetailsEl) {
+                if (typeof details === 'object') {
+                    const detailsText = Object.entries(details)
+                        .map(([key, value]) => `${key}: ${value}`)
+                        .join(', ');
+                    stepDetailsEl.textContent = detailsText;
+                    stepDetailsEl.style.display = 'block';
                 } else {
-                stepDetailsEl.style.display = 'none';
+                    stepDetailsEl.style.display = 'none';
+                }
             }
         }
     }
-}
 
-// Fonction pour masquer le loader de création
-function hideProjectCreationLoader() {
-    const loaderModal = document.getElementById('projectCreationLoader');
-    if (loaderModal) {
-        const modal = bootstrap.Modal.getInstance(loaderModal);
-        if (modal) {
-            modal.hide();
+    // Fonction pour masquer le loader de création
+    function hideProjectCreationLoader() {
+        const loaderModal = document.getElementById('projectCreationLoader');
+        if (loaderModal) {
+            const modal = bootstrap.Modal.getInstance(loaderModal);
+            if (modal) {
+                modal.hide();
+            }
         }
     }
-}
 
-// Fonction pour créer un projet (modifier l'existante)
-function createProject() {
-    // Afficher le loader avant d'envoyer la requête
-    showProjectCreationLoader();
-    
-    // Le reste du code existant...
-}
+    // Fonction pour créer un projet (modifier l'existante)
+    function createProject() {
+        // Afficher le loader avant d'envoyer la requête
+        showProjectCreationLoader();
 
-// Nouvelles fonctions pour WordPress et Next.js
-async function openWordPressFrontend(projectName) {
-    try {
-        const response = await fetch(`/get_wordpress_urls/${projectName}`);
-        const data = await response.json();
-        
-        if (data.success) {
-            window.open(data.urls.frontend, '_blank');
-        } else {
-            // URL par défaut si échec
+        // Le reste du code existant...
+    }
+
+    // Nouvelles fonctions pour WordPress et Next.js
+    async function openWordPressFrontend(projectName) {
+        try {
+            const response = await fetch(`/get_wordpress_urls/${projectName}`);
+            const data = await response.json();
+
+            if (data.success) {
+                window.open(data.urls.frontend, '_blank');
+            } else {
+                // URL par défaut si échec
+                window.open(`http://192.168.1.21:8080`, '_blank');
+            }
+        } catch (error) {
+            console.error('Erreur récupération URL frontend:', error);
+            // URL par défaut en cas d'erreur
             window.open(`http://192.168.1.21:8080`, '_blank');
         }
-    } catch (error) {
-        console.error('Erreur récupération URL frontend:', error);
-        // URL par défaut en cas d'erreur
-        window.open(`http://192.168.1.21:8080`, '_blank');
     }
-}
 
-async function openWordPressAdmin(projectName) {
-    try {
-        const response = await fetch(`/get_wordpress_urls/${projectName}`);
-        const data = await response.json();
-        
-        if (data.success) {
-            window.open(data.urls.admin, '_blank');
-        } else {
-            // URL par défaut si échec
+    async function openWordPressAdmin(projectName) {
+        try {
+            const response = await fetch(`/get_wordpress_urls/${projectName}`);
+            const data = await response.json();
+
+            if (data.success) {
+                window.open(data.urls.admin, '_blank');
+            } else {
+                // URL par défaut si échec
+                window.open(`http://192.168.1.21:8080/wp-admin`, '_blank');
+            }
+        } catch (error) {
+            console.error('Erreur récupération URL admin:', error);
+            // URL par défaut en cas d'erreur
             window.open(`http://192.168.1.21:8080/wp-admin`, '_blank');
         }
-    } catch (error) {
-        console.error('Erreur récupération URL admin:', error);
-        // URL par défaut en cas d'erreur
-        window.open(`http://192.168.1.21:8080/wp-admin`, '_blank');
     }
-}
 
-async function runNpmCommand(projectName, command) {
-    const button = event.target.closest('button');
-    const originalText = button.innerHTML;
-    
-    // Changer l'état du bouton
-    button.disabled = true;
-    button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>En cours...';
-    
-    try {
-        const response = await fetch(`/nextjs_npm/${projectName}/${command}`, {
+    async function runNpmCommand(projectName, command) {
+        // Créer une tâche dans le gestionnaire
+        const task = startNpmTask(projectName, command);
+        if (!task) return; // Tâche déjà en cours
+        
+        const button = event.target.closest('button');
+        const originalText = button.innerHTML;
+        
+        // Vérifier si npm run dev est déjà en cours
+        if (command === 'dev') {
+            try {
+                const statusResponse = await fetch(`/check_nextjs_status/${projectName}`);
+                const statusData = await statusResponse.json();
+                
+                if (statusData.dev_running) {
+                    taskManager.completeTask(task.id, 'npm run dev était déjà en cours', false);
+                    showError('npm run dev est déjà en cours d\'exécution');
+                    return;
+                }
+            } catch (error) {
+                console.error('Erreur lors de la vérification du statut:', error);
+                taskManager.updateTask(task.id, { 
+                    message: 'Vérification du statut...',
+                    details: error.message 
+                });
+            }
+        }
+        
+        // Changer l'état du bouton
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>En cours...';
+        
+        // Mettre à jour la tâche
+        taskManager.updateTask(task.id, { 
+            message: `Exécution de npm ${command}...`,
+            progress: 25
+        });
+        
+        try {
+            const response = await fetch(`/nextjs_npm/${projectName}/${command}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                // Compléter la tâche avec succès
+                taskManager.completeTask(task.id, `✅ ${data.message}`, true);
+                
+                // Messages spécifiques selon la commande
+                if (command === 'dev') {
+                    // Recharger les projets pour afficher l'IP Next.js
+                    setTimeout(() => loadProjects(), 2000);
+                } else if (command === 'build') {
+                    // Recharger les projets pour afficher l'IP Next.js
+                    setTimeout(() => loadProjects(), 2000);
+                }
+            } else {
+                // Compléter la tâche avec erreur
+                taskManager.completeTask(task.id, `❌ ${data.message}`, false);
+            }
+        } catch (error) {
+            console.error(`Erreur npm ${command}:`, error);
+            taskManager.completeTask(task.id, `❌ Erreur lors de l'exécution de npm ${command}`, false);
+        } finally {
+            // Restaurer l'état du bouton
+            button.disabled = false;
+            button.innerHTML = originalText;
+        }
+    }
+
+    // Fonction pour arrêter npm run dev
+    async function stopNpmDev(projectName) {
+        // Créer une tâche dans le gestionnaire
+        const task = startStopNpmDevTask(projectName);
+        if (!task) return; // Tâche déjà en cours
+
+        try {
+            // Désactiver temporairement le bouton
+            const projectItem = document.querySelector(`[data-project="${projectName}"]`);
+            const nextjsCard = projectItem?.querySelector('.service-nextjs');
+            const devButtons = nextjsCard?.querySelectorAll('button') || [];
+            
+            let devButton = null;
+            for (const btn of devButtons) {
+                const text = btn.textContent || '';
+                if (text.includes('Stop Dev')) {
+                    devButton = btn;
+                    break;
+                }
+            }
+            
+            if (devButton) {
+                devButton.disabled = true;
+                devButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i><span>Arrêt...</span>';
+            }
+
+            // Mettre à jour la tâche
+            taskManager.updateTask(task.id, { 
+                message: 'Arrêt de npm run dev...',
+                progress: 50
+            });
+            
+            const response = await fetch(`/stop_nextjs_dev/${projectName}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                taskManager.completeTask(task.id, data.message, true);
+                
+                // Attendre 1 seconde puis vérifier le statut pour mettre à jour le bouton
+                setTimeout(async () => {
+                    await checkNextjsDevStatus();
+                }, 1000);
+            } else {
+                taskManager.completeTask(task.id, data.message, false);
+                
+                // Restaurer le bouton en cas d'erreur
+                if (devButton) {
+                    devButton.disabled = false;
+                    devButton.innerHTML = '<i class="fas fa-stop me-1"></i><span>Stop Dev</span>';
+                }
+            }
+        } catch (error) {
+            console.error('Erreur lors de l\'arrêt npm dev:', error);
+            taskManager.completeTask(task.id, 'Erreur lors de l\'arrêt de npm run dev', false);
+            
+            // Restaurer le bouton en cas d'erreur
+            const projectItem = document.querySelector(`[data-project="${projectName}"]`);
+            const nextjsCard = projectItem?.querySelector('.service-nextjs');
+            const devButtons = nextjsCard?.querySelectorAll('button') || [];
+            
+            for (const btn of devButtons) {
+                const text = btn.textContent || '';
+                if (text.includes('Arrêt...')) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-stop me-1"></i><span>Stop Dev</span>';
+                    break;
+                }
+            }
+        }
+    }
+
+    // Fonction pour vérifier le statut des boutons npm run dev
+    async function checkNextjsDevStatus() {
+        const projects = document.querySelectorAll('.project-item');
+        
+        for (const projectItem of projects) {
+            const projectName = projectItem.dataset.project;
+            
+            // Chercher le bouton dans les service Next.js
+            const nextjsCard = projectItem.querySelector('.service-nextjs');
+            if (!nextjsCard) continue;
+            
+            const devButtons = nextjsCard.querySelectorAll('button');
+            let devButton = null;
+            
+            // Trouver le bouton Run Dev ou Stop Dev
+            for (const btn of devButtons) {
+                const text = btn.textContent || '';
+                if (text.includes('Run Dev') || text.includes('Stop Dev')) {
+                    devButton = btn;
+                    break;
+                }
+            }
+            
+            // Chercher l'élément project-nextjs-ip
+            const nextjsIpElement = projectItem.querySelector('.project-nextjs-ip');
+            
+            if (devButton) {
+                try {
+                    const response = await fetch(`/check_nextjs_status/${projectName}`);
+                    const data = await response.json();
+                    
+                    console.log(`Status for ${projectName}:`, data); // Debug
+                    
+                    if (data.success && data.dev_running) {
+                        // npm run dev est en cours - bouton Stop Dev
+                        devButton.disabled = false;
+                        devButton.innerHTML = '<i class="fas fa-stop me-1"></i><span>Stop Dev</span>';
+                        devButton.classList.add('btn-running');
+                        devButton.classList.remove('btn-success');
+                        devButton.title = 'Arrêter npm run dev';
+                        devButton.setAttribute('onclick', `stopNpmDev('${projectName}')`);
+                        
+                        // Afficher l'IP Next.js si npm dev est actif
+                        if (nextjsIpElement) {
+                            nextjsIpElement.style.display = 'block';
+                        }
+                    } else {
+                        // npm run dev n'est pas en cours - bouton Run Dev
+                        devButton.disabled = false;
+                        devButton.innerHTML = '<i class="fas fa-play me-1"></i><span>Run Dev</span>';
+                        devButton.classList.add('btn-success');
+                        devButton.classList.remove('btn-running');
+                        devButton.title = 'Démarrer le conteneur Next.js avec npm run dev';
+                        devButton.setAttribute('onclick', `startNextjsContainer('${projectName}')`);
+                        
+                        // Masquer l'IP Next.js si npm dev n'est pas actif
+                        if (nextjsIpElement) {
+                            nextjsIpElement.style.display = 'none';
+                        }
+                    }
+                } catch (error) {
+                    console.error(`Erreur lors de la vérification du statut npm dev pour ${projectName}:`, error);
+                    
+                    // En cas d'erreur, masquer l'IP Next.js par sécurité
+                    if (nextjsIpElement) {
+                        nextjsIpElement.style.display = 'none';
+                    }
+                }
+            }
+        }
+    }
+
+    // Fonction pour configurer un domaine externe
+    function configureExternalDomain(projectName) {
+        const domain = prompt('Entrez votre domaine externe (ex: monsite.example.com):', '');
+        
+        if (!domain || domain.trim() === '') {
+            return;
+        }
+        
+        const cleanDomain = domain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
+        
+        // Validation basique du domaine
+        if (!cleanDomain.includes('.') || cleanDomain.includes(' ')) {
+            // Utiliser une tâche temporaire pour l'erreur de validation
+            const tempTask = startDomainConfigTask(projectName);
+            if (tempTask) {
+                taskManager.completeTask(tempTask.id, 'Format de domaine invalide', false);
+            }
+            return;
+        }
+        
+        // Confirmer l'action
+        if (!confirm(`Configurer le domaine "${cleanDomain}" pour le projet "${projectName}" ?\n\nCela nécessitera une configuration nginx et DNS.`)) {
+            return;
+        }
+
+        // Créer une tâche dans le gestionnaire
+        const task = startDomainConfigTask(projectName);
+        if (!task) return; // Tâche déjà en cours
+
+        // Mettre à jour la tâche
+        taskManager.updateTask(task.id, { 
+            message: `Configuration du domaine ${cleanDomain}...`,
+            progress: 50
+        });
+        
+        fetch(`/configure_external_domain/${projectName}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ domain: cleanDomain })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                taskManager.completeTask(task.id, data.message, true);
+                
+                // Afficher les étapes suivantes
+                const steps = data.next_steps.map((step, index) => `${index + 1}. ${step}`).join('\n');
+                
+                const message = `🎉 Domaine configuré !\n\n📋 ÉTAPES SUIVANTES :\n${steps}\n\n🖥️ Exécutez ces commandes sur votre serveur pour finaliser la configuration.`;
+                
+                // Utiliser une alerte pour afficher les instructions complètes
+                setTimeout(() => {
+                    alert(message);
+                }, 1000);
+            } else {
+                taskManager.completeTask(task.id, data.message, false);
             }
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            taskManager.completeTask(task.id, 'Erreur lors de la configuration du domaine', false);
         });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            showSuccess(`✅ ${data.message}`);
-            
-            // Messages spécifiques selon la commande
-            if (command === 'dev') {
-                showToast('Next.js Dev', 'npm run dev démarré en arrière-plan. Consultez les logs du conteneur pour voir la sortie.', 'success', 5000);
-            } else if (command === 'install') {
-                showToast('NPM Install', 'Les dépendances ont été installées avec succès.', 'success', 3000);
-            } else if (command === 'build') {
-                showToast('NPM Build', 'Le projet a été construit avec succès pour la production.', 'success', 5000);
-            }
-        } else {
-            showError(`❌ ${data.message}`);
-        }
-    } catch (error) {
-        console.error(`Erreur npm ${command}:`, error);
-        showError(`❌ Erreur lors de l'exécution de npm ${command}`);
-    } finally {
-        // Restaurer l'état du bouton
-        button.disabled = false;
-        button.innerHTML = originalText;
     }
-}
-    </script>
-{% endblock %} 
+
+    // Fonction pour redémarrer le conteneur Next.js
+    async function startNextjsContainer(projectName) {
+        // Créer une tâche dans le gestionnaire
+        const task = startNextjsContainerTask(projectName);
+        if (!task) return; // Tâche déjà en cours
+
+        try {
+            // Mettre à jour la tâche
+            taskManager.updateTask(task.id, { 
+                message: 'Démarrage du conteneur Next.js...',
+                progress: 50
+            });
+
+            const response = await fetch(`/start_nextjs_container/${projectName}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                taskManager.completeTask(task.id, data.message, true);
+                
+                // Attendre que le conteneur démarre puis vérifier le statut
+                setTimeout(async () => {
+                    await checkNextjsDevStatus();
+                }, 3000);
+            } else {
+                taskManager.completeTask(task.id, data.message, false);
+            }
+        } catch (error) {
+            console.error('Erreur lors du démarrage du conteneur:', error);
+            taskManager.completeTask(task.id, 'Erreur lors du démarrage du conteneur Next.js', false);
+        }
+    }
+</script>
+{% endblock %}

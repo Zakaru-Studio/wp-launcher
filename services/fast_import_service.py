@@ -39,35 +39,108 @@ class FastImportService:
             self.socketio.emit('fast_import_progress', data)
             print(f"📊 [PROGRESS] {project_name}: {progress}% - {message}")
     
+    def _detect_file_encoding(self, sql_file: str) -> str:
+        """Détecte l'encodage du fichier SQL"""
+        try:
+            import chardet
+        except ImportError:
+            print("⚠️ chardet non disponible, utilisation d'UTF-8")
+            return 'utf-8'
+        
+        try:
+            # Lire les premiers 64KB pour détecter l'encodage
+            with open(sql_file, 'rb') as f:
+                raw_data = f.read(65536)
+                
+            result = chardet.detect(raw_data)
+            encoding_result = result.get('encoding')
+            if encoding_result is None:
+                detected_encoding = 'utf-8'
+            else:
+                detected_encoding = str(encoding_result)
+            confidence = result.get('confidence', 0)
+            
+            print(f"🔍 Encodage détecté: {detected_encoding} (confiance: {confidence:.2f})")
+            
+            # Vérifier que l'encodage fonctionne
+            try:
+                with open(sql_file, 'r', encoding=detected_encoding) as f:
+                    f.read(1024)  # Test de lecture
+                return detected_encoding
+            except UnicodeDecodeError:
+                print(f"⚠️ Encodage {detected_encoding} invalide, utilisation d'UTF-8")
+                return 'utf-8'
+                
+        except Exception as e:
+            print(f"⚠️ Erreur détection encodage: {e}, utilisation d'UTF-8")
+            return 'utf-8'
+    
     def _analyze_sql_file(self, sql_file: str) -> Dict[str, Any]:
         """Analyse le fichier SQL pour compter les tables et statements"""
         try:
             print("🔍 Analyse du fichier SQL...")
             
+            # Détecter l'encodage du fichier
+            encoding = self._detect_file_encoding(sql_file)
+            
             table_count = 0
             statement_count = 0
             create_tables = []
+            is_mariadb = False
+            is_wordpress = False
             
-            with open(sql_file, 'r', encoding='utf-8', errors='ignore') as f:
+            with open(sql_file, 'r', encoding=encoding, errors='ignore') as f:
+                # Lire le début du fichier pour identifier le type
+                header = f.read(1024)
+                f.seek(0)
                 content = f.read()
                 
-                # Compter les CREATE TABLE
-                create_table_matches = re.findall(r'CREATE TABLE\s+(?:IF NOT EXISTS\s+)?`?([^`\s]+)`?', content, re.IGNORECASE)
-                create_tables = create_table_matches
+                # Détecter MariaDB
+                if 'MariaDB dump' in header or 'MariaDB' in header:
+                    is_mariadb = True
+                    print("📊 Type de dump détecté: MariaDB")
+                elif 'MySQL dump' in header or 'mysqldump' in header:
+                    print("📊 Type de dump détecté: MySQL")
+                
+                # Détecter WordPress
+                wp_keywords = ['wp_options', 'wp_posts', 'wp_users', 'wp_comments']
+                found_wp_keywords = [kw for kw in wp_keywords if kw in content.lower()]
+                if found_wp_keywords:
+                    is_wordpress = True
+                    print(f"📊 WordPress détecté (tables: {', '.join(found_wp_keywords)})")
+                
+                # Compter les CREATE TABLE avec support MariaDB/MySQL
+                create_table_patterns = [
+                    r'CREATE TABLE\s+(?:IF NOT EXISTS\s+)?`?([^`\s]+)`?',
+                    r'CREATE\s+TABLE\s+`?([^`\s]+)`?'
+                ]
+                
+                for pattern in create_table_patterns:
+                    matches = re.findall(pattern, content, re.IGNORECASE)
+                    create_tables.extend(matches)
+                
+                # Supprimer les doublons et filtrer
+                create_tables = list(set([table for table in create_tables if table and not table.startswith('`')]))
                 table_count = len(create_tables)
                 
-                # Compter les statements SQL (approximatif)
-                statements = content.split(';')
-                statement_count = len([s for s in statements if s.strip()])
+                # Compter les statements SQL (plus précis)
+                statements = [s.strip() for s in content.split(';') if s.strip() and not s.strip().startswith('--')]
+                statement_count = len(statements)
                 
                 file_size = os.path.getsize(sql_file)
+                
+                print(f"📊 Analyse terminée: {table_count} tables, {statement_count} statements")
                 
                 return {
                     'table_count': table_count,
                     'statement_count': statement_count,
                     'create_tables': create_tables,
                     'file_size': file_size,
-                    'file_size_mb': file_size / (1024 * 1024)
+                    'file_size_mb': file_size / (1024 * 1024),
+                    'encoding': encoding,
+                    'is_mariadb': is_mariadb,
+                    'is_wordpress': is_wordpress,
+                    'wp_tables': found_wp_keywords if is_wordpress else []
                 }
                 
         except Exception as e:
@@ -77,7 +150,11 @@ class FastImportService:
                 'statement_count': 0,
                 'create_tables': [],
                 'file_size': 0,
-                'file_size_mb': 0
+                'file_size_mb': 0,
+                'encoding': 'utf-8',
+                'is_mariadb': False,
+                'is_wordpress': False,
+                'wp_tables': []
             }
     
     def _monitor_import_progress(self, project_name: str, mysql_container: str, analysis_data: Dict):

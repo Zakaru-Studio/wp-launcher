@@ -10,29 +10,29 @@
     --warning-gradient: linear-gradient(135deg, #ffeaa7 0%, #fab1a0 100%);
     --danger-gradient: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
     --info-gradient: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
-    
+
     /* Couleurs dark theme */
     --bg-primary: #0a0a0f;
     --bg-secondary: #1a1a2e;
     --bg-tertiary: #16213e;
     --bg-dark-card: #1e1e2e;
     --bg-darker-card: #0f1419;
-    
+
     --glass-bg: rgba(255, 255, 255, 0.03);
     --glass-bg-hover: rgba(255, 255, 255, 0.08);
     --glass-border: rgba(255, 255, 255, 0.1);
     --glass-border-hover: rgba(255, 255, 255, 0.2);
-    
+
     --text-primary: #ffffff;
     --text-secondary: #e1e5e9;
     --text-muted: #8b949e;
     --text-disabled: #6c757d;
-    
+
     --shadow-soft: 0 8px 32px rgba(0, 0, 0, 0.3);
     --shadow-medium: 0 15px 35px rgba(0, 0, 0, 0.4);
     --shadow-strong: 0 25px 50px rgba(0, 0, 0, 0.6);
     --shadow-glow: 0 0 20px rgba(102, 126, 234, 0.3);
-    
+
     --border-radius: 16px;
     --border-radius-small: 8px;
     --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -63,7 +63,7 @@ body::before {
     left: 0;
     width: 100%;
     height: 100%;
-    background: 
+    background:
         radial-gradient(circle at 20% 80%, rgba(102, 126, 234, 0.05) 0%, transparent 50%),
         radial-gradient(circle at 80% 20%, rgba(245, 87, 108, 0.05) 0%, transparent 50%),
         radial-gradient(circle at 40% 40%, rgba(79, 172, 254, 0.05) 0%, transparent 50%);
@@ -77,11 +77,10 @@ body::before {
     margin: 0 auto;
 }
 
-/* Header amélioré avec justify-content space-between */
+/* Header avec structure verticale */
 .header {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    flex-direction: column;
     padding: 1.5rem 2rem;
     background: var(--glass-bg);
     backdrop-filter: blur(20px);
@@ -91,6 +90,20 @@ body::before {
     top: 0;
     z-index: 99;
     border-radius: 0 0 var(--border-radius) var(--border-radius);
+}
+
+.header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.header-bottom {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
 }
 
 .header-left {
@@ -110,12 +123,24 @@ body::before {
     letter-spacing: -0.5px;
 }
 
+.app-version {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-left: 0.5rem;
+    background: var(--primary-gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-shadow: 0 0 20px rgba(102, 126, 234, 0.3);
+    letter-spacing: -0.5px; 
+}
+
 .header-right {
     display: flex;
     align-items: center;
 }
 
-/* Barre de recherche améliorée */
+/* Barre de recherche plus compacte */
 .search-bar {
     position: relative;
     display: flex;
@@ -124,9 +149,8 @@ body::before {
     border: 1px solid var(--glass-border);
     border-radius: var(--border-radius-small);
     padding: 0.5rem 1rem;
-    min-width: 250px;
-    width:400px;
-    max-width: 600px;
+    min-width: 200px;
+    width: 100%;
     transition: var(--transition);
 }
 
@@ -137,8 +161,7 @@ body::before {
 
 .search-icon {
     color: var(--text-muted);
-    margin-right: 0.75rem;
-    font-size: 0.9rem;
+    margin-right: 0.5rem;
 }
 
 .search-bar input {
@@ -147,8 +170,7 @@ body::before {
     border: none;
     outline: none;
     color: var(--text-primary);
-    font-size: 0.9rem;
-    padding: 0.25rem 0;
+    padding: 0.15rem 0;
 }
 
 .search-bar input::placeholder {
@@ -167,8 +189,8 @@ body::before {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
+    width: 20px;
+    height: 20px;
 }
 
 .clear-search:hover {
@@ -176,42 +198,13 @@ body::before {
     color: var(--text-primary);
 }
 
-/* Bouton créer un projet - design dark */
-.create-project-btn {
-    position: fixed;
-    bottom: 2rem;
-    right: 2rem;
-    width: 70px;
-    height: 70px;
-    border-radius: 50%;
-    background: var(--primary-gradient);
-    border: none;
-    color: white;
-    font-size: 1.5rem;
-    box-shadow: var(--shadow-medium), 0 0 20px rgba(102, 126, 234, 0.3);
-    transition: var(--transition);
-    z-index: 1000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-}
+/* Bouton créer un projet retiré - désormais uniquement dans le header */
 
-.create-project-btn:hover {
-    transform: scale(1.1) rotate(90deg);
-    box-shadow: var(--shadow-strong), 0 0 30px rgba(102, 126, 234, 0.5);
-}
-
-.create-project-btn:active {
-    transform: scale(0.95);
-}
-
-/* Stats cards plus compactes et cliquables */
+/* Stats comme filtres rapides compacts */
 .stats-section {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 1.5rem;
-    margin-bottom: 2rem;
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 0;
     margin-top: 0;
 }
 
@@ -219,13 +212,17 @@ body::before {
     background: var(--glass-bg);
     backdrop-filter: blur(20px);
     border: 1px solid var(--glass-border);
-    border-radius: var(--border-radius);
-    padding: 1.5rem;
-    text-align: center;
+    border-radius: var(--border-radius-small);
+    padding: 0.39rem 1rem;
     transition: var(--transition);
     position: relative;
     overflow: hidden;
     cursor: pointer;
+    min-width: 80px;
+    display: flex;
+    justify-content: center;
+    align-items: baseline;
+    gap: 0.5rem;
 }
 
 .stat-card::before {
@@ -234,13 +231,19 @@ body::before {
     top: 0;
     left: 0;
     right: 0;
-    height: 3px;
+    height: 2px;
     background: var(--primary-gradient);
+    transform: scaleX(0);
+    transition: var(--transition);
+}
+
+.stat-card:hover::before {
+    transform: scaleX(1);
 }
 
 .stat-card:hover {
-    transform: translateY(-3px);
-    box-shadow: var(--shadow-medium);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-soft);
     background: var(--glass-bg-hover);
     border-color: var(--glass-border-hover);
 }
@@ -251,26 +254,28 @@ body::before {
 }
 
 .stat-card .stat-number {
-    font-size: 2rem;
+    font-size: 1.2rem;
     font-weight: 700;
     color: var(--text-primary);
-    margin-bottom: 0.25rem;
+    margin-bottom: 0.125rem;
     text-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
 }
 
 .stat-card .stat-label {
     color: var(--text-muted);
-    font-size: 0.85rem;
+    font-size: 0.7rem;
     text-transform: uppercase;
-    letter-spacing: 1px;
-    margin-bottom: 0.25rem;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.125rem;
+    font-weight: 500;
 }
 
 .stat-card .stat-subtitle {
     color: var(--text-muted);
-    font-size: 0.75rem;
+    font-size: 0.65rem;
     opacity: 0.7;
     margin-bottom: 0;
+    line-height: 1.2;
 }
 
 /* Indicateur de filtre actif */
@@ -350,7 +355,6 @@ body::before {
     transform: translateY(-3px);
     box-shadow: var(--shadow-medium);
     border-color: rgba(102, 126, 234, 0.3);
-    background: var(--glass-bg-hover);
 }
 
 .project-header {
@@ -359,16 +363,18 @@ body::before {
     align-items: flex-start;
 }
 
-.project-header-info{
-        display: flex;
-        gap: 1.5rem;
+.project-header-info {
+    display: flex;
+    gap: 1.5rem;
 }
 
 .project-title {
     font-size: 1.4rem;
     font-weight: 600;
     color: var(--text-primary);
-    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap:0.3rem;
 }
 
 .project-hostname {
@@ -379,11 +385,11 @@ body::before {
     gap: 0.5rem;
 }
 
-.project-hostname a{
+.project-hostname a {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    color:#4facfe;
+    color: #4facfe;
 }
 
 /* Styles pour l'IP + port sous le hostname */
@@ -405,7 +411,6 @@ body::before {
     background: rgba(79, 172, 254, 0.1);
     border: 1px solid rgba(79, 172, 254, 0.2);
     transition: var(--transition);
-    font-weight: 500;
 }
 
 .ip-port-link:hover {
@@ -415,6 +420,38 @@ body::before {
     text-decoration: none;
     transform: translateY(-1px);
     box-shadow: 0 4px 8px rgba(79, 172, 254, 0.2);
+}
+
+.project-nextjs-ip {
+    margin-top: 0.25rem;
+}
+
+.nextjs-ip-link {
+    color: #4ffebd !important;
+    text-decoration: none;
+    font-size: 0.8rem;
+    padding: 0.35rem 0.5rem;
+    border-radius: 4px;
+    background: rgba(79, 172, 254, 0.1);
+    border: 1px solid #4ffebe22;
+    transition: var(--transition);
+    font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
+
+    transition: all 0.3s ease;
+}
+
+.nextjs-ip-link:hover {
+    color: #3ee6a4 !important;
+    background: rgba(79, 172, 254, 0.2);
+    border-color: rgba(79, 172, 254, 0.4);
+    text-decoration: none;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(79, 172, 254, 0.2);
+}
+
+.project-nextjs-ip i {
+    color: #4ffebd;
+    opacity: 0.8;
 }
 
 .project-status {
@@ -444,29 +481,34 @@ body::before {
 }
 
 @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.6; }
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.6;
+    }
 }
 
 /* Services grid moderne dark */
 .services-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1rem;
-    margin-bottom: 1.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
 }
 
 .service-card {
     background: rgba(255, 255, 255, 0.02);
     border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: var(--border-radius-small);
-    padding: 1rem;
-    text-align: center;
+    border-radius: var(--border-radius);
+    padding: 1.5rem;
     transition: var(--transition);
-    text-decoration: none;
-    color: var(--text-secondary);
     position: relative;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 .service-card::before {
@@ -488,27 +530,186 @@ body::before {
 .service-card:hover {
     background: rgba(255, 255, 255, 0.05);
     transform: translateY(-2px);
-    color: var(--text-primary);
-    text-decoration: none;
     box-shadow: var(--shadow-soft);
 }
 
+.service-link {
+    text-decoration: none;
+    color: inherit;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    margin-bottom: 1rem;
+}
+
+.service-link:hover {
+    text-decoration: none;
+    color: inherit;
+}
+
 .service-icon {
-    font-size: 1.5rem;
-    margin-bottom: 0.5rem;
+    font-size: 2rem;
+    margin-bottom: 0.75rem;
     color: #4facfe;
+    transition: var(--transition);
+}
+
+.service-card:hover .service-icon {
+    transform: scale(1.1);
 }
 
 .service-name {
-    font-size: 0.9rem;
-    font-weight: 500;
-    margin-bottom: 0.25rem;
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--text-primary);
 }
 
 .service-port {
-    font-size: 0.8rem;
+    font-size: 0.9rem;
     color: var(--text-muted);
     font-family: 'Fira Code', monospace;
+}
+
+/* Boutons dans les service cards */
+.service-buttons {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.btn-service {
+    padding: 0.5rem .4rem;
+    border: none;
+    border-radius: 8px;
+    font-weight: 500;
+    font-size: 0.7rem;
+    transition: var(--transition);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    position: relative;
+    overflow: hidden;
+    text-decoration: none;
+    width: 100%;
+}
+
+.btn-service::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+    transition: var(--transition);
+}
+
+.btn-service:hover::before {
+    left: 100%;
+}
+
+.btn-service:hover {
+    transform: translateY(-1px);
+}
+
+.btn-service:active {
+    transform: translateY(0);
+}
+
+.btn-service i {
+    font-size: 0.8rem;
+}
+
+.btn-service span {
+    white-space: nowrap;
+}
+
+/* Styles spécifiques pour les boutons selon leur type */
+.btn-service.btn-primary {
+    background-color: transparent;
+    border: 1px solid rgb(33, 117, 155);
+    color: rgb(33, 117, 155);
+    box-shadow: 0 3px 13px rgba(33, 117, 155, 0.25);
+}
+
+.btn-service.btn-primary:hover {
+    background-color: rgba(33, 117, 155, 0.1);
+    border-color: rgb(0, 115, 170);
+    color: rgb(0, 115, 170);
+    box-shadow: 0 4px 16px rgba(33, 117, 155, 0.3);
+}
+
+.btn-service.btn-secondary {
+    background-color: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: rgba(255, 255, 255, 0.8);
+    box-shadow: 0 3px 13px rgba(255, 255, 255, 0.1);
+}
+
+.btn-service.btn-secondary:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.5);
+    color: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 6px 20px rgba(255, 255, 255, 0.2);
+}
+
+.btn-service.btn-info {
+    background-color: transparent;
+    border: 1px solid rgb(97, 218, 251);
+    color: rgb(97, 218, 251);
+    box-shadow: 0 3px 13px rgba(97, 218, 251, 0.25);
+}
+
+.btn-service.btn-info:hover {
+    background-color: rgba(97, 218, 251, 0.1);
+    border-color: rgb(79, 195, 247);
+    color: rgb(79, 195, 247);
+    box-shadow: 0 6px 20px rgba(97, 218, 251, 0.4);
+}
+
+.btn-service.btn-success {
+    background-color: transparent;
+    border: 1px solid rgb(0, 200, 81);
+    color: rgb(0, 200, 81);
+    box-shadow: 0 3px 13px rgba(0, 200, 81, 0.25);
+}
+
+.btn-service.btn-success:hover {
+    background-color: rgba(0, 200, 81, 0.1);
+    border-color: rgb(0, 168, 68);
+    color: rgb(0, 168, 68);
+    box-shadow: 0 6px 20px rgba(0, 200, 81, 0.35);
+}
+
+.btn-service.btn-warning {
+    background-color: transparent;
+    border: 1px solid rgb(255, 143, 0);
+    color: rgb(255, 143, 0);
+    box-shadow: 0 3px 13px rgba(255, 143, 0, 0.2);
+}
+
+.btn-service.btn-warning:hover {
+    background-color: rgba(255, 143, 0, 0.1);
+    border-color: rgb(255, 111, 0);
+    color: rgb(255, 111, 0);
+    box-shadow: 0 6px 20px rgba(255, 143, 0, 0.3);
+}
+
+.btn-service.btn-danger {
+    background-color: transparent;
+    border: 1px solid rgb(255, 107, 107);
+    color: rgb(255, 107, 107);
+    box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+}
+
+.btn-service.btn-danger:hover {
+    background-color: rgba(255, 107, 107, 0.1);
+    border-color: rgb(238, 90, 36);
+    color: rgb(238, 90, 36);
+    box-shadow: 0 6px 20px rgba(255, 107, 107, 0.4);
 }
 
 /* Actions buttons ultra modernes dark */
@@ -559,44 +760,45 @@ body::before {
 }
 
 .btn-start {
-    background: var(--success-gradient);
-    color: white;
-    box-shadow: 0 4px 15px rgba(79, 172, 254, 0.3);
+    padding-inline: 25px;
+    background-color: transparent;
+    border: 1px solid rgb(207 154 246);
+    color: rgb(207 154 246);
+    box-shadow: 0 2px 13px rgba(209, 155, 248, 0.2);
 }
 
-.btn-start:hover {
-    box-shadow: 0 6px 20px rgba(79, 172, 254, 0.4);
-}
-
-.btn-stop {
-    background: var(--danger-gradient);
-    color: white;
-    box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
-}
-
-.btn-stop:hover {
-    box-shadow: 0 6px 20px rgba(255, 107, 107, 0.4);
+.btn-running {
+    color: rgb(22, 226, 229);
+    background-color: transparent;
+    border: 1px solid rgba(22, 226, 229);
+    box-shadow: 0 2px 13px rgba(107, 255, 255, 0.2);
 }
 
 .btn-secondary {
-    background: rgba(255, 255, 255, 0.08);
-    color: var(--text-primary);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background-color: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: rgba(255, 255, 255, 0.8);
+    box-shadow: 0 4px 15px rgba(255, 255, 255, 0.1);
 }
 
 .btn-secondary:hover {
-    background: rgba(255, 255, 255, 0.12);
-    color: var(--text-primary);
-    border-color: rgba(255, 255, 255, 0.2);
+    background-color: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.5);
+    color: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 6px 20px rgba(255, 255, 255, 0.2);
 }
 
 .btn-danger {
-    background: var(--danger-gradient);
-    color: white;
+    background-color: transparent;
+    border: 1px solid rgb(255, 107, 107);
+    color: rgb(255, 107, 107);
     box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
 }
 
 .btn-danger:hover {
+    background-color: rgba(255, 107, 107, 0.1);
+    border-color: rgb(238, 90, 36);
+    color: rgb(238, 90, 36);
     box-shadow: 0 6px 20px rgba(255, 107, 107, 0.4);
 }
 
@@ -606,33 +808,14 @@ body::before {
     opacity: 0.7;
 }
 
-.btn-modern.loading::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 20px;
-    height: 20px;
-    border: 2px solid transparent;
-    border-top: 2px solid white;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    0% { transform: translate(-50%, -50%) rotate(0deg); }
-    100% { transform: translate(-50%, -50%) rotate(360deg); }
-}
-
 .add-site-btn {
     background: var(--primary-gradient);
     color: white;
     border: none;
-    border-radius: var(--border-radius);
-    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    padding: 0.6rem 1.4rem;
     font-weight: 500;
-    font-size: 0.9rem;
+    font-size: 0.87rem;
     transition: var(--transition);
     cursor: pointer;
 }
@@ -802,7 +985,7 @@ body::before {
     word-break: break-all;
 }
 
-.upload-zone.upload-complete{
+.upload-zone.upload-complete {
     background: rgba(79, 172, 254, 0.1);
     border: 1px solid rgba(79, 172, 254, 0.3);
     color: var(--text-primary);
@@ -842,8 +1025,13 @@ body::before {
 }
 
 @keyframes shimmer {
-    0% { transform: translateX(-100%); }
-    100% { transform: translateX(100%); }
+    0% {
+        transform: translateX(-100%);
+    }
+
+    100% {
+        transform: translateX(100%);
+    }
 }
 
 /* Switch moderne dark */
@@ -946,39 +1134,96 @@ body::before {
     .container-fluid {
         padding: 1rem;
     }
-    
+
     .header-right {
         position: static;
         text-align: center;
         margin-bottom: 2rem;
     }
-    
+
     .header-title {
         font-size: 2rem;
     }
-    
+
     .stats-section {
         grid-template-columns: 1fr;
         margin-top: 1rem;
     }
-    
+
     .services-grid {
         grid-template-columns: 1fr;
     }
-    
+
     .project-actions {
         flex-direction: column;
         align-items: stretch;
     }
-    
+
     .btn-modern {
         width: 100%;
         justify-content: center;
     }
-    
+
     .create-project-btn {
         bottom: 1rem;
         right: 1rem;
+    }
+}
+
+/* Responsive design pour le header */
+@media (max-width: 768px) {
+    .header {
+        padding: 1rem;
+    }
+
+    .header-top {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: stretch;
+        text-align: center;
+    }
+
+    .header-bottom {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: stretch;
+    }
+
+    .stats-section {
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .stat-card {
+        min-width: 60px;
+        padding: 0.5rem 0.75rem;
+    }
+
+    .stat-card .stat-number {
+        font-size: 1rem;
+    }
+
+    .stat-card .stat-label {
+        font-size: 0.65rem;
+    }
+
+    .stat-card .stat-subtitle {
+        font-size: 0.6rem;
+    }
+
+    .search-bar {
+        width: 100%;
+        max-width: none;
+    }
+
+    .header-title {
+        font-size: 1.5rem;
+    }
+
+    .add-site-btn {
+        font-size: 0.9rem;
+        padding: 0.6rem 1rem;
     }
 }
 
@@ -992,6 +1237,7 @@ body::before {
         opacity: 0;
         transform: translateY(20px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -1007,6 +1253,7 @@ body::before {
         opacity: 0;
         transform: translateX(-20px);
     }
+
     to {
         opacity: 1;
         transform: translateX(0);
@@ -1064,7 +1311,7 @@ body::before {
 :focus {
     outline: 2px solid rgba(102, 126, 234, 0.5);
     outline-offset: 2px;
-} 
+}
 
 /* Barre de progression sticky pour import de base de données */
 .import-progress-sticky {
@@ -1086,6 +1333,7 @@ body::before {
         transform: translateY(100%);
         opacity: 0;
     }
+
     to {
         transform: translateY(0);
         opacity: 1;
@@ -1170,17 +1418,17 @@ body::before {
         flex-direction: column;
         gap: 0.75rem;
     }
-    
+
     .import-progress-header {
         text-align: center;
         width: 100%;
     }
-    
+
     .import-progress-message {
         text-align: center;
         min-width: auto;
     }
-    
+
     .btn-close-progress {
         position: absolute;
         top: 0.5rem;
@@ -1194,26 +1442,144 @@ body.import-progress-visible {
     padding-bottom: 120px;
 }
 
-/* Toast notifications améliorés */
-.toast-container {
+/* Système de toaster pour tâches en cours */
+.task-toaster {
     position: fixed;
-    top: 20px;
+    bottom: 20px;
     right: 20px;
-    z-index: 1100;
+    z-index: 9999;
+    max-width: 400px;
+    max-height: 80vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
 }
 
-.toast {
+.task-toast {
     background: var(--glass-bg);
     backdrop-filter: blur(20px);
     border: 1px solid var(--glass-border);
-    border-radius: var(--border-radius-small);
-    box-shadow: var(--shadow-medium);
+    border-radius: var(--border-radius);
+    padding: 1rem;
     color: var(--text-primary);
-    margin-bottom: 0.5rem;
-    animation: slideInRight 0.3s ease-out;
+    box-shadow: var(--shadow-medium);
+    min-width: 320px;
+    animation: slideInFromRight 0.3s ease-out;
+    position: relative;
+    overflow: hidden;
 }
 
-@keyframes slideInRight {
+.task-toast.completed {
+    border-color: rgba(79, 172, 254, 0.5);
+    background: rgba(79, 172, 254, 0.1);
+}
+
+.task-toast.error {
+    border-color: rgba(255, 107, 107, 0.5);
+    background: rgba(255, 107, 107, 0.1);
+}
+
+.task-toast.warning {
+    border-color: rgba(255, 193, 7, 0.5);
+    background: rgba(255, 193, 7, 0.1);
+}
+
+.task-toast-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+.task-toast-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.task-toast-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0.25rem;
+    border-radius: 4px;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+}
+
+.task-toast-close:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+.task-toast-content {
+    margin-bottom: 0.75rem;
+}
+
+.task-toast-message {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.task-toast-details {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.task-toast-progress {
+    margin-bottom: 0.5rem;
+}
+
+.task-progress-bar {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+}
+
+.task-progress-fill {
+    height: 100%;
+    background: var(--primary-gradient);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+    position: relative;
+}
+
+.task-progress-fill.indeterminate {
+    width: 30% !important;
+    animation: progressIndeterminate 1.5s infinite linear;
+}
+
+.task-toast-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.task-time {
+    font-family: 'Fira Code', monospace;
+}
+
+.task-status {
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+@keyframes slideInFromRight {
     from {
         transform: translateX(100%);
         opacity: 0;
@@ -1224,21 +1590,38 @@ body.import-progress-visible {
     }
 }
 
-.toast.bg-success {
-    border-color: rgba(79, 172, 254, 0.3);
+@keyframes progressIndeterminate {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(233%);
+    }
 }
 
-.toast.bg-danger {
-    border-color: rgba(255, 107, 107, 0.3);
+/* Responsive pour les toasters */
+@media (max-width: 768px) {
+    .task-toaster {
+        right: 10px;
+        left: 10px;
+        max-width: none;
+    }
+    
+    .task-toast {
+        min-width: auto;
+        padding: 0.75rem;
+    }
+    
+    .task-toast-title {
+        font-size: 0.85rem;
+    }
+    
+    .task-toast-message {
+        font-size: 0.75rem;
+    }
 }
 
-.toast.bg-warning {
-    border-color: rgba(255, 234, 167, 0.3);
-}
-
-.toast.bg-info {
-    border-color: rgba(168, 237, 234, 0.3);
-}
+/* Anciens styles de toast Bootstrap supprimés - utilisation du TaskManager uniquement */
 
 /* Amélioration du scrollbar */
 ::-webkit-scrollbar {
@@ -1268,7 +1651,7 @@ body.import-progress-visible {
 :focus {
     outline: 2px solid rgba(102, 126, 234, 0.3);
     outline-offset: 2px;
-} 
+}
 
 /* Service principal (WordPress via hostname) */
 .service-main {
@@ -1305,8 +1688,96 @@ body.import-progress-visible {
     font-weight: 600;
 }
 
+/* Service inactif */
+.service-inactive {
+    opacity: 0.6;
+    background: rgba(255, 255, 255, 0.01);
+    border: 1px dashed rgba(255, 255, 255, 0.1);
+}
+
+.service-inactive .service-icon {
+    color: var(--text-muted);
+}
+
+.service-inactive .service-port {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* Styles spécifiques par type de service */
+.service-wordpress .service-icon {
+    color: #21759b;
+}
+
+.service-phpmyadmin .service-icon {
+    color: #f39c12;
+}
+
+.service-phpmyadmin .btn-service.btn-secondary {
+    background-color: transparent;
+    border: 1px solid rgb(243, 156, 18);
+    color: rgb(243, 156, 18);
+    box-shadow: 0 4px 15px rgba(243, 156, 18, 0.3);
+}
+
+.service-phpmyadmin .btn-service.btn-secondary:hover {
+    background-color: rgba(243, 156, 18, 0.1);
+    border-color: rgb(230, 126, 34);
+    color: rgb(230, 126, 34);
+    box-shadow: 0 6px 20px rgba(243, 156, 18, 0.4);
+}
+
+.service-nextjs .service-icon {
+    color: #61dafb;
+}
+
+.service-mailpit .service-icon {
+    color: #ff6b6b;
+}
+
+.service-mailpit .btn-service.btn-secondary {
+    background-color: transparent;
+    border: 1px solid rgb(255, 107, 107);
+    color: rgb(255, 107, 107);
+    box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+}
+
+.service-mailpit .btn-service.btn-secondary:hover {
+    background-color: rgba(255, 107, 107, 0.1);
+    border-color: rgb(238, 90, 36);
+    color: rgb(238, 90, 36);
+    box-shadow: 0 6px 20px rgba(255, 107, 107, 0.4);
+}
+
 /* Responsive design */
 @media (max-width: 768px) {
+    .services-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+
+    .service-card {
+        padding: 1rem;
+    }
+
+    .service-icon {
+        font-size: 1.5rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .service-name {
+        font-size: 0.9rem;
+    }
+
+    .service-port {
+        font-size: 0.8rem;
+    }
+
+    .btn-service {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.8rem;
+    }
+
     .service-main::before {
         top: -5px;
         right: -5px;
@@ -1314,142 +1785,290 @@ body.import-progress-visible {
         height: 16px;
         font-size: 10px;
     }
-} 
+}
 
-/* Nouveaux styles pour les groupes de boutons WordPress et Next.js */
-.wordpress-actions,
-.nextjs-actions {
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--border-radius-small);
-    padding: 1rem;
-    margin-bottom: 1rem;
-    backdrop-filter: blur(10px);
+/* Anciens styles supprimés - maintenant les boutons sont dans les service-cards */
+
+/* Styles pour le lien de suppression en bas à droite */
+
+.delete-link {
+    font-size: 0.8rem;
+    opacity: 0.8;
+    color: #b06464;
+    text-decoration: none;
     transition: var(--transition);
-}
-
-.wordpress-actions:hover,
-.nextjs-actions:hover {
-    background: var(--glass-bg-hover);
-    border-color: var(--glass-border-hover);
-}
-
-.wordpress-actions h4,
-.nextjs-actions h4 {
-    font-size: 0.9rem;
-    font-weight: 600;
-    margin-bottom: 0.75rem;
-    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    padding: 1rem;
+    border-radius: var(--border-radius-small);
+    background: rgba(255, 107, 107, 0.05);
+    border: 1px solid rgba(255, 107, 107, 0.1);
     display: flex;
+    justify-content: center;
     align-items: center;
 }
 
-.wordpress-actions h4 i {
-    color: #21759b; /* Couleur WordPress */
+.delete-link:hover {
+    color: #ff6b6b;
+    text-decoration: none;
+    background: rgba(255, 107, 107, 0.1);
+    border-color: rgba(255, 107, 107, 0.3);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(255, 107, 107, 0.2);
 }
 
-.nextjs-actions h4 i {
-    color: #61dafb; /* Couleur React/Next.js */
-}
+.delete-link i {
+    margin: 0 !important;
+}   
 
-.action-buttons {
+/* Ajustements pour les boutons dans le header */
+.project-header-right {
     display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
 }
 
-.action-buttons .btn-modern {
-    min-width: auto;
+.project-header-right .btn-modern {
     font-size: 0.8rem;
     padding: 0.5rem 1rem;
     height: auto;
+    min-width: auto;
 }
 
-/* Boutons WordPress spécifiques */
-.wordpress-actions .btn-primary {
-    background: linear-gradient(135deg, #21759b 0%, #0073aa 100%);
-    border: none;
-}
-
-.wordpress-actions .btn-primary:hover {
-    background: linear-gradient(135deg, #0073aa 0%, #005a87 100%);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 15px rgba(33, 117, 155, 0.3);
-}
-
-/* Boutons Next.js spécifiques */
-.nextjs-actions .btn-info {
-    background: linear-gradient(135deg, #61dafb 0%, #21759b 100%);
-    border: none;
-    color: #000;
-}
-
-.nextjs-actions .btn-info:hover {
-    background: linear-gradient(135deg, #4fc3f7 0%, #1976d2 100%);
-    color: #fff;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 15px rgba(97, 218, 251, 0.3);
-}
-
-.nextjs-actions .btn-success {
-    background: linear-gradient(135deg, #00c851 0%, #007e33 100%);
-    border: none;
-}
-
-.nextjs-actions .btn-success:hover {
-    background: linear-gradient(135deg, #00a844 0%, #006629 100%);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 15px rgba(0, 200, 81, 0.3);
-}
-
-.nextjs-actions .btn-warning {
-    background: linear-gradient(135deg, #ff8f00 0%, #ff6f00 100%);
-    border: none;
-    color: #fff;
-}
-
-.nextjs-actions .btn-warning:hover {
-    background: linear-gradient(135deg, #ff6f00 0%, #e65100 100%);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 15px rgba(255, 143, 0, 0.3);
-}
-
-/* Responsive pour les groupes d'actions */
+/* Responsive pour les éléments du header et liens */
 @media (max-width: 768px) {
-    .wordpress-actions,
-    .nextjs-actions {
-        padding: 0.75rem;
-        margin-bottom: 0.75rem;
-    }
-    
-    .wordpress-actions h4,
-    .nextjs-actions h4 {
-        font-size: 0.85rem;
-        margin-bottom: 0.5rem;
-    }
-    
-    .action-buttons {
-        gap: 0.25rem;
-    }
-    
-    .action-buttons .btn-modern {
+    .project-header-right .btn-modern {
         font-size: 0.75rem;
-        padding: 0.4rem 0.6rem;
-        min-width: 48px;
+        padding: 0.4rem 0.8rem;
     }
-} 
 
-.project-wp-nextjs{
+    .delete-link {
+        font-size: 0.8rem;
+        padding: 0.4rem 0.8rem;
+    }
+}
+
+
+/* Suppression des outlines sur les liens */
+a:focus,
+a:active,
+a:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+/* Style pour le bouton npm run dev en cours */
+.btn-service.btn-running {
+    background-color: transparent;
+    border: 1px solid #4ffebd;
+    color: #4ffebd;
+    box-shadow: 0 4px 15px rgba(79, 254, 189, 0.3);
+    cursor: pointer;
+    opacity: 1;
+}
+
+.btn-service.btn-running:hover {
+    background-color: rgba(79, 254, 189, 0.1);
+    border-color: #3ee6a4;
+    color: #3ee6a4;
+    box-shadow: 0 6px 20px rgba(79, 254, 189, 0.4);
+}
+
+.fa-spinner{
+    animation: spin 1.5s linear infinite;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Styles pour le bouton toggle des projets */
+.project-toggle-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: .9rem;
+    padding: 0.5rem;
+    border-radius: 50%;
+    transition: all 0.3s ease;
+    cursor: pointer;
     display: flex;
-    justify-content: space-between;
-    gap: 1rem;
-    margin-bottom: 1rem;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+}
+
+.project-toggle-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--primary-color);
+    transform: scale(1.1);
+}
+
+.project-toggle-btn:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+/* Transition pour l'icône du toggle */
+.project-toggle-btn i {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Message pour les services vides */
+.empty-services {
+    padding: 2rem;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px dashed var(--glass-border);
+    border-radius: var(--border-radius-small);
     margin-top: 1rem;
 }
-.project-wp-nextjs > div{
-    width: 50%;
-    display: flex;
-    gap: 1rem;
-    margin-bottom: 0.5rem;
-    margin-top: 0;
+
+.empty-services p {
+    margin-bottom: 0;
+    color: var(--text-muted);
+    font-size: 0.9rem;
 }
+
+ .stat-item {
+     padding: 1rem;
+     border: 1px solid rgba(255, 255, 255, 0.1);
+     border-radius: 8px;
+     background: rgba(255, 255, 255, 0.05);
+ }
+
+ .stat-value {
+     font-size: 1.2rem;
+     font-weight: bold;
+     margin-bottom: 0.5rem;
+ }
+
+ .stat-label {
+     font-size: 0.9rem;
+     color: var(--text-secondary);
+ }
+
+ .table-imported {
+     background: rgba(40, 167, 69, 0.1);
+     border: 1px solid rgba(40, 167, 69, 0.3);
+     border-radius: 6px;
+     padding: 0.5rem;
+     margin: 0.2rem;
+     font-size: 0.9rem;
+     color: var(--text-primary);
+ }
+
+ .table-imported .table-name {
+     font-weight: bold;
+     color: #28a745;
+ }
+
+ .progress {
+     background-color: rgba(255, 255, 255, 0.1);
+     border: 1px solid rgba(255, 255, 255, 0.2);
+ }
+
+ .progress-bar {
+     background: linear-gradient(90deg, #007bff, #28a745);
+     color: white;
+     font-weight: bold;
+ }
+
+ /* Styles pour le toggle des projets */
+ .project-header {
+     cursor: pointer;
+     user-select: none;
+     display: flex;
+     justify-content: space-between;
+     align-items: center;
+     transition: all 0.3s ease;
+ }
+
+ .project-header-right {
+     display: flex;
+     align-items: center;
+     gap: 1rem;
+ }
+
+ .project-toggle-btn {
+     background: none;
+     border: none;
+     color: var(--text-secondary);
+     font-size: 1rem;
+     border-radius: 50%;
+     transition: all 0.3s ease;
+     cursor: pointer;
+     display: flex;
+     align-items: center;
+     justify-content: center;
+     width: 2rem;
+     height: 2rem;
+ }
+
+ .project-toggle-btn:hover {
+     background: rgba(255, 255, 255, 0.064);
+     color: var(--primary-color);
+     transform: scale(1.1);
+ }
+
+ .project-toggle-btn i {
+     transition: transform 0.3s ease;
+ }
+
+ .project-content {
+     overflow: hidden;
+     transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+     max-height: 1000px;
+     opacity: 1;
+     margin-top: 1rem;
+ }
+
+ .project-content.collapsed {
+     max-height: 0;
+     opacity: 0;
+     margin-top: 0;
+     margin-bottom: 0;
+     padding-top: 0;
+     padding-bottom: 0;
+ }
+
+ /* Animation pour le chevron */
+ .project-toggle-btn:hover i {
+     transform: scale(1.2);
+ }
+
+ /* Style pour indiquer que le header est cliquable */
+ .project-header::before {
+     content: '';
+     position: absolute;
+     top: 0;
+     left: 0;
+     right: 0;
+     bottom: 0;
+     border-radius: 12px;
+     opacity: 0;
+     transition: opacity 0.3s ease;
+     pointer-events: none;
+ }
+
+ .project-item {
+     position: relative;
+ }
+
+ /* Amélioration de l'accessibilité */
+ .project-header:focus-visible {
+     outline: 2px solid var(--primary-color);
+     outline-offset: 2px;
+     border-radius: 12px;
+ }
+
+ .project-toggle-btn:focus-visible {
+     outline: 2px solid var(--primary-color);
+     outline-offset: 2px;
+ }

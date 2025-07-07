@@ -10,8 +10,9 @@ import subprocess
 class PortService:
     """Service pour la gestion des ports des projets"""
     
-    def __init__(self, projects_folder='projets'):
+    def __init__(self, projects_folder='projets', containers_folder='containers'):
         self.projects_folder = projects_folder
+        self.containers_folder = containers_folder
         self.port_range_start = 8080
         self.port_range_end = 9000
     
@@ -46,22 +47,22 @@ class PortService:
         except Exception:
             pass
         
-        # Récupérer les ports des projets existants
+        # Récupérer les ports des projets existants depuis containers/
         used_ports.update(self._get_project_ports())
         
         return used_ports
     
     def _get_project_ports(self):
-        """Récupère les ports des projets existants"""
+        """Récupère les ports des projets existants depuis containers/"""
         used_ports = set()
         
-        if not os.path.exists(self.projects_folder):
+        if not os.path.exists(self.containers_folder):
             return used_ports
         
-        for project in os.listdir(self.projects_folder):
-            project_path = os.path.join(self.projects_folder, project)
+        for project in os.listdir(self.containers_folder):
+            project_path = os.path.join(self.containers_folder, project)
             if os.path.isdir(project_path):
-                # Récupérer tous les fichiers de ports
+                # Récupérer tous les fichiers de ports depuis containers/
                 port_files = ['.port', '.pma_port', '.mailpit_port', '.smtp_port', '.nextjs_port']
                 for port_file in port_files:
                     port_file_path = os.path.join(project_path, port_file)
