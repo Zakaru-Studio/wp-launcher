@@ -3,7 +3,7 @@ default-character-set = utf8mb4
 
 [mysqld]
 # Configuration optimisée pour Docker - Compatible avec 2-4GB RAM
-max_allowed_packet = 128M
+max_allowed_packet = 1G
 innodb_buffer_pool_size = 512M
 innodb_log_file_size = 256M
 innodb_log_buffer_size = 32M

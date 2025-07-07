@@ -83,158 +83,134 @@ function setupSocketIO() {
 }
 
 /**
- * Affiche un loader global avec message
+ * Affiche un loader
  * @param {string} message - Message à afficher
  */
-function showLoader(message = 'Traitement en cours...') {
-    const loader = document.getElementById('global-loader');
-    const loaderMessage = document.getElementById('loader-message');
+function showLoader(message = 'Chargement...') {
+    isLoading = true;
     
-    if (loader && loaderMessage) {
-        loaderMessage.textContent = message;
-        loader.classList.remove('d-none');
-        isLoading = true;
-        
-        // Empêcher le scroll de la page
-        document.body.style.overflow = 'hidden';
+    // Créer le loader s'il n'existe pas
+    let loader = document.getElementById('global-loader');
+    if (!loader) {
+        loader = document.createElement('div');
+        loader.id = 'global-loader';
+        loader.className = 'global-loader';
+        loader.innerHTML = `
+            <div class="loader-content">
+                <div class="spinner"></div>
+                <p class="loader-message">${message}</p>
+            </div>
+        `;
+        document.body.appendChild(loader);
     }
+    
+    // Mettre à jour le message
+    const messageEl = loader.querySelector('.loader-message');
+    if (messageEl) {
+        messageEl.textContent = message;
+    }
+    
+    // Afficher le loader
+    loader.style.display = 'flex';
+    setTimeout(() => {
+        loader.classList.add('visible');
+    }, 10);
 }
 
 /**
- * Cache le loader global
+ * Masque le loader
  */
 function hideLoader() {
-    const loader = document.getElementById('global-loader');
+    isLoading = false;
     
+    const loader = document.getElementById('global-loader');
     if (loader) {
-        loader.classList.add('d-none');
-        isLoading = false;
-        
-        // Restaurer le scroll de la page
-        document.body.style.overflow = '';
+        loader.classList.remove('visible');
+        setTimeout(() => {
+            loader.style.display = 'none';
+        }, 300);
     }
 }
 
 /**
  * Affiche un toast/notification
- * @param {string} message - Message à afficher
- * @param {string} type - Type: success, error, warning, info
+ * @param {string} title - Titre du toast
+ * @param {string} message - Message du toast
+ * @param {string} type - Type de toast (success, error, warning, info)
+ * @param {number} duration - Durée d'affichage en ms (0 = permanent)
  */
-function showToast(message, type = 'success') {
-    const toastContainer = document.getElementById('toast-container') || createToastContainer();
+function showToast(title, message = '', type = 'info', duration = 5000) {
+    const toastContainer = document.getElementById('toast-container');
+    if (!toastContainer) {
+        const container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+        container.style.zIndex = '11';
+        document.body.appendChild(container);
+    }
     
-    const toastId = 'toast-' + Date.now();
-    const icons = {
-        success: 'check-circle',
-        error: 'exclamation-triangle',
-        warning: 'exclamation-circle',
-        info: 'info-circle'
-    };
-    
-    const bgClasses = {
-        success: 'bg-success',
-        error: 'bg-danger',
-        warning: 'bg-warning',
-        info: 'bg-info'
-    };
-    
-    const icon = icons[type] || icons.info;
-    const bgClass = bgClasses[type] || bgClasses.info;
-    
-    const toastHtml = `
-        <div id="${toastId}" class="toast align-items-center text-white ${bgClass} border-0 fade-in" role="alert">
-            <div class="d-flex">
-                <div class="toast-body">
-                    <i class="fas fa-${icon} me-2"></i>
-                    ${message}
-                </div>
-                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+    const toastId = generateUniqueId();
+    const toast = document.createElement('div');
+    toast.id = toastId;
+    toast.className = `toast align-items-center text-white bg-${type} border-0`;
+    toast.setAttribute('role', 'alert');
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                <strong>${title}</strong>
+                ${message ? `<div class="mt-1">${message}</div>` : ''}
             </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
         </div>
     `;
     
-    toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+    toastContainer.appendChild(toast);
     
-    const toastElement = document.getElementById(toastId);
-    const toast = new bootstrap.Toast(toastElement, { 
-        delay: type === 'error' ? 8000 : 4000 
+    // Initialiser le toast Bootstrap
+    const bsToast = new bootstrap.Toast(toast, {
+        autohide: duration > 0,
+        delay: duration
     });
     
-    toast.show();
+    bsToast.show();
     
-    // Supprimer l'élément après fermeture
-    toastElement.addEventListener('hidden.bs.toast', function() {
-        toastElement.remove();
+    // Nettoyer après fermeture
+    toast.addEventListener('hidden.bs.toast', () => {
+        toast.remove();
     });
-}
-
-/**
- * Crée le conteneur de toasts s'il n'existe pas
- */
-function createToastContainer() {
-    const container = document.createElement('div');
-    container.id = 'toast-container';
-    container.className = 'toast-container position-fixed bottom-0 end-0 p-3';
-    container.style.zIndex = '11';
-    document.body.appendChild(container);
-    return container;
-}
-
-/**
- * Ajoute un loader sur un bouton
- * @param {Element} button - Élément bouton
- */
-function addButtonLoader(button) {
-    if (!button) return;
     
-    button.disabled = true;
-    button.classList.add('loading');
-    button.dataset.originalText = button.innerHTML;
+    return toastId;
 }
 
 /**
- * Retire le loader d'un bouton
- * @param {Element} button - Élément bouton
- */
-function removeButtonLoader(button) {
-    if (!button) return;
-    
-    button.disabled = false;
-    button.classList.remove('loading');
-    if (button.dataset.originalText) {
-        button.innerHTML = button.dataset.originalText;
-        delete button.dataset.originalText;
-    }
-}
-
-/**
- * Effectue une requête AJAX avec gestion d'erreurs
+ * Effectue une requête HTTP avec gestion d'erreurs
  * @param {string} url - URL de la requête
- * @param {object} options - Options de la requête
- * @returns {Promise} - Promesse de la réponse
+ * @param {string} method - Méthode HTTP
+ * @param {Object} headers - Headers de la requête
+ * @param {*} body - Corps de la requête
+ * @returns {Promise} - Promesse de réponse
  */
-async function makeRequest(url, options = {}) {
-    const defaultOptions = {
-        method: 'GET',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        ...options
-    };
-    
+async function makeRequest(url, method = 'GET', headers = {}, body = null) {
     try {
-        const response = await fetch(url, defaultOptions);
+        const config = {
+            method,
+            headers: {
+                'Content-Type': 'application/json',
+                ...headers
+            }
+        };
+        
+        if (body && method !== 'GET') {
+            config.body = typeof body === 'string' ? body : JSON.stringify(body);
+        }
+        
+        const response = await fetch(url, config);
         
         if (!response.ok) {
-            throw new Error(`Erreur HTTP: ${response.status}`);
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-            return await response.json();
-        } else {
-            return await response.text();
-        }
+        return await response.json();
     } catch (error) {
         console.error('Erreur requête:', error);
         throw error;
@@ -247,35 +223,35 @@ async function makeRequest(url, options = {}) {
  * @returns {string} - Taille formatée
  */
 function formatFileSize(bytes) {
-    if (bytes === 0) return '0 B';
-    
+    if (bytes === 0) return '0 Bytes';
     const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
 /**
- * Formate une durée en texte lisible
+ * Formate une durée
  * @param {number} seconds - Durée en secondes
  * @returns {string} - Durée formatée
  */
 function formatDuration(seconds) {
-    if (seconds < 60) {
-        return Math.round(seconds) + 's';
-    } else if (seconds < 3600) {
-        return Math.floor(seconds / 60) + 'm ' + Math.round(seconds % 60) + 's';
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    
+    if (hours > 0) {
+        return `${hours}h ${minutes}m ${secs}s`;
+    } else if (minutes > 0) {
+        return `${minutes}m ${secs}s`;
     } else {
-        const hours = Math.floor(seconds / 3600);
-        const minutes = Math.floor((seconds % 3600) / 60);
-        return hours + 'h ' + minutes + 'm';
+        return `${secs}s`;
     }
 }
 
 /**
  * Valide un nom de projet
- * @param {string} name - Nom à valider
+ * @param {string} name - Nom du projet
  * @returns {boolean} - Validité du nom
  */
 function validateProjectName(name) {
@@ -283,8 +259,8 @@ function validateProjectName(name) {
         return false;
     }
     
-    // Lettres, chiffres, tirets et underscores uniquement
-    const regex = /^[a-zA-Z0-9-_]+$/;
+    // Regex pour lettres, chiffres, tirets et underscores
+    const regex = /^[a-zA-Z0-9_-]+$/;
     return regex.test(name.trim());
 }
 
@@ -306,38 +282,25 @@ function validateHostname(hostname) {
 /**
  * Copie du texte dans le presse-papiers
  * @param {string} text - Texte à copier
- * @returns {Promise<boolean>} - Succès de l'opération
+ * @returns {Promise<boolean>} - Succès de la copie
  */
 async function copyToClipboard(text) {
     try {
-        if (navigator.clipboard && window.isSecureContext) {
-            await navigator.clipboard.writeText(text);
-            return true;
-        } else {
-            // Fallback pour les navigateurs plus anciens
-            const textArea = document.createElement('textarea');
-            textArea.value = text;
-            textArea.style.position = 'fixed';
-            textArea.style.left = '-999999px';
-            textArea.style.top = '-999999px';
-            document.body.appendChild(textArea);
-            textArea.focus();
-            textArea.select();
-            const result = document.execCommand('copy');
-            textArea.remove();
-            return result;
-        }
+        await navigator.clipboard.writeText(text);
+        showToast('Copié !', 'Texte copié dans le presse-papiers', 'success', 2000);
+        return true;
     } catch (error) {
         console.error('Erreur copie presse-papiers:', error);
+        showToast('Erreur', 'Impossible de copier dans le presse-papiers', 'error');
         return false;
     }
 }
 
 /**
- * Débounce une fonction
- * @param {Function} func - Fonction à débouncer
- * @param {number} wait - Délai d'attente en ms
- * @returns {Function} - Fonction débouncée
+ * Debounce une fonction
+ * @param {Function} func - Fonction à debouncer
+ * @param {number} wait - Délai en ms
+ * @returns {Function} - Fonction debouncée
  */
 function debounce(func, wait) {
     let timeout;
@@ -390,7 +353,7 @@ function escapeHtml(text) {
  * @returns {string} - ID unique
  */
 function generateUniqueId() {
-    return 'id-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+    return 'id_' + Math.random().toString(36).substr(2, 9);
 }
 
 // Export des fonctions si module ES6

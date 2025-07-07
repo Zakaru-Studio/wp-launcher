@@ -60,13 +60,17 @@ define('FORCE_SSL_ADMIN', false);
 define('COOKIEPATH', '/');
 define('SITECOOKIEPATH', '/');
 
-// Configuration mémoire
-define('WP_MEMORY_LIMIT', '256M');
+// Augmenter les limites d'upload
+ini_set('upload_max_filesize', '10240M');
+ini_set('post_max_size', '10240M');
+ini_set('max_execution_time', '0');
+ini_set('max_input_time', '7200');
+ini_set('memory_limit', '10240M');
 
-// Configuration des uploads
-define('UPLOAD_MAX_FILESIZE', '1G');
-define('POST_MAX_SIZE', '1G');
-define('MAX_EXECUTION_TIME', 600);
+// Définir les constantes WordPress
+define('WP_MEMORY_LIMIT', '10240M');
+define('UPLOAD_MAX_FILESIZE', '10240M');
+define('POST_MAX_SIZE', '10240M');
 
 // Configuration des langues
 define('WPLANG', 'fr_FR');

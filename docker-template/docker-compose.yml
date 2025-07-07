@@ -20,16 +20,16 @@ services:
     mem_limit: 1g
     cpus: '2'
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "wordpress", "-pwordpress"]
-      timeout: 20s
-      retries: 10
-      interval: 10s
-      start_period: 60s
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      timeout: 10s
+      retries: 5
+      interval: 5s
+      start_period: 30s
 
   wordpress:
     depends_on:
       mysql:
-        condition: service_healthy
+        condition: service_started
     image: wordpress:latest
     container_name: PROJECT_NAME_wordpress_1
     restart: unless-stopped
@@ -44,6 +44,8 @@ services:
       WORDPRESS_DEBUG_DISPLAY: 1
     volumes:
       - ./wordpress:/var/www/html
+      - ../../projets/{project_name}/wp-content:/var/www/html/wp-content
+      - ../../projets/{project_name}/wp-config.php:/var/www/html/wp-config.php
       - ./php-config/php.ini:/usr/local/etc/php/conf.d/custom.ini
     networks:
       - wordpress_network
@@ -56,7 +58,7 @@ services:
   phpmyadmin:
     depends_on:
       mysql:
-        condition: service_healthy
+        condition: service_started
     image: phpmyadmin/phpmyadmin:latest
     container_name: PROJECT_NAME_phpmyadmin_1
     restart: unless-stopped
@@ -67,6 +69,8 @@ services:
       PMA_PASSWORD: wordpress
       MYSQL_ROOT_PASSWORD: rootpassword
       PMA_ABSOLUTE_URI: http://192.168.1.21:PROJECT_PMA_PORT/
+    volumes:
+      - ./phpmyadmin-config/php.ini:/usr/local/etc/php/conf.d/phpmyadmin.ini
     networks:
       - wordpress_network
     ports:
@@ -97,7 +101,7 @@ services:
     restart: unless-stopped
     working_dir: /app
     volumes:
-      - ./nextjs:/app
+      - ../../projets/{project_name}/nextjs:/app
     networks:
       - wordpress_network
     ports:

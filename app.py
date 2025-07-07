@@ -37,6 +37,20 @@ ALLOWED_EXTENSIONS = {'zip', 'sql', 'gz'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024 * 1024  # 5GB max
 
+def is_external_domain(hostname):
+    """
+    Vérifie si un hostname est un domaine externe valide
+    (contient un TLD comme .com, .fr, .org, etc.)
+    """
+    external_tlds = [
+        '.com', '.org', '.net', '.edu', '.gov', '.mil', '.int',
+        '.fr', '.de', '.uk', '.it', '.es', '.nl', '.be', '.ch',
+        '.ca', '.au', '.jp', '.cn', '.ru', '.br', '.in', '.mx',
+        '.io', '.co', '.me', '.biz', '.info', '.name', '.pro'
+    ]
+    hostname_lower = hostname.lower()
+    return any(hostname_lower.endswith(tld) for tld in external_tlds)
+
 def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -568,7 +582,8 @@ def create_project():
         else:
             # Nettoyer l'hostname
             project_hostname = project_hostname.lower().replace(' ', '-')
-            if not project_hostname.endswith('.local') and not project_hostname.endswith('.dev'):
+            # Permettre les domaines externes avec TLD valides, sinon ajouter .local
+            if not project_hostname.endswith('.local') and not project_hostname.endswith('.dev') and not is_external_domain(project_hostname):
                 project_hostname += '.local'
         
         print(f"📝 Nom du projet: {project_name}")
@@ -587,19 +602,26 @@ def create_project():
             wp_migrate_archive = None
             print("📁 Aucun fichier WP Migrate - site WordPress vierge")
         
-        # Créer le dossier du projet
-        project_path = os.path.join(PROJECTS_FOLDER, project_name)
-        if os.path.exists(project_path):
+        # ======= NOUVELLE STRUCTURE: CRÉER LES DOSSIERS SÉPARÉS =======
+        
+        # 1. Créer le dossier des fichiers éditables (projets/)
+        editable_path = os.path.join(PROJECTS_FOLDER, project_name)
+        if os.path.exists(editable_path):
             return jsonify({'success': False, 'message': f'Le projet {project_name} existe déjà'})
         
-        print(f"📂 Création du dossier: {project_path}")
-        os.makedirs(project_path, exist_ok=True)
+        print(f"📂 Création du dossier fichiers éditables: {editable_path}")
+        os.makedirs(editable_path, exist_ok=True)
         
-        # Copier le template Docker
+        # 2. Créer le dossier de configuration Docker (containers/)
+        container_path = os.path.join('containers', project_name)
+        print(f"📂 Création du dossier configuration Docker: {container_path}")
+        os.makedirs(container_path, exist_ok=True)
+        
+        # 3. Copier le template Docker vers containers/
         print("📋 Copie du template Docker...")
-        copy_docker_template(project_path)
+        copy_docker_template(container_path)
         
-        # Sauvegarder le fichier uploadé (si fourni)
+        # 4. Sauvegarder le fichier uploadé (si fourni)
         archive_path = None
         
         if wp_migrate_archive and wp_migrate_archive.filename:
@@ -612,9 +634,9 @@ def create_project():
                 raise Exception(f"Erreur: fichier WP Migrate non sauvegardé: {archive_path}")
             print(f"✅ Fichier WP Migrate sauvegardé")
         
-        # Extraire wp-content ou utiliser celui par défaut
-        wp_content_dest = os.path.join(project_path, 'wordpress', 'wp-content')
-        print(f"📦 Configuration wp-content: {wp_content_dest}")
+        # 5. Créer wp-content directement dans projets/ (volume externe)
+        wp_content_dest = os.path.join(editable_path, 'wp-content')
+        print(f"📦 Configuration wp-content externe: {wp_content_dest}")
         os.makedirs(wp_content_dest, exist_ok=True)
         
         # Détecter le type de fichier archive
@@ -647,7 +669,7 @@ def create_project():
             print("📦 Création d'un wp-content vierge avec thèmes par défaut")
             create_default_wp_content(wp_content_dest)
         
-        # Trouver des ports libres automatiquement
+        # 6. Trouver des ports libres automatiquement
         print("🔍 Recherche de ports libres...")
         project_port = find_free_port_for_project()
         pma_port = find_free_port_for_project(project_port + 1)
@@ -660,63 +682,94 @@ def create_project():
             nextjs_port = find_free_port_for_project(pma_port + 1)
             print(f"⚛️ Port Next.js attribué: {nextjs_port}")
         
-        # Modifier le docker-compose.yml avec le bon nom de projet, hostname et ports
-        compose_file = os.path.join(project_path, 'docker-compose.yml')
-        print(f"⚙️ Configuration Docker Compose: {compose_file}")
+        # Ports Mailpit
+        mailpit_port = find_free_port_for_project((nextjs_port or pma_port) + 1)
+        smtp_port = find_free_port_for_project(mailpit_port + 1)
+        print(f"📧 Port Mailpit attribué: {mailpit_port}")
+        print(f"📮 Port SMTP attribué: {smtp_port}")
+        
+        # 7. Configurer le docker-compose.yml avec les ports et chemins
+        print("⚙️ Configuration docker-compose.yml...")
+        compose_file = os.path.join(container_path, 'docker-compose.yml')
+        
         if os.path.exists(compose_file):
             with open(compose_file, 'r') as f:
-                content = f.read()
+                compose_content = f.read()
             
             # Remplacer les placeholders
-            content = content.replace('PROJECT_NAME', project_name)
-            content = content.replace('PROJECT_HOSTNAME', project_hostname)
-            content = content.replace('PROJECT_PORT', str(project_port))
-            content = content.replace('PROJECT_PMA_PORT', str(pma_port))
+            compose_content = compose_content.replace('PROJECT_NAME', project_name)
+            compose_content = compose_content.replace('{project_name}', project_name)
+            compose_content = compose_content.replace('PROJECT_PORT', str(project_port))
+            compose_content = compose_content.replace('PROJECT_PMA_PORT', str(pma_port))
+            compose_content = compose_content.replace('PROJECT_MAILPIT_PORT', str(mailpit_port))
+            compose_content = compose_content.replace('PROJECT_SMTP_PORT', str(smtp_port))
             
-            # Ports pour Mailpit (emails)
-            mailpit_port = find_free_port_for_project(pma_port + 1)
-            smtp_port = find_free_port_for_project(mailpit_port + 1)
-            content = content.replace('PROJECT_MAILPIT_PORT', str(mailpit_port))
-            content = content.replace('PROJECT_SMTP_PORT', str(smtp_port))
-            
-            # Port Next.js si activé
             if enable_nextjs and nextjs_port:
-                content = content.replace('PROJECT_NEXTJS_PORT', str(nextjs_port))
-            else:
-                # Supprimer le service Next.js s'il n'est pas activé
-                import re
-                # Trouver le début du service nextjs jusqu'à la fin des services
-                pattern = r'(\s+nextjs:.*?)(\n\nvolumes:)'
-                content = re.sub(pattern, r'\2', content, flags=re.DOTALL)
+                compose_content = compose_content.replace('PROJECT_NEXTJS_PORT', str(nextjs_port))
             
             with open(compose_file, 'w') as f:
-                f.write(content)
-            print("✅ Docker Compose configuré")
-        else:
-            raise Exception("Fichier docker-compose.yml manquant")
+                f.write(compose_content)
+            print("✅ docker-compose.yml configuré")
         
-        # Sauvegarder les ports attribués
-        port_file = os.path.join(project_path, '.port')
+        # 8. Créer le fichier wp-config.php externe
+        print("📄 Création du wp-config.php externe...")
+        wp_config_template = os.path.join(container_path, 'wordpress', 'wp-config.php')
+        wp_config_dest = os.path.join(editable_path, 'wp-config.php')
+        
+        if os.path.exists(wp_config_template):
+            with open(wp_config_template, 'r') as f:
+                wp_config_content = f.read()
+            
+            # Remplacer les variables
+            wp_config_content = wp_config_content.replace('PROJECT_HOSTNAME', project_hostname)
+            wp_config_content = wp_config_content.replace('PROJECT_PORT', str(project_port))
+            
+            with open(wp_config_dest, 'w') as f:
+                f.write(wp_config_content)
+            print("✅ wp-config.php externe créé")
+        
+        # 9. Sauvegarder les fichiers de configuration dans containers/
+        print("💾 Sauvegarde des fichiers de ports...")
+        
+        port_file = os.path.join(container_path, '.port')
         with open(port_file, 'w') as f:
             f.write(str(project_port))
         print(f"✅ Port WordPress {project_port} sauvegardé")
         
-        pma_port_file = os.path.join(project_path, '.pma_port')
+        pma_port_file = os.path.join(container_path, '.pma_port')
         with open(pma_port_file, 'w') as f:
             f.write(str(pma_port))
         print(f"✅ Port phpMyAdmin {pma_port} sauvegardé")
         
+        # Sauvegarder les ports Mailpit
+        mailpit_port_file = os.path.join(container_path, '.mailpit_port')
+        with open(mailpit_port_file, 'w') as f:
+            f.write(str(mailpit_port))
+        print(f"✅ Port Mailpit {mailpit_port} sauvegardé")
+        
+        smtp_port_file = os.path.join(container_path, '.smtp_port')
+        with open(smtp_port_file, 'w') as f:
+            f.write(str(smtp_port))
+        print(f"✅ Port SMTP {smtp_port} sauvegardé")
+        
+        # Sauvegarder l'hostname dans containers/
+        hostname_file = os.path.join(container_path, '.hostname')
+        with open(hostname_file, 'w') as f:
+            f.write(project_hostname)
+        print(f"✅ Hostname sauvegardé: {project_hostname}")
+        
+        # 10. Configuration Next.js si activé
         if enable_nextjs and nextjs_port:
-            nextjs_port_file = os.path.join(project_path, '.nextjs_port')
+            nextjs_port_file = os.path.join(container_path, '.nextjs_port')
             with open(nextjs_port_file, 'w') as f:
                 f.write(str(nextjs_port))
-            nextjs_enabled_file = os.path.join(project_path, '.nextjs_enabled')
+            nextjs_enabled_file = os.path.join(container_path, '.nextjs_enabled')
             with open(nextjs_enabled_file, 'w') as f:
                 f.write('true')
             print(f"✅ Port Next.js {nextjs_port} sauvegardé")
             
-            # Créer un dossier Next.js basique
-            nextjs_dir = os.path.join(project_path, 'nextjs')
+            # Créer un dossier Next.js dans projets/ (fichiers éditables)
+            nextjs_dir = os.path.join(editable_path, 'nextjs')
             os.makedirs(nextjs_dir, exist_ok=True)
             
             # Créer un package.json basique
@@ -758,32 +811,13 @@ export default function Home() {{
             with open(os.path.join(pages_dir, 'index.js'), 'w') as f:
                 f.write(index_content)
             
-            print("✅ Structure Next.js créée")
+            print("✅ Structure Next.js créée dans projets/")
         
-        # Modifier le wp-config.php avec le bon hostname
-        wp_config_file = os.path.join(project_path, 'wordpress', 'wp-config.php')
-        print(f"⚙️ Configuration WordPress: {wp_config_file}")
-        if os.path.exists(wp_config_file):
-            with open(wp_config_file, 'r') as f:
-                wp_content = f.read()
-            wp_content = wp_content.replace('PROJECT_HOSTNAME', project_hostname)
-            with open(wp_config_file, 'w') as f:
-                f.write(wp_content)
-            print("✅ WordPress configuré avec l'hostname")
-        else:
-            print("⚠️ Fichier wp-config.php manquant, création automatique par WordPress")
-        
-        # Sauvegarder l'hostname dans un fichier de configuration
-        hostname_file = os.path.join(project_path, '.hostname')
-        with open(hostname_file, 'w') as f:
-            f.write(project_hostname)
-        print(f"✅ Hostname sauvegardé: {project_hostname}")
-        
-        # Lancer Docker Compose
+        # 11. Lancer Docker Compose depuis containers/
         print("🐳 Lancement de Docker Compose...")
         result = subprocess.run([
             'docker-compose', 'up', '-d'
-        ], capture_output=True, text=True, cwd=project_path)
+        ], capture_output=True, text=True, cwd=container_path)
         
         if result.returncode != 0:
             raise Exception(f"Erreur Docker Compose: {result.stderr}")
@@ -792,18 +826,26 @@ export default function Home() {{
         
         # Attendre un peu que les conteneurs se lancent
         print("⏳ Attente du démarrage des conteneurs...")
-        time.sleep(45)
+        time.sleep(15)  # Attente initiale
+        
+        # Attente intelligente pour MySQL (jusqu'à 3 minutes max)
+        print("🔍 Vérification que MySQL est prêt...")
+        mysql_ready = intelligent_mysql_wait(f"{project_name}_mysql_1", project_name, max_wait_time=180)
+        if not mysql_ready:
+            print("⚠️ MySQL prend plus de temps que prévu, mais continuons...")
+        else:
+            print("✅ MySQL est prêt pour l'import")
         
         # Importer la base de données ou créer une base vierge
         if db_path:
             print("🗃️ Début import de la base de données...")
-            if not import_database(project_path, db_path, project_name):
+            if not import_database(container_path, db_path, project_name):
                 return jsonify({'success': False, 'message': 'Projet créé mais erreur lors de l\'import de la base de données'})
             else:
                 success_message = f'Projet {project_name} créé avec succès !'
         else:
             print("🗃️ Création d'une base de données WordPress vierge...")
-            if not create_clean_wordpress_database(project_path, project_name):
+            if not create_clean_wordpress_database(container_path, project_name):
                 return jsonify({'success': False, 'message': 'Projet créé mais erreur lors de la création de la base de données'})
             else:
                 success_message = f'Projet {project_name} créé avec succès ! Rendez-vous sur le site pour terminer l\'installation WordPress.'
@@ -827,6 +869,34 @@ export default function Home() {{
                 print("✅ Fichier WP Migrate temporaire supprimé")
         except Exception as e:
             print(f"⚠️ Erreur lors du nettoyage: {e}")
+        
+        # Configuration automatique des permissions WordPress
+        print("")
+        print("🔑 Configuration automatique des permissions WordPress...")
+        try:
+            permissions_script = './setup_wordpress_permissions.sh'
+            if os.path.exists(permissions_script):
+                result = subprocess.run([
+                    'bash', permissions_script, project_name
+                ], capture_output=True, text=True, timeout=300)
+                
+                if result.returncode == 0:
+                    print("✅ Permissions WordPress configurées automatiquement")
+                    print("📋 Script de permissions exécuté avec succès")
+                    # Ajouter une note informative au message de succès
+                    success_message += "\n\n🔑 Permissions configurées automatiquement :\n"
+                    success_message += "• dev-server ajouté au groupe www-data\n"
+                    success_message += "• Accès complet aux fichiers wp-content\n"
+                    success_message += "• Scripts de maintenance créés\n"
+                    success_message += "• Reconnectez-vous SSH pour effet complet des permissions"
+                else:
+                    print(f"⚠️ Erreur lors de la configuration des permissions: {result.stderr}")
+                    success_message += "\n\n⚠️ Permissions partiellement configurées - voir logs du serveur"
+            else:
+                print("⚠️ Script de permissions non trouvé, permissions par défaut appliquées")
+                success_message += "\n\n⚠️ Utilisez ./setup_wordpress_permissions.sh pour configurer les permissions"
+        except Exception as e:
+            print(f"⚠️ Erreur lors de l'exécution du script de permissions: {e}")
         
         return jsonify({'success': True, 'message': success_message})
         
@@ -853,6 +923,54 @@ def list_projects():
                 
                 projects.append(project_name)
     return jsonify(projects)
+
+def auto_fix_missing_mailpit_ports(project_path, project_name):
+    """
+    Corrige automatiquement les fichiers de ports Mailpit manquants 
+    en lisant les ports depuis docker-compose.yml
+    """
+    try:
+        compose_file = os.path.join(project_path, 'docker-compose.yml')
+        if not os.path.exists(compose_file):
+            return False
+        
+        # Lire docker-compose.yml
+        with open(compose_file, 'r') as f:
+            compose_content = f.read()
+        
+        # Extraire les ports Mailpit avec regex
+        import re
+        mailpit_web_match = re.search(r'"0\.0\.0\.0:(\d+):8025"', compose_content)
+        smtp_match = re.search(r'"0\.0\.0\.0:(\d+):1025"', compose_content)
+        
+        if not mailpit_web_match or not smtp_match:
+            return False
+        
+        mailpit_port = mailpit_web_match.group(1)
+        smtp_port = smtp_match.group(1)
+        
+        # Créer les fichiers manquants
+        fixed = False
+        
+        mailpit_port_file = os.path.join(project_path, '.mailpit_port')
+        if not os.path.exists(mailpit_port_file):
+            with open(mailpit_port_file, 'w') as f:
+                f.write(mailpit_port)
+            print(f"✅ Auto-correction: .mailpit_port créé pour {project_name} (port {mailpit_port})")
+            fixed = True
+        
+        smtp_port_file = os.path.join(project_path, '.smtp_port')
+        if not os.path.exists(smtp_port_file):
+            with open(smtp_port_file, 'w') as f:
+                f.write(smtp_port)
+            print(f"✅ Auto-correction: .smtp_port créé pour {project_name} (port {smtp_port})")
+            fixed = True
+        
+        return fixed
+        
+    except Exception as e:
+        print(f"⚠️ Erreur auto-correction Mailpit pour {project_name}: {e}")
+        return False
 
 @app.route('/projects_with_status')
 def list_projects_with_status():
@@ -889,6 +1007,9 @@ def list_projects_with_status():
                     print(f"⚠️ Projet {project_name} non accessible, permissions problématiques")
                     continue
                 
+                # AUTO-CORRECTION: Vérifier et corriger les ports Mailpit manquants
+                auto_fix_missing_mailpit_ports(project_path, project_name)
+                
                 # Créer l'objet Project et utiliser ses propriétés
                 project = Project(project_name, PROJECTS_FOLDER)
                 
@@ -901,6 +1022,8 @@ def list_projects_with_status():
                     'hostname': project.hostname,
                     'port': project.port,
                     'pma_port': project.pma_port,
+                    'mailpit_port': project.mailpit_port,
+                    'smtp_port': project.smtp_port,
                     'nextjs_enabled': project.has_nextjs,
                     'nextjs_port': project.nextjs_port if project.has_nextjs else None
                 })
@@ -1174,46 +1297,134 @@ def delete_project(project_name):
                     print(f"⚠️ Erreur marquage global: {e3}")
                     # Ultime tentative avec sudo sur fichier global
                     try:
-                        subprocess.run(['sudo', 'bash', '-c', f'echo "{project_name}" >> {deleted_projects_file}'], 
-                                     capture_output=True, timeout=5)
+                        deleted_projects_file = os.path.join(PROJECTS_FOLDER, '.deleted_projects')
+                        with open(deleted_projects_file, 'a') as f:
+                            f.write(f"{project_name}\n")
                         print("✅ Projet marqué comme supprimé (fichier global avec sudo)")
                     except Exception as e4:
                         print(f"⚠️ Erreur finale: {e4}")
                         print("❌ Impossible de marquer le projet comme supprimé")
         
-        # ÉTAPE 7: Nettoyage final des ressources Docker orphelines
+        # ÉTAPE 7: Nettoyage final des ressources Docker
         print("🧹 Nettoyage final des ressources Docker...")
         try:
             docker_service.cleanup_unused_resources()
         except Exception as e:
             print(f"⚠️ Erreur nettoyage final: {e}")
         
-        # ÉTAPE 8: Tentative de suppression physique des fichiers (optionnelle)
-        print("📁 Tentative de suppression des fichiers...")
+        # ÉTAPE 7.5: Attente pour stabilisation complète (NOUVEAU)
+        print("⏳ Attente de 10 secondes pour stabilisation complète des processus Docker...")
+        import time
+        time.sleep(10)
+        print("✅ Stabilisation terminée, début suppression physique")
+
+        # ÉTAPE 8: Suppression physique des fichiers (OBLIGATOIRE)
+        print("📁 Suppression physique des fichiers...")
+        project_deleted = False
+        
         try:
-            # Correction des permissions
-            subprocess.run(['sudo', 'chmod', '-R', '777', project.path], 
-                         capture_output=True, text=True, timeout=10)
+            # Utiliser le script de suppression robuste
+            script_path = os.path.join(os.path.dirname(__file__), 'delete_project_robust.sh')
             
-            # Suppression avec sudo
-            result = subprocess.run([
-                'sudo', 'rm', '-rf', project.path
-            ], capture_output=True, text=True, timeout=20)
-            
-            if result.returncode == 0:
-                print("✅ Fichiers supprimés physiquement")
+            if os.path.exists(script_path):
+                print("🔧 Utilisation du script de suppression robuste...")
+                
+                # Augmenter le timeout à 5 minutes et capturer toutes les sorties
+                result = subprocess.run([
+                    'bash', script_path, project_name
+                ], capture_output=True, text=True, timeout=300)  # 5 minutes au lieu de 2 minutes
+                
+                # Vérifier si le dossier a été supprimé (peu importe le code de retour)
+                project_deleted = not os.path.exists(project.path)
+                
+                if project_deleted:
+                    print("✅ Dossier supprimé avec le script robuste")
+                    print(f"📝 Sortie du script: {result.stdout[-500:] if result.stdout else 'Aucune sortie'}")  # Dernières 500 caractères
+                else:
+                    print(f"⚠️ Script robuste terminé mais dossier existe encore")
+                    print(f"📝 Code de retour: {result.returncode}")
+                    print(f"📝 Sortie du script: {result.stdout[-1000:] if result.stdout else 'Aucune sortie'}")
+                    print(f"📝 Erreurs du script: {result.stderr[-1000:] if result.stderr else 'Aucune erreur'}")
+                    
+                    # Même si le script "échoue", tenter une dernière vérification
+                    import time
+                    time.sleep(2)  # Attendre 2 secondes supplémentaires
+                    project_deleted = not os.path.exists(project.path)
+                    if project_deleted:
+                        print("✅ Dossier finalement supprimé après attente supplémentaire")
+                    else:
+                        # MÉTHODE DE FALLBACK FORCÉE (NOUVEAU)
+                        print("🔧 Méthode de fallback : suppression forcée avec sudo...")
+                        try:
+                            # Utiliser la même méthode que le script robuste utilise
+                            print("🔑 Correction des permissions forcée...")
+                            subprocess.run(['sudo', 'chown', '-R', 'dev-server:dev-server', project.path], 
+                                         capture_output=True, text=True, timeout=30)
+                            subprocess.run(['sudo', 'chmod', '-R', '777', project.path], 
+                                         capture_output=True, text=True, timeout=30)
+                            
+                            print("🗑️ Suppression forcée...")
+                            result = subprocess.run(['sudo', 'rm', '-rf', project.path], 
+                                                   capture_output=True, text=True, timeout=60)
+                            
+                            # Vérifier le résultat final
+                            project_deleted = not os.path.exists(project.path)
+                            if project_deleted:
+                                print("✅ Suppression forcée réussie !")
+                            else:
+                                print(f"❌ Suppression forcée échouée: {result.stderr}")
+                        except Exception as fallback_error:
+                            print(f"❌ Erreur méthode de fallback: {fallback_error}")
+                    
             else:
-                print(f"⚠️ Suppression physique échouée: {result.stderr}")
+                print("⚠️ Script robuste non trouvé, utilisation de la méthode de base...")
+                
+                # Méthode de fallback - correction des permissions puis suppression
+                print("🔧 Correction des permissions...")
+                subprocess.run(['sudo', 'chown', '-R', 'dev-server:dev-server', project.path], 
+                             capture_output=True, text=True, timeout=30)
+                subprocess.run(['sudo', 'chmod', '-R', '777', project.path], 
+                             capture_output=True, text=True, timeout=30)
+                
+                print("🗑️ Suppression avec sudo rm...")
+                result = subprocess.run([
+                    'sudo', 'rm', '-rf', project.path
+                ], capture_output=True, text=True, timeout=60)
+                
+                project_deleted = not os.path.exists(project.path)
+                
+                if project_deleted:
+                    print("✅ Dossier supprimé avec la méthode de base")
+                else:
+                    print(f"⚠️ Suppression de base échouée: {result.stderr}")
+                    
+        except subprocess.TimeoutExpired:
+            print("⚠️ Timeout lors de la suppression (plus de 5 minutes)")
+            # Vérifier quand même si le dossier a été supprimé malgré le timeout
+            project_deleted = not os.path.exists(project.path)
+            if project_deleted:
+                print("✅ Dossier supprimé malgré le timeout")
         except Exception as e:
             print(f"⚠️ Erreur suppression physique: {e}")
+            project_deleted = not os.path.exists(project.path)
+            if project_deleted:
+                print("✅ Dossier supprimé malgré l'erreur")
         
-        print(f"✅ Suppression du projet {project_name} terminée")
-        
-        return jsonify({
-            'success': True,
-            'message': 'Projet supprimé avec succès',
-            'details': 'Conteneurs Docker supprimés, volumes nettoyés, projet marqué comme supprimé'
-        })
+        # ÉTAPE 9: Vérification finale et retour du résultat
+        if project_deleted:
+            print(f"✅ Suppression du projet {project_name} terminée avec succès")
+            return jsonify({
+                'success': True,
+                'message': 'Projet supprimé avec succès',
+                'details': 'Conteneurs Docker supprimés, volumes nettoyés, dossier physique supprimé'
+            })
+        else:
+            print(f"⚠️ Suppression du projet {project_name} incomplète - dossier non supprimé")
+            return jsonify({
+                'success': False,
+                'message': 'Suppression partiellement échouée',
+                'details': 'Les conteneurs Docker ont été supprimés mais le dossier existe encore. Le projet est marqué comme supprimé et n\'apparaîtra plus dans l\'interface.'
+            })
         
     except Exception as e:
         print(f"❌ Erreur lors de la suppression du projet: {e}")
@@ -1249,8 +1460,8 @@ def edit_hostname(project_name):
         if new_hostname.startswith('http://') or new_hostname.startswith('https://') or new_hostname.startswith('@'):
             return jsonify({'success': False, 'message': 'Le hostname ne doit pas contenir de protocole (http://) ou de caractères spéciaux (@)'})
         
-        # Vérifier que le hostname se termine par .local ou .dev
-        if not (new_hostname.endswith('.local') or new_hostname.endswith('.dev')):
+        # Permettre les domaines externes avec TLD valides, sinon ajouter .local
+        if not (new_hostname.endswith('.local') or new_hostname.endswith('.dev') or is_external_domain(new_hostname)):
             new_hostname += '.local'
         
         print(f"🌐 Nouveau hostname: {new_hostname}")
@@ -1388,6 +1599,56 @@ def edit_hostname(project_name):
         
     except Exception as e:
         print(f"❌ Erreur lors de l'édition de l'hostname: {e}")
+        return jsonify({'success': False, 'message': f'Erreur: {str(e)}'})
+
+@app.route('/start_project/<project_name>', methods=['POST'])
+def start_project(project_name):
+    """Démarre un projet WordPress"""
+    try:
+        print(f"🚀 Démarrage du projet: {project_name}")
+        
+        # Vérifier que le projet existe
+        project_path = os.path.join(PROJECTS_FOLDER, project_name)
+        if not os.path.exists(project_path):
+            return jsonify({'success': False, 'message': 'Projet non trouvé'})
+        
+        # Utiliser le DockerService pour démarrer les conteneurs
+        success, error = docker_service.start_containers(project_path)
+        
+        if success:
+            print(f"✅ Projet {project_name} démarré avec succès")
+            return jsonify({'success': True, 'message': f'Projet {project_name} démarré avec succès'})
+        else:
+            print(f"❌ Erreur lors du démarrage: {error}")
+            return jsonify({'success': False, 'message': f'Erreur lors du démarrage: {error}'})
+            
+    except Exception as e:
+        print(f"❌ Erreur lors du démarrage du projet: {e}")
+        return jsonify({'success': False, 'message': f'Erreur: {str(e)}'})
+
+@app.route('/stop_project/<project_name>', methods=['POST'])
+def stop_project(project_name):
+    """Arrête un projet WordPress"""
+    try:
+        print(f"🛑 Arrêt du projet: {project_name}")
+        
+        # Vérifier que le projet existe
+        project_path = os.path.join(PROJECTS_FOLDER, project_name)
+        if not os.path.exists(project_path):
+            return jsonify({'success': False, 'message': 'Projet non trouvé'})
+        
+        # Utiliser le DockerService pour arrêter les conteneurs
+        success, error = docker_service.stop_containers(project_path)
+        
+        if success:
+            print(f"✅ Projet {project_name} arrêté avec succès")
+            return jsonify({'success': True, 'message': f'Projet {project_name} arrêté avec succès'})
+        else:
+            print(f"❌ Erreur lors de l'arrêt: {error}")
+            return jsonify({'success': False, 'message': f'Erreur lors de l\'arrêt: {error}'})
+            
+    except Exception as e:
+        print(f"❌ Erreur lors de l'arrêt du projet: {e}")
         return jsonify({'success': False, 'message': f'Erreur: {str(e)}'})
 
 @app.route('/add_nextjs/<project_name>', methods=['POST'])
@@ -1579,6 +1840,155 @@ def remove_nextjs_from_project(project_name):
         
     except Exception as e:
         print(f"❌ Erreur lors de la suppression de Next.js: {e}")
+        return jsonify({'success': False, 'message': f'Erreur: {str(e)}'})
+
+@app.route('/get_wordpress_urls/<project_name>')
+def get_wordpress_urls(project_name):
+    """Récupère les URLs WordPress depuis la base de données"""
+    try:
+        mysql_container = f"{project_name}_mysql_1"
+        
+        # Vérifier que le conteneur MySQL fonctionne
+        result = subprocess.run([
+            'docker', 'ps', '--filter', f'name={mysql_container}', '--filter', 'status=running', '--format', '{{.Names}}'
+        ], capture_output=True, text=True)
+        
+        if mysql_container not in result.stdout:
+            return jsonify({'success': False, 'message': 'Conteneur MySQL non accessible'})
+        
+        # Récupérer les URLs depuis la base de données
+        query_result = subprocess.run([
+            'docker', 'exec', mysql_container, 'mysql', 
+            '-u', 'wordpress', '-pwordpress', 'wordpress',
+            '-e', "SELECT option_name, option_value FROM wp_options WHERE option_name IN ('home', 'siteurl', 'admin_email');"
+        ], capture_output=True, text=True, timeout=10)
+        
+        if query_result.returncode != 0:
+            return jsonify({'success': False, 'message': 'Erreur lors de la requête SQL'})
+        
+        # Parser les résultats
+        lines = query_result.stdout.strip().split('\n')
+        urls = {}
+        
+        for line in lines[1:]:  # Skip header
+            if '\t' in line:
+                parts = line.split('\t')
+                if len(parts) >= 2:
+                    option_name = parts[0]
+                    option_value = parts[1]
+                    urls[option_name] = option_value
+        
+        # URLs par défaut si pas trouvées
+        if not urls.get('home'):
+            urls['home'] = f"http://192.168.1.21:8080"
+        if not urls.get('siteurl'):
+            urls['siteurl'] = urls['home']
+            
+        # Construire les URLs proprement
+        frontend_url = urls.get('home', f"http://192.168.1.21:8080")
+        siteurl = urls.get('siteurl', f"http://192.168.1.21:8080")
+        
+        # Supprimer le slash final s'il existe pour éviter les doubles slashes
+        if siteurl.endswith('/'):
+            siteurl = siteurl.rstrip('/')
+            
+        return jsonify({
+            'success': True,
+            'urls': {
+                'frontend': frontend_url,
+                'admin': siteurl + '/wp-admin',
+                'admin_email': urls.get('admin_email', '')
+            }
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur lors de la récupération des URLs: {e}")
+        return jsonify({'success': False, 'message': f'Erreur: {str(e)}'})
+
+@app.route('/nextjs_npm/<project_name>/<command>', methods=['POST'])
+def nextjs_npm(project_name, command):
+    """Exécute les commandes npm pour Next.js"""
+    try:
+        print(f"🎯 Commande npm {command} pour {project_name}")
+        
+        # Vérifier que le projet existe
+        project_path = os.path.join(PROJECTS_FOLDER, project_name)
+        if not os.path.exists(project_path):
+            return jsonify({'success': False, 'message': 'Projet non trouvé'})
+        
+        nextjs_path = os.path.join(project_path, 'nextjs')
+        if not os.path.exists(nextjs_path):
+            return jsonify({'success': False, 'message': 'Dossier Next.js non trouvé'})
+        
+        nextjs_container = f"{project_name}_nextjs_1"
+        
+        # Vérifier que le conteneur existe
+        result = subprocess.run([
+            'docker', 'ps', '-a', '--filter', f'name={nextjs_container}', '--format', '{{.Names}}'
+        ], capture_output=True, text=True)
+        
+        if nextjs_container not in result.stdout:
+            return jsonify({'success': False, 'message': 'Conteneur Next.js non trouvé'})
+        
+        # Commandes autorisées
+        allowed_commands = {
+            'install': ['npm', 'install'],
+            'dev': ['npm', 'run', 'dev'],
+            'build': ['npm', 'run', 'build'],
+            'start': ['npm', 'start']
+        }
+        
+        if command not in allowed_commands:
+            return jsonify({'success': False, 'message': 'Commande non autorisée'})
+        
+        npm_command = allowed_commands[command]
+        
+        # Pour 'dev', il faut d'abord arrêter le processus existant
+        if command == 'dev':
+            # Arrêter le processus npm dev existant
+            subprocess.run([
+                'docker', 'exec', nextjs_container, 'pkill', '-f', 'npm.*dev'
+            ], capture_output=True)
+            
+            # Exécuter npm run dev en arrière-plan
+            subprocess.run([
+                'docker', 'exec', '-d', nextjs_container, 'sh', '-c', 
+                f"cd /app && {' '.join(npm_command)}"
+            ], capture_output=True, text=True, timeout=30)
+            
+            message = f"npm run dev démarré en arrière-plan"
+            
+        elif command == 'install':
+            # npm install - attendre la fin
+            result = subprocess.run([
+                'docker', 'exec', nextjs_container, 'sh', '-c', 
+                f"cd /app && {' '.join(npm_command)}"
+            ], capture_output=True, text=True, timeout=300)  # 5 minutes max
+            
+            if result.returncode == 0:
+                message = "npm install terminé avec succès"
+            else:
+                return jsonify({'success': False, 'message': f'Erreur npm install: {result.stderr}'})
+                
+        elif command == 'build':
+            # npm run build - attendre la fin
+            result = subprocess.run([
+                'docker', 'exec', nextjs_container, 'sh', '-c', 
+                f"cd /app && {' '.join(npm_command)}"
+            ], capture_output=True, text=True, timeout=600)  # 10 minutes max
+            
+            if result.returncode == 0:
+                message = "npm run build terminé avec succès"
+            else:
+                return jsonify({'success': False, 'message': f'Erreur npm build: {result.stderr}'})
+        
+        print(f"✅ {message}")
+        return jsonify({'success': True, 'message': message})
+        
+    except subprocess.TimeoutExpired:
+        return jsonify({'success': False, 'message': f'Timeout lors de l\'exécution de npm {command}'})
+    except Exception as e:
+        print(f"❌ Erreur npm {command}: {e}")
         return jsonify({'success': False, 'message': f'Erreur: {str(e)}'})
 
 if __name__ == '__main__':

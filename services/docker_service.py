@@ -166,19 +166,42 @@ class DockerService:
         except Exception as e:
             return f"Erreur lors de la récupération des logs: {str(e)}"
     
-    def execute_command_in_container(self, project_name, service_name, command, timeout=30):
-        """Exécute une commande dans un conteneur"""
+    def execute_command(self, command, timeout=30):
+        """Exécute une commande Docker générique"""
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=timeout
+            )
+            
+            return result.returncode == 0, result.stdout, result.stderr
+        except subprocess.TimeoutExpired:
+            return False, "", "Timeout lors de l'exécution de la commande"
+        except Exception as e:
+            return False, "", str(e)
+    
+    def execute_command_in_container(self, project_name, service_name, command, timeout=30, input_data=None):
+        """Exécute une commande dans un conteneur avec support pour input_data"""
         try:
             container_name = f"{project_name}_{service_name}_1"
             
             # Construire la commande docker exec
-            docker_cmd = ['docker', 'exec', container_name] + command
+            docker_cmd = ['docker', 'exec']
+            
+            # Ajouter -i si on a des données d'entrée
+            if input_data:
+                docker_cmd.append('-i')
+            
+            docker_cmd.extend([container_name] + command)
             
             result = subprocess.run(
-                docker_cmd, 
-                capture_output=True, 
-                text=True, 
-                timeout=timeout
+                docker_cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                input=input_data
             )
             
             return result.returncode == 0, result.stdout, result.stderr
@@ -256,4 +279,261 @@ class DockerService:
             return True
         except Exception as e:
             print(f"Erreur lors du nettoyage Docker: {e}")
+            return False 
+
+    def create_project_structure(self, project_path, enable_nextjs=False):
+        """Crée la structure de répertoires et copie les fichiers de configuration"""
+        os.makedirs(project_path, exist_ok=True)
+        
+        # Créer les dossiers de configuration
+        php_config_dir = os.path.join(project_path, 'php-config')
+        mysql_config_dir = os.path.join(project_path, 'mysql-config')
+        phpmyadmin_config_dir = os.path.join(project_path, 'phpmyadmin-config')
+        
+        os.makedirs(php_config_dir, exist_ok=True)
+        os.makedirs(mysql_config_dir, exist_ok=True)
+        os.makedirs(phpmyadmin_config_dir, exist_ok=True)
+        
+        # Copier les fichiers de configuration
+        shutil.copy2('docker-template/php-config/php.ini', php_config_dir)
+        shutil.copy2('docker-template/mysql-config/mysql.cnf', mysql_config_dir)
+        shutil.copy2('docker-template/phpmyadmin-config/php.ini', phpmyadmin_config_dir)
+        
+        # Copier le fichier docker-compose approprié
+        if enable_nextjs:
+            shutil.copy2('docker-template/docker-compose.yml', project_path)
+        else:
+            shutil.copy2('docker-template/docker-compose-no-nextjs.yml', 
+                        os.path.join(project_path, 'docker-compose.yml'))
+        
+        # Créer le dossier WordPress
+        wordpress_dir = os.path.join(project_path, 'wordpress')
+        os.makedirs(wordpress_dir, exist_ok=True)
+        
+        # Copier le fichier wp-config.php template
+        shutil.copy2('docker-template/wordpress/wp-config.php', wordpress_dir)
+        
+        print("✅ [DOCKER_SERVICE] Structure de projet créée")
+        return True
+        
+    def fix_wordpress_permissions(self, project_name):
+        """Corrige les permissions WordPress pour un projet"""
+        try:
+            project_path = os.path.join('projets', project_name)
+            wordpress_path = os.path.join(project_path, 'wordpress')
+            
+            if not os.path.exists(wordpress_path):
+                print(f"⚠️ [DOCKER_SERVICE] Dossier WordPress non trouvé: {wordpress_path}")
+                return False
+            
+            print(f"🔧 [DOCKER_SERVICE] Correction des permissions WordPress pour {project_name}")
+            
+            # Changer le propriétaire vers www-data
+            result = subprocess.run([
+                'sudo', 'chown', '-R', 'www-data:www-data', wordpress_path
+            ], capture_output=True, text=True, timeout=60)
+            
+            if result.returncode != 0:
+                print(f"❌ [DOCKER_SERVICE] Erreur chown: {result.stderr}")
+                return False
+            
+            # Permissions des dossiers (755)
+            result = subprocess.run([
+                'sudo', 'find', wordpress_path, '-type', 'd', '-exec', 'chmod', '755', '{}', ';'
+            ], capture_output=True, text=True, timeout=60)
+            
+            if result.returncode != 0:
+                print(f"❌ [DOCKER_SERVICE] Erreur chmod dossiers: {result.stderr}")
+                return False
+            
+            # Permissions des fichiers (644)
+            result = subprocess.run([
+                'sudo', 'find', wordpress_path, '-type', 'f', '-exec', 'chmod', '644', '{}', ';'
+            ], capture_output=True, text=True, timeout=60)
+            
+            if result.returncode != 0:
+                print(f"❌ [DOCKER_SERVICE] Erreur chmod fichiers: {result.stderr}")
+                return False
+            
+            # Permissions spéciales pour wp-content/uploads (775)
+            uploads_path = os.path.join(wordpress_path, 'wp-content', 'uploads')
+            if os.path.exists(uploads_path):
+                result = subprocess.run([
+                    'sudo', 'find', uploads_path, '-type', 'd', '-exec', 'chmod', '775', '{}', ';'
+                ], capture_output=True, text=True, timeout=60)
+                
+                if result.returncode != 0:
+                    print(f"❌ [DOCKER_SERVICE] Erreur chmod uploads: {result.stderr}")
+                    return False
+            
+            # Permissions spéciales pour wp-config.php (600)
+            wp_config_path = os.path.join(wordpress_path, 'wp-config.php')
+            if os.path.exists(wp_config_path):
+                result = subprocess.run([
+                    'sudo', 'chmod', '600', wp_config_path
+                ], capture_output=True, text=True, timeout=30)
+                
+                if result.returncode != 0:
+                    print(f"❌ [DOCKER_SERVICE] Erreur chmod wp-config: {result.stderr}")
+                    return False
+            
+            print(f"✅ [DOCKER_SERVICE] Permissions WordPress corrigées pour {project_name}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ [DOCKER_SERVICE] Erreur lors de la correction des permissions: {e}")
+            return False
+    
+    def fix_dev_permissions(self, project_name):
+        """Applique les permissions de développement pour wp-config.php et wp-content"""
+        try:
+            project_path = os.path.join('projets', project_name)
+            wordpress_path = os.path.join(project_path, 'wordpress')
+            
+            if not os.path.exists(wordpress_path):
+                print(f"⚠️ [DOCKER_SERVICE] Dossier WordPress non trouvé: {wordpress_path}")
+                return False
+            
+            print(f"🔧 [DOCKER_SERVICE] Application des permissions de développement pour {project_name}")
+            
+            # Permissions pour wp-config.php
+            wp_config_path = os.path.join(wordpress_path, 'wp-config.php')
+            if os.path.exists(wp_config_path):
+                result = subprocess.run([
+                    'sudo', 'chown', 'dev-server:dev-server', wp_config_path
+                ], capture_output=True, text=True, timeout=30)
+                
+                if result.returncode != 0:
+                    print(f"❌ [DOCKER_SERVICE] Erreur chown wp-config: {result.stderr}")
+                    return False
+                
+                result = subprocess.run([
+                    'sudo', 'chmod', '644', wp_config_path
+                ], capture_output=True, text=True, timeout=30)
+                
+                if result.returncode != 0:
+                    print(f"❌ [DOCKER_SERVICE] Erreur chmod wp-config: {result.stderr}")
+                    return False
+                
+                print(f"✅ [DOCKER_SERVICE] wp-config.php: dev-server:dev-server (644)")
+            
+            # Permissions pour wp-content
+            wp_content_path = os.path.join(wordpress_path, 'wp-content')
+            if os.path.exists(wp_content_path):
+                result = subprocess.run([
+                    'sudo', 'chown', '-R', 'dev-server:dev-server', wp_content_path
+                ], capture_output=True, text=True, timeout=60)
+                
+                if result.returncode != 0:
+                    print(f"❌ [DOCKER_SERVICE] Erreur chown wp-content: {result.stderr}")
+                    return False
+                
+                # Permissions des dossiers (755)
+                result = subprocess.run([
+                    'sudo', 'find', wp_content_path, '-type', 'd', '-exec', 'chmod', '755', '{}', ';'
+                ], capture_output=True, text=True, timeout=60)
+                
+                if result.returncode != 0:
+                    print(f"❌ [DOCKER_SERVICE] Erreur chmod dossiers wp-content: {result.stderr}")
+                    return False
+                
+                # Permissions des fichiers (644)
+                result = subprocess.run([
+                    'sudo', 'find', wp_content_path, '-type', 'f', '-exec', 'chmod', '644', '{}', ';'
+                ], capture_output=True, text=True, timeout=60)
+                
+                if result.returncode != 0:
+                    print(f"❌ [DOCKER_SERVICE] Erreur chmod fichiers wp-content: {result.stderr}")
+                    return False
+                
+                # Permissions spéciales pour uploads (775)
+                uploads_path = os.path.join(wp_content_path, 'uploads')
+                if os.path.exists(uploads_path):
+                    result = subprocess.run([
+                        'sudo', 'chmod', '775', uploads_path
+                    ], capture_output=True, text=True, timeout=30)
+                    
+                    if result.returncode != 0:
+                        print(f"❌ [DOCKER_SERVICE] Erreur chmod uploads: {result.stderr}")
+                        return False
+                    
+                    result = subprocess.run([
+                        'sudo', 'find', uploads_path, '-type', 'd', '-exec', 'chmod', '775', '{}', ';'
+                    ], capture_output=True, text=True, timeout=60)
+                    
+                    if result.returncode != 0:
+                        print(f"❌ [DOCKER_SERVICE] Erreur chmod dossiers uploads: {result.stderr}")
+                        return False
+                    
+                    result = subprocess.run([
+                        'sudo', 'find', uploads_path, '-type', 'f', '-exec', 'chmod', '664', '{}', ';'
+                    ], capture_output=True, text=True, timeout=60)
+                    
+                    if result.returncode != 0:
+                        print(f"❌ [DOCKER_SERVICE] Erreur chmod fichiers uploads: {result.stderr}")
+                        return False
+                
+                print(f"✅ [DOCKER_SERVICE] wp-content: dev-server:dev-server (755/644)")
+            
+            print(f"✅ [DOCKER_SERVICE] Permissions de développement appliquées pour {project_name}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ [DOCKER_SERVICE] Erreur lors de l'application des permissions dev: {e}")
+            return False
+    
+    def register_hostname(self, project_name, hostname, port):
+        """Enregistre un hostname dans le DNS local et reverse proxy"""
+        try:
+            # Appeler le script d'intégration Python
+            result = subprocess.run([
+                'python3', 'integrate_hostname_automation.py', 
+                'add', project_name, hostname, str(port)
+            ], capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0:
+                print(f"✅ [DOCKER_SERVICE] Hostname {hostname} enregistré")
+                return True
+            else:
+                print(f"⚠️ [DOCKER_SERVICE] Erreur lors de l'enregistrement hostname: {result.stderr}")
+                return False
+        except Exception as e:
+            print(f"⚠️ [DOCKER_SERVICE] Erreur hostname: {e}")
+            return False
+    
+    def unregister_hostname(self, project_name, hostname):
+        """Désenregistre un hostname du DNS local et reverse proxy"""
+        try:
+            # Appeler le script d'intégration Python
+            result = subprocess.run([
+                'python3', 'integrate_hostname_automation.py', 
+                'remove', project_name, hostname
+            ], capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0:
+                print(f"✅ [DOCKER_SERVICE] Hostname {hostname} désenregistré")
+                return True
+            else:
+                print(f"⚠️ [DOCKER_SERVICE] Erreur lors du désenregistrement hostname: {result.stderr}")
+                return False
+        except Exception as e:
+            print(f"⚠️ [DOCKER_SERVICE] Erreur hostname: {e}")
+            return False
+    
+    def sync_all_hostnames(self):
+        """Synchronise tous les hostnames avec le DNS local et reverse proxy"""
+        try:
+            result = subprocess.run([
+                'python3', 'integrate_hostname_automation.py', 
+                'sync'
+            ], capture_output=True, text=True, timeout=60)
+            
+            if result.returncode == 0:
+                print("✅ [DOCKER_SERVICE] Synchronisation hostnames terminée")
+                return True
+            else:
+                print(f"⚠️ [DOCKER_SERVICE] Erreur lors de la synchronisation: {result.stderr}")
+                return False
+        except Exception as e:
+            print(f"⚠️ [DOCKER_SERVICE] Erreur synchronisation: {e}")
             return False 

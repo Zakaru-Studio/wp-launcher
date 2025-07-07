@@ -7,6 +7,7 @@
 let uploadZone = null;
 let fileInput = null;
 let currentFile = null;
+let uploadSetupDone = false; // Flag pour éviter la double initialisation
 
 /**
  * Initialisation de la zone d'upload
@@ -15,8 +16,9 @@ document.addEventListener('DOMContentLoaded', function() {
     uploadZone = document.getElementById('upload-zone');
     fileInput = document.getElementById('wp_migrate_archive');
     
-    if (uploadZone && fileInput) {
+    if (uploadZone && fileInput && !uploadSetupDone) {
         setupUploadZone();
+        uploadSetupDone = true;
     }
 });
 
@@ -24,8 +26,23 @@ document.addEventListener('DOMContentLoaded', function() {
  * Configuration de la zone d'upload
  */
 function setupUploadZone() {
+    // Nettoyer les événements existants pour éviter les doublons
+    const newUploadZone = uploadZone.cloneNode(true);
+    uploadZone.parentNode.replaceChild(newUploadZone, uploadZone);
+    uploadZone = newUploadZone;
+    
+    // Récupérer à nouveau les références après le clonage
+    fileInput = document.getElementById('wp_migrate_archive');
+    
     // Événements de la zone d'upload
-    uploadZone.addEventListener('click', () => fileInput.click());
+    uploadZone.addEventListener('click', function(e) {
+        // Éviter de déclencher le clic si on clique sur le bouton de suppression
+        if (e.target.closest('.btn-danger')) {
+            return;
+        }
+        fileInput.click();
+    });
+    
     uploadZone.addEventListener('dragover', handleDragOver);
     uploadZone.addEventListener('dragleave', handleDragLeave);
     uploadZone.addEventListener('drop', handleDrop);
@@ -137,10 +154,10 @@ function validateFile(file) {
         return false;
     }
     
-    // Vérifier la taille (5GB max)
-    const maxSize = 5 * 1024 * 1024 * 1024; // 5GB
+    // Vérifier la taille (8GB max)
+    const maxSize = 8 * 1024 * 1024 * 1024; // 8GB
     if (file.size > maxSize) {
-        showUploadError('Fichier trop volumineux. Maximum 5GB.');
+        showUploadError('Fichier trop volumineux. Taille maximale : 8GB');
         return false;
     }
     

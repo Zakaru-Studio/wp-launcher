@@ -74,28 +74,18 @@ function deleteProject(projectName) {
 }
 
 /**
- * Confirme et exécute la suppression d'un projet
- * @param {string} projectName - Nom du projet
+ * Confirme et execute la suppression d'un projet
+ * @param {string} projectName - Nom du projet à supprimer
  */
 async function confirmDeleteProject(projectName) {
     try {
-        const confirmButton = document.getElementById('confirm-delete');
-        confirmButton.classList.add('loading');
+        // Fermer le modal de confirmation
+        bootstrap.Modal.getInstance(document.getElementById('deleteModal')).hide();
         
-        // Trouver et marquer visuellement l'élément comme étant supprimé
-        const projectElements = document.querySelectorAll('.project-item');
-        let projectElement = null;
-        
-        for (const element of projectElements) {
-            const title = element.querySelector('.project-title');
-            if (title && title.textContent.trim() === projectName) {
-                projectElement = element;
-                break;
-            }
-        }
-        
-        // Marquer visuellement l'élément comme étant supprimé
+        // Trouver et désactiver visuellement le projet
+        const projectElement = document.querySelector(`[data-project="${projectName}"]`);
         if (projectElement) {
+            // Effet visuel de suppression en cours
             projectElement.style.opacity = '0.5';
             projectElement.style.pointerEvents = 'none';
             projectElement.style.transition = 'all 0.3s ease';
@@ -128,64 +118,58 @@ async function confirmDeleteProject(projectName) {
             projectElement.appendChild(overlay);
         }
         
+        // Appel API pour supprimer le projet
         const response = await makeRequest(`/delete_project/${projectName}`, 'DELETE');
         
         if (response.success) {
             showSuccess(`Projet ${projectName} supprimé avec succès`);
-            bootstrap.Modal.getInstance(document.getElementById('deleteModal')).hide();
             
-            // Animation de suppression de l'élément
+            // Animation de disparition du projet
             if (projectElement) {
                 projectElement.style.transform = 'scale(0.8)';
                 projectElement.style.opacity = '0';
                 
+                // Supprimer l'élément après l'animation
                 setTimeout(() => {
-                    // Supprimer l'élément du DOM
                     if (projectElement.parentNode) {
                         projectElement.parentNode.removeChild(projectElement);
                     }
-                    
-                    // Recharger la liste complète pour s'assurer de la cohérence
+                    // Recharger la liste complète pour être sûr
                     loadProjects();
                 }, 300);
             } else {
-                // Si l'élément n'a pas été trouvé, recharger directement
+                // Recharger immédiatement si l'élément n'est pas trouvé
                 loadProjects();
             }
         } else {
-            showError(response.message || 'Erreur lors de la suppression');
-            
-            // Restaurer l'élément en cas d'erreur
+            // Erreur - restaurer l'état visuel
             if (projectElement) {
                 projectElement.style.opacity = '1';
                 projectElement.style.pointerEvents = 'auto';
-                const overlay = projectElement.querySelector('div[style*="position: absolute"]');
+                const overlay = projectElement.querySelector('[style*="position: absolute"]');
                 if (overlay) {
                     overlay.remove();
                 }
             }
+            showError(response.message || 'Erreur lors de la suppression');
         }
     } catch (error) {
         console.error('Erreur suppression:', error);
         showError('Erreur lors de la suppression du projet');
         
-        // Restaurer l'élément en cas d'erreur
-        const projectElements = document.querySelectorAll('.project-item');
-        for (const element of projectElements) {
-            const title = element.querySelector('.project-title');
-            if (title && title.textContent.trim() === projectName) {
-                element.style.opacity = '1';
-                element.style.pointerEvents = 'auto';
-                const overlay = element.querySelector('div[style*="position: absolute"]');
-                if (overlay) {
-                    overlay.remove();
-                }
-                break;
+        // Restaurer l'état visuel en cas d'erreur
+        const projectElement = document.querySelector(`[data-project="${projectName}"]`);
+        if (projectElement) {
+            projectElement.style.opacity = '1';
+            projectElement.style.pointerEvents = 'auto';
+            const overlay = projectElement.querySelector('[style*="position: absolute"]');
+            if (overlay) {
+                overlay.remove();
             }
         }
-    } finally {
-        const confirmButton = document.getElementById('confirm-delete');
-        confirmButton.classList.remove('loading');
+        
+        // Recharger la liste en cas d'erreur pour être sûr
+        loadProjects();
     }
 }
 
@@ -211,7 +195,7 @@ function editHostname(projectName, currentHostname) {
 }
 
 /**
- * Sauvegarde le nouvel hostname
+ * Sauvegarde le nouvel hostname et met à jour le reverse proxy
  * @param {string} projectName - Nom du projet
  * @param {string} newHostname - Nouvel hostname
  */
@@ -241,33 +225,34 @@ async function saveHostname(projectName, newHostname) {
 }
 
 /**
- * Fonction pour mettre à jour la base de données
+ * Fonction pour importer une base de données avec le système ultra-rapide
  * @param {string} projectName - Nom du projet
  */
-function updateDatabase(projectName) {
+function fastImportDatabase(projectName) {
     const modal = new bootstrap.Modal(document.getElementById('updateDbModal'));
     
     // Gérer la soumission du formulaire
     const form = document.getElementById('update-db-form');
     form.onsubmit = (e) => {
         e.preventDefault();
-        uploadDatabase(projectName, new FormData(form));
+        fastUploadDatabase(projectName, new FormData(form));
     };
     
     modal.show();
 }
 
 /**
- * Upload et import de la base de données
+ * Upload et import ultra-rapide de la base de données
  * @param {string} projectName - Nom du projet
  * @param {FormData} formData - Données du formulaire
  */
-async function uploadDatabase(projectName, formData) {
+async function fastUploadDatabase(projectName, formData) {
     try {
         const submitButton = document.querySelector('#update-db-form button[type="submit"]');
         submitButton.classList.add('loading');
         
-        const response = await fetch(`/update_database/${projectName}`, {
+        // Utiliser la nouvelle route ultra-rapide
+        const response = await fetch(`/fast_import_database/${projectName}`, {
             method: 'POST',
             body: formData
         });
@@ -275,14 +260,24 @@ async function uploadDatabase(projectName, formData) {
         const result = await response.json();
         
         if (result.success) {
-            showSuccess('Import de base de données démarré');
+            showSuccess('Import ultra-rapide de base de données démarré');
             bootstrap.Modal.getInstance(document.getElementById('updateDbModal')).hide();
+            
+            // Afficher des informations sur les performances
+            if (result.estimated_speed) {
+                showToast(
+                    'Import optimisé',
+                    `Méthode sélectionnée: ${result.method}<br>Vitesse estimée: ${result.estimated_speed}`,
+                    'info',
+                    5000
+                );
+            }
         } else {
-            showError(result.message || 'Erreur lors de l\'import');
+            showError(result.message || 'Erreur lors de l\'import ultra-rapide');
         }
     } catch (error) {
-        console.error('Erreur import DB:', error);
-        showError('Erreur lors de l\'import de la base de données');
+        console.error('Erreur import DB ultra-rapide:', error);
+        showError('Erreur lors de l\'import ultra-rapide de la base de données');
     } finally {
         const submitButton = document.querySelector('#update-db-form button[type="submit"]');
         submitButton.classList.remove('loading');
@@ -295,16 +290,14 @@ async function uploadDatabase(projectName, formData) {
  */
 async function addNextjs(projectName) {
     try {
-        const button = document.querySelector(`button[onclick="addNextjs('${projectName}')"]`);
-        if (button) {
-            button.classList.add('loading');
-            button.innerHTML = '';
+        if (!confirm(`Ajouter Next.js au projet ${projectName} ?`)) {
+            return;
         }
-
+        
         const response = await makeRequest(`/add_nextjs/${projectName}`, 'POST');
         
         if (response.success) {
-            showSuccess(`Next.js ajouté au projet ${projectName}`);
+            showSuccess(`Next.js ajouté au projet ${projectName} sur le port ${response.nextjs_port}`);
             loadProjects(); // Recharger la liste
         } else {
             showError(response.message || 'Erreur lors de l\'ajout de Next.js');
@@ -321,12 +314,10 @@ async function addNextjs(projectName) {
  */
 async function removeNextjs(projectName) {
     try {
-        const button = document.querySelector(`button[onclick="removeNextjs('${projectName}')"]`);
-        if (button) {
-            button.classList.add('loading');
-            button.innerHTML = '';
+        if (!confirm(`Supprimer Next.js du projet ${projectName} ?`)) {
+            return;
         }
-
+        
         const response = await makeRequest(`/remove_nextjs/${projectName}`, 'POST');
         
         if (response.success) {
@@ -402,6 +393,313 @@ async function copyToClipboard(text) {
 }
 
 /**
+ * Import d'un fichier SQL local trouvé dans les uploads
+ * @param {string} projectName - Nom du projet
+ */
+async function importLocalSql(projectName) {
+    try {
+        // Confirmer l'action
+        if (!confirm(`Importer le fichier SQL local le plus récent pour le projet ${projectName} ?`)) {
+            return;
+        }
+        
+        showLoader('Import du fichier SQL local en cours...');
+        
+        const response = await fetch(`/import_local_sql/${projectName}`, {
+            method: 'POST'
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showSuccess(`Fichier SQL local importé avec succès: ${result.file_imported}`);
+            // Rafraîchir la liste des projets
+            setTimeout(loadProjects, 2000);
+        } else {
+            showError(result.message || 'Erreur lors de l\'import du fichier SQL local');
+        }
+    } catch (error) {
+        console.error('Erreur import SQL local:', error);
+        showError('Erreur lors de l\'import du fichier SQL local');
+    } finally {
+        hideLoader();
+    }
+}
+
+/**
+ * Lister les fichiers SQL locaux disponibles
+ */
+async function listLocalSqlFiles() {
+    try {
+        const response = await fetch('/list_local_sql');
+        const result = await response.json();
+        
+        if (result.success) {
+            console.log('Fichiers SQL locaux:', result.files);
+            return result.files;
+        } else {
+            console.error('Erreur lors de la liste des fichiers SQL:', result.message);
+            return [];
+        }
+    } catch (error) {
+        console.error('Erreur liste SQL local:', error);
+        return [];
+    }
+}
+
+// Variables globales pour le suivi du progrès
+let currentImportProject = null;
+let importProgressModal = null;
+let importedTablesSet = new Set();
+
+// Initialisation du suivi du progrès
+function initProgressTracking() {
+    // Écouter les événements de progrès d'import
+    socket.on('fast_import_progress', function(data) {
+        updateImportProgress(data);
+    });
+    
+    // Référence au modal de progrès
+    importProgressModal = new bootstrap.Modal(document.getElementById('importProgressModal'));
+}
+
+// Mettre à jour le progrès d'import
+function updateImportProgress(data) {
+    if (data.project !== currentImportProject) {
+        return; // Ignorer si ce n'est pas le bon projet
+    }
+    
+    const progressBar = document.getElementById('import-progress-bar');
+    const progressPercentage = document.getElementById('progress-percentage');
+    const progressMessage = document.getElementById('progress-message');
+    const progressSpinner = document.getElementById('progress-spinner');
+    const progressSuccessIcon = document.getElementById('progress-success-icon');
+    const progressErrorIcon = document.getElementById('progress-error-icon');
+    const progressCloseBtn = document.getElementById('progress-close-btn');
+    const progressFooter = document.getElementById('progress-footer');
+    const tablesContainer = document.getElementById('tables-container');
+    const importedTablesDiv = document.getElementById('imported-tables');
+    const importStats = document.getElementById('import-stats');
+    
+    // Mettre à jour la barre de progrès
+    progressBar.style.width = data.progress + '%';
+    progressPercentage.textContent = data.progress + '%';
+    progressMessage.textContent = data.message;
+    
+    // Gérer les différents états
+    switch (data.status) {
+        case 'starting':
+        case 'analyzing':
+        case 'analyzed':
+        case 'connecting':
+        case 'dropping':
+        case 'optimizing':
+        case 'copying':
+            progressSpinner.style.display = 'block';
+            progressSuccessIcon.style.display = 'none';
+            progressErrorIcon.style.display = 'none';
+            break;
+            
+        case 'importing':
+            progressSpinner.style.display = 'block';
+            progressSuccessIcon.style.display = 'none';
+            progressErrorIcon.style.display = 'none';
+            
+            // Afficher les tables importées
+            if (data.table && !importedTablesSet.has(data.table)) {
+                importedTablesSet.add(data.table);
+                addImportedTable(data.table);
+                tablesContainer.style.display = 'block';
+            }
+            break;
+            
+        case 'finalizing':
+            progressSpinner.style.display = 'block';
+            progressSuccessIcon.style.display = 'none';
+            progressErrorIcon.style.display = 'none';
+            break;
+            
+        case 'completed':
+            progressSpinner.style.display = 'none';
+            progressSuccessIcon.style.display = 'block';
+            progressErrorIcon.style.display = 'none';
+            progressCloseBtn.style.display = 'block';
+            progressFooter.style.display = 'block';
+            
+            // Arrêter l'animation de la barre de progrès
+            progressBar.classList.remove('progress-bar-animated');
+            break;
+            
+        case 'error':
+            progressSpinner.style.display = 'none';
+            progressSuccessIcon.style.display = 'none';
+            progressErrorIcon.style.display = 'block';
+            progressCloseBtn.style.display = 'block';
+            progressFooter.style.display = 'block';
+            
+            // Changer la couleur de la barre de progrès en rouge
+            progressBar.classList.remove('progress-bar-animated');
+            progressBar.style.background = '#dc3545';
+            break;
+    }
+    
+    console.log('📊 Progrès import:', data);
+}
+
+// Ajouter une table importée à l'affichage
+function addImportedTable(tableName) {
+    const importedTablesDiv = document.getElementById('imported-tables');
+    const tableElement = document.createElement('div');
+    tableElement.className = 'col-auto';
+    tableElement.innerHTML = `
+        <div class="table-imported">
+            <div class="table-name">${tableName}</div>
+        </div>
+    `;
+    importedTablesDiv.appendChild(tableElement);
+}
+
+// Afficher les statistiques finales
+function showImportStats(details) {
+    const importStats = document.getElementById('import-stats');
+    const statDuration = document.getElementById('stat-duration');
+    const statSpeed = document.getElementById('stat-speed');
+    const statSize = document.getElementById('stat-size');
+    const statTables = document.getElementById('stat-tables');
+    
+    if (details) {
+        statDuration.textContent = details.duration || '-';
+        statSpeed.textContent = details.speed || '-';
+        statSize.textContent = details.file_size || '-';
+        statTables.textContent = details.tables_imported || '-';
+        
+        importStats.style.display = 'block';
+    }
+}
+
+// Réinitialiser le modal de progrès
+function resetProgressModal() {
+    const progressBar = document.getElementById('import-progress-bar');
+    const progressPercentage = document.getElementById('progress-percentage');
+    const progressMessage = document.getElementById('progress-message');
+    const progressSpinner = document.getElementById('progress-spinner');
+    const progressSuccessIcon = document.getElementById('progress-success-icon');
+    const progressErrorIcon = document.getElementById('progress-error-icon');
+    const progressCloseBtn = document.getElementById('progress-close-btn');
+    const progressFooter = document.getElementById('progress-footer');
+    const tablesContainer = document.getElementById('tables-container');
+    const importedTablesDiv = document.getElementById('imported-tables');
+    const importStats = document.getElementById('import-stats');
+    
+    // Réinitialiser les éléments
+    progressBar.style.width = '0%';
+    progressBar.style.background = '';
+    progressBar.classList.add('progress-bar-animated');
+    progressPercentage.textContent = '0%';
+    progressMessage.textContent = 'Initialisation...';
+    
+    // Réinitialiser les icônes
+    progressSpinner.style.display = 'block';
+    progressSuccessIcon.style.display = 'none';
+    progressErrorIcon.style.display = 'none';
+    progressCloseBtn.style.display = 'none';
+    progressFooter.style.display = 'none';
+    
+    // Réinitialiser les tables
+    tablesContainer.style.display = 'none';
+    importedTablesDiv.innerHTML = '';
+    importedTablesSet.clear();
+    
+    // Réinitialiser les statistiques
+    importStats.style.display = 'none';
+}
+
+// Fonction d'import ultra-rapide
+function fastImportDatabase(projectName) {
+    currentImportProject = projectName;
+    
+    // Réinitialiser et afficher le modal de progrès
+    resetProgressModal();
+    importProgressModal.show();
+    
+    // Cacher le modal d'import de fichier
+    const updateModal = bootstrap.Modal.getInstance(document.getElementById('updateDbModal'));
+    if (updateModal) {
+        updateModal.hide();
+    }
+    
+    // Préparer les données du formulaire
+    const formData = new FormData();
+    const fileInput = document.getElementById('db-file');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        showToast('Veuillez sélectionner un fichier', 'error');
+        importProgressModal.hide();
+        return;
+    }
+    
+    formData.append('db_file', file);
+    
+    // Envoyer la requête d'import
+    fetch(`/fast_import_database/${projectName}`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            console.log('✅ Import réussi:', data);
+            
+            // Afficher les statistiques finales
+            if (data.details) {
+                showImportStats(data.details);
+            }
+            
+            // Recharger la liste des projets après un délai
+            setTimeout(() => {
+                loadProjects();
+            }, 2000);
+            
+        } else {
+            console.error('❌ Erreur import:', data.message);
+            showToast(data.message, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('❌ Erreur réseau:', error);
+        showToast('Erreur lors de l\'import: ' + error.message, 'error');
+    });
+}
+
+// Fonction pour ouvrir le modal d'import
+function openImportModal(projectName) {
+    document.getElementById('update-db-form').dataset.projectName = projectName;
+    const modal = new bootstrap.Modal(document.getElementById('updateDbModal'));
+    modal.show();
+}
+
+// Modifier la fonction updateDatabase pour utiliser le nouveau système
+function updateDatabase(projectName) {
+    console.log('📋 Ouverture du modal d\'import pour:', projectName);
+    openImportModal(projectName);
+}
+
+// Gestionnaire du formulaire d'import
+document.getElementById('update-db-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const projectName = this.dataset.projectName;
+    if (!projectName) {
+        showToast('Erreur: nom du projet manquant', 'error');
+        return;
+    }
+    
+    // Lancer l'import ultra-rapide
+    fastImportDatabase(projectName);
+});
+
+/**
  * Gestion de la soumission du formulaire de création
  */
 document.addEventListener('DOMContentLoaded', function() {
@@ -437,3 +735,29 @@ if (typeof refreshProjects === 'undefined') {
         }
     };
 } 
+
+// Initialiser le suivi du progrès au chargement de la page
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🚀 Initialisation du suivi du progrès...');
+    
+    // Attendre que SocketIO soit prêt
+    if (typeof socket !== 'undefined') {
+        initProgressTracking();
+    } else {
+        // Réessayer après un délai si socket n'est pas encore défini
+        setTimeout(() => {
+            if (typeof socket !== 'undefined') {
+                initProgressTracking();
+            }
+        }, 1000);
+    }
+    
+    // Gérer la fermeture du modal de progrès
+    const progressModal = document.getElementById('importProgressModal');
+    if (progressModal) {
+        progressModal.addEventListener('hidden.bs.modal', function() {
+            currentImportProject = null;
+            importedTablesSet.clear();
+        });
+    }
+}); 

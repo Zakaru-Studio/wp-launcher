@@ -75,7 +75,6 @@ body::before {
 .container-fluid {
     max-width: 1400px;
     margin: 0 auto;
-    padding: 2rem;
 }
 
 /* Header amélioré avec justify-content space-between */
@@ -358,7 +357,11 @@ body::before {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 1.5rem;
+}
+
+.project-header-info{
+        display: flex;
+        gap: 1.5rem;
 }
 
 .project-title {
@@ -368,12 +371,50 @@ body::before {
     margin-bottom: 0.5rem;
 }
 
-.project-subtitle {
+.project-hostname {
     color: var(--text-muted);
     font-size: 0.9rem;
     display: flex;
     align-items: center;
     gap: 0.5rem;
+}
+
+.project-hostname a{
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color:#4facfe;
+}
+
+/* Styles pour l'IP + port sous le hostname */
+.project-ip-port {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+    font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
+}
+
+.ip-port-link {
+    color: #4facfe;
+    text-decoration: none;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    background: rgba(79, 172, 254, 0.1);
+    border: 1px solid rgba(79, 172, 254, 0.2);
+    transition: var(--transition);
+    font-weight: 500;
+}
+
+.ip-port-link:hover {
+    color: #00f2fe;
+    background: rgba(79, 172, 254, 0.2);
+    border-color: rgba(79, 172, 254, 0.4);
+    text-decoration: none;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(79, 172, 254, 0.2);
 }
 
 .project-status {
@@ -1228,3 +1269,187 @@ body.import-progress-visible {
     outline: 2px solid rgba(102, 126, 234, 0.3);
     outline-offset: 2px;
 } 
+
+/* Service principal (WordPress via hostname) */
+.service-main {
+    border: 2px solid #28a745;
+    background: linear-gradient(135deg, rgba(40, 167, 69, 0.1) 0%, rgba(40, 167, 69, 0.05) 100%);
+    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.2);
+    position: relative;
+}
+
+.service-main::before {
+    content: "⭐";
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: #28a745;
+    color: white;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    z-index: 1;
+}
+
+.service-main:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 20px rgba(40, 167, 69, 0.3);
+}
+
+.service-main .service-port {
+    color: #28a745;
+    font-weight: 600;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .service-main::before {
+        top: -5px;
+        right: -5px;
+        width: 16px;
+        height: 16px;
+        font-size: 10px;
+    }
+} 
+
+/* Nouveaux styles pour les groupes de boutons WordPress et Next.js */
+.wordpress-actions,
+.nextjs-actions {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--border-radius-small);
+    padding: 1rem;
+    margin-bottom: 1rem;
+    backdrop-filter: blur(10px);
+    transition: var(--transition);
+}
+
+.wordpress-actions:hover,
+.nextjs-actions:hover {
+    background: var(--glass-bg-hover);
+    border-color: var(--glass-border-hover);
+}
+
+.wordpress-actions h4,
+.nextjs-actions h4 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+}
+
+.wordpress-actions h4 i {
+    color: #21759b; /* Couleur WordPress */
+}
+
+.nextjs-actions h4 i {
+    color: #61dafb; /* Couleur React/Next.js */
+}
+
+.action-buttons {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.action-buttons .btn-modern {
+    min-width: auto;
+    font-size: 0.8rem;
+    padding: 0.5rem 1rem;
+    height: auto;
+}
+
+/* Boutons WordPress spécifiques */
+.wordpress-actions .btn-primary {
+    background: linear-gradient(135deg, #21759b 0%, #0073aa 100%);
+    border: none;
+}
+
+.wordpress-actions .btn-primary:hover {
+    background: linear-gradient(135deg, #0073aa 0%, #005a87 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 15px rgba(33, 117, 155, 0.3);
+}
+
+/* Boutons Next.js spécifiques */
+.nextjs-actions .btn-info {
+    background: linear-gradient(135deg, #61dafb 0%, #21759b 100%);
+    border: none;
+    color: #000;
+}
+
+.nextjs-actions .btn-info:hover {
+    background: linear-gradient(135deg, #4fc3f7 0%, #1976d2 100%);
+    color: #fff;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 15px rgba(97, 218, 251, 0.3);
+}
+
+.nextjs-actions .btn-success {
+    background: linear-gradient(135deg, #00c851 0%, #007e33 100%);
+    border: none;
+}
+
+.nextjs-actions .btn-success:hover {
+    background: linear-gradient(135deg, #00a844 0%, #006629 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 15px rgba(0, 200, 81, 0.3);
+}
+
+.nextjs-actions .btn-warning {
+    background: linear-gradient(135deg, #ff8f00 0%, #ff6f00 100%);
+    border: none;
+    color: #fff;
+}
+
+.nextjs-actions .btn-warning:hover {
+    background: linear-gradient(135deg, #ff6f00 0%, #e65100 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 15px rgba(255, 143, 0, 0.3);
+}
+
+/* Responsive pour les groupes d'actions */
+@media (max-width: 768px) {
+    .wordpress-actions,
+    .nextjs-actions {
+        padding: 0.75rem;
+        margin-bottom: 0.75rem;
+    }
+    
+    .wordpress-actions h4,
+    .nextjs-actions h4 {
+        font-size: 0.85rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .action-buttons {
+        gap: 0.25rem;
+    }
+    
+    .action-buttons .btn-modern {
+        font-size: 0.75rem;
+        padding: 0.4rem 0.6rem;
+        min-width: 48px;
+    }
+} 
+
+.project-wp-nextjs{
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    margin-top: 1rem;
+}
+.project-wp-nextjs > div{
+    width: 50%;
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+    margin-top: 0;
+}

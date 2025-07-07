@@ -276,25 +276,159 @@ const posts = await response.json();
         return True
     
     def process_wp_migrate_archive(self, archive_path, upload_folder):
-        """Traite une archive WP Migrate Pro"""
+        """Traite une archive WP Migrate Pro ou WP Umbrella"""
         temp_extract_path = os.path.join(upload_folder, f'temp_extract_{self.name}')
         os.makedirs(temp_extract_path, exist_ok=True)
         
-        # Extraire l'archive
-        extract_zip(archive_path, temp_extract_path)
+        print(f"📦 [EXTRACT] Début de l'extraction de l'archive: {archive_path}")
+        print(f"📦 [EXTRACT] Répertoire temporaire: {temp_extract_path}")
         
-        # Vérifier la structure WP Migrate Pro
-        expected_wp_content = os.path.join(temp_extract_path, 'app', 'public', 'wp-content')
-        expected_sql = os.path.join(temp_extract_path, 'app', 'sql', 'local.sql')
+        # Extraire l'archive
+        try:
+            extract_zip(archive_path, temp_extract_path)
+            print(f"✅ [EXTRACT] Archive extraite avec succès")
+        except Exception as e:
+            print(f"❌ [EXTRACT] Erreur lors de l'extraction: {e}")
+            raise e
+        
+        # Vérifier le contenu extrait
+        extracted_items = os.listdir(temp_extract_path)
+        print(f"📦 [EXTRACT] Nombre d'éléments extraits: {len(extracted_items)}")
+        
+        # Afficher la structure pour débug
+        print("🔍 [EXTRACT] Structure de l'archive extraite:")
+        for root, dirs, files in os.walk(temp_extract_path):
+            level = root.replace(temp_extract_path, '').count(os.sep)
+            indent = ' ' * 2 * level
+            print(f"{indent}{os.path.basename(root)}/")
+            subindent = ' ' * 2 * (level + 1)
+            for file in files[:5]:  # Limiter l'affichage
+                print(f"{subindent}{file}")
+            if len(files) > 5:
+                print(f"{subindent}... et {len(files) - 5} autres fichiers")
         
         wp_content_path = None
         db_path = None
         
-        if os.path.exists(expected_wp_content):
-            wp_content_path = expected_wp_content
+        # Chercher wp-content et fichier SQL dans toute l'arborescence
+        print("🔍 [SEARCH] Recherche de wp-content et fichiers SQL...")
         
-        if os.path.exists(expected_sql):
-            db_path = expected_sql
+        for root, dirs, files in os.walk(temp_extract_path):
+            # Chercher wp-content
+            if 'wp-content' in dirs:
+                potential_wp_content = os.path.join(root, 'wp-content')
+                print(f"🔍 [SEARCH] wp-content trouvé à: {potential_wp_content}")
+                
+                # Vérifier que c'est bien un wp-content valide
+                themes_dir = os.path.join(potential_wp_content, 'themes')
+                plugins_dir = os.path.join(potential_wp_content, 'plugins')
+                uploads_dir = os.path.join(potential_wp_content, 'uploads')
+                
+                themes_exists = os.path.exists(themes_dir)
+                plugins_exists = os.path.exists(plugins_dir)
+                uploads_exists = os.path.exists(uploads_dir)
+                
+                print(f"🔍 [SEARCH] Validation wp-content:")
+                print(f"   - themes/: {'✅' if themes_exists else '❌'}")
+                print(f"   - plugins/: {'✅' if plugins_exists else '❌'}")
+                print(f"   - uploads/: {'✅' if uploads_exists else '❌'}")
+                
+                if themes_exists or plugins_exists:
+                    wp_content_path = potential_wp_content
+                    print(f"✅ [SEARCH] wp-content validé: {wp_content_path}")
+                    
+                    # Compter les éléments
+                    if themes_exists:
+                        theme_count = len([d for d in os.listdir(themes_dir) if os.path.isdir(os.path.join(themes_dir, d))])
+                        print(f"📊 [SEARCH] Nombre de thèmes: {theme_count}")
+                    
+                    if plugins_exists:
+                        plugin_count = len([d for d in os.listdir(plugins_dir) if os.path.isdir(os.path.join(plugins_dir, d))])
+                        print(f"📊 [SEARCH] Nombre de plugins: {plugin_count}")
+                    
+                    break
+                else:
+                    print(f"⚠️ [SEARCH] wp-content non valide (pas de themes/ ni plugins/)")
+            
+            # Chercher fichiers SQL
+            for file in files:
+                if file.endswith('.sql'):
+                    potential_sql = os.path.join(root, file)
+                    print(f"🔍 [SEARCH] Fichier SQL trouvé: {potential_sql}")
+                    print(f"📊 [SEARCH] Taille: {os.path.getsize(potential_sql)} bytes")
+                    
+                    # Vérifier que le fichier SQL contient du contenu WordPress
+                    try:
+                        with open(potential_sql, 'r', encoding='utf-8') as f:
+                            first_lines = f.read(1000).lower()
+                            keywords = ['wordpress', 'wp_options', 'wp_posts', 'create table', 'insert into']
+                            found_keywords = [kw for kw in keywords if kw in first_lines]
+                            
+                            print(f"🔍 [SEARCH] Analyse du contenu SQL:")
+                            print(f"   - Mots-clés trouvés: {found_keywords}")
+                            
+                            if found_keywords:
+                                db_path = potential_sql
+                                print(f"✅ [SEARCH] Fichier SQL WordPress validé: {db_path}")
+                                break
+                            else:
+                                print(f"⚠️ [SEARCH] Fichier SQL ne semble pas être WordPress")
+                    except UnicodeDecodeError:
+                        print(f"⚠️ [SEARCH] Erreur UTF-8, test avec latin-1...")
+                        try:
+                            with open(potential_sql, 'r', encoding='latin-1') as f:
+                                first_lines = f.read(1000).lower()
+                                keywords = ['wordpress', 'wp_options', 'wp_posts', 'create table', 'insert into']
+                                found_keywords = [kw for kw in keywords if kw in first_lines]
+                                
+                                print(f"🔍 [SEARCH] Analyse du contenu SQL (latin-1):")
+                                print(f"   - Mots-clés trouvés: {found_keywords}")
+                                
+                                if found_keywords:
+                                    db_path = potential_sql
+                                    print(f"✅ [SEARCH] Fichier SQL WordPress validé (latin-1): {db_path}")
+                                    break
+                                else:
+                                    print(f"⚠️ [SEARCH] Fichier SQL ne semble pas être WordPress (latin-1)")
+                        except Exception as e:
+                            print(f"❌ [SEARCH] Erreur lors de l'analyse du fichier SQL: {e}")
+                            continue
+                    except Exception as e:
+                        print(f"❌ [SEARCH] Erreur lors de l'analyse du fichier SQL: {e}")
+                        continue
+        
+        # Si on n'a pas trouvé wp-content, chercher des variantes
+        if not wp_content_path:
+            print("⚠️ [SEARCH] wp-content standard non trouvé, recherche de variantes...")
+            for root, dirs, files in os.walk(temp_extract_path):
+                # Chercher des dossiers qui contiennent themes/ et plugins/
+                has_themes = 'themes' in dirs
+                has_plugins = 'plugins' in dirs
+                has_uploads = 'uploads' in dirs
+                
+                if has_themes or has_plugins:
+                    print(f"🔍 [SEARCH] Dossier alternatif trouvé: {root}")
+                    print(f"   - themes/: {'✅' if has_themes else '❌'}")
+                    print(f"   - plugins/: {'✅' if has_plugins else '❌'}")
+                    print(f"   - uploads/: {'✅' if has_uploads else '❌'}")
+                    
+                    # Ce dossier semble être un wp-content
+                    wp_content_path = root
+                    print(f"✅ [SEARCH] wp-content alternatif validé: {wp_content_path}")
+                    break
+        
+        # Résumé final
+        print("📋 [SUMMARY] Résumé de l'extraction:")
+        if wp_content_path:
+            print(f"✅ [SUMMARY] wp-content trouvé: {wp_content_path}")
+        else:
+            print(f"❌ [SUMMARY] wp-content non trouvé dans l'archive")
+        
+        if db_path:
+            print(f"✅ [SUMMARY] Base de données trouvée: {db_path}")
+            print(f"📊 [SUMMARY] Taille du fichier SQL: {os.path.getsize(db_path)} bytes")
+        else:
+            print(f"❌ [SUMMARY] Aucune base de données trouvée dans l'archive")
         
         return {
             'wp_content_path': wp_content_path,
