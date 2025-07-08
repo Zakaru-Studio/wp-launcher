@@ -367,15 +367,4 @@ function startNextjsContainerTask(projectName) {
     return taskManager.createTask(taskId, taskName, 'start_nextjs', projectName);
 }
 
-// Démarrer une tâche de configuration de domaine
-function startDomainConfigTask(projectName) {
-    const taskId = taskManager.generateTaskId('config_domain', projectName);
-    const taskName = 'Configuration domaine';
-    
-    if (taskManager.hasRunningTask('config_domain', projectName)) {
-        console.log(`Une tâche de configuration domaine est déjà en cours pour ce projet`);
-        return null;
-    }
-    
-    return taskManager.createTask(taskId, taskName, 'config_domain', projectName);
-} 
+ 

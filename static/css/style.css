@@ -92,6 +92,14 @@ body::before {
     border-radius: 0 0 var(--border-radius) var(--border-radius);
 }
 
+.modal-dialog{
+    height: 100%;
+     display: flex;
+        justify-content: center;
+        align-items: center;
+        transform: translateY(-10%) !important;
+}
+
 .header-top {
     display: flex;
     justify-content: space-between;
@@ -132,7 +140,6 @@ body::before {
     -webkit-text-fill-color: transparent;
     background-clip: text;
     text-shadow: 0 0 20px rgba(102, 126, 234, 0.3);
-    letter-spacing: -0.5px; 
 }
 
 .header-right {
@@ -813,7 +820,7 @@ body::before {
     color: white;
     border: none;
     border-radius: 8px;
-    padding: 0.6rem 1.4rem;
+    padding: 0.5rem 1.1rem;
     font-weight: 500;
     font-size: 0.87rem;
     transition: var(--transition);

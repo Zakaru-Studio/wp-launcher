@@ -8,10 +8,11 @@
     <div class="header-top">
         <div class="header-left">
             <h1 class="header-title">WordPress Launcher</h1>
-            <span class="app-version" id="app-version">v{{ git_version }}</span>
+            <span class="app-version" id="app-version">v0.2.0</span>
         </div>
         <div class="header-right">
-            <button class="add-site-btn" onclick="showCreateProjectModal()"><i class="fas fa-plus"></i> Ajouter un site</button>
+            <button class="add-site-btn" onclick="showCreateProjectModal()"><i class="fas fa-plus"></i> Ajouter un
+                site</button>
         </div>
     </div>
     <div class="header-bottom">
@@ -45,8 +46,8 @@
                 <div class="stat-subtitle">Headless</div>
             </div>
         </div>
-        
-      
+
+
     </div>
 </header>
 
@@ -123,16 +124,7 @@
                                 <div class="form-text">Lettres, chiffres, tirets et underscores uniquement</div>
                             </div>
 
-                            <!-- Hostname (optionnel) -->
-                            <div class="form-group">
-                                <label for="project_hostname" class="form-label">
-                                    <i class="fas fa-globe me-1"></i>
-                                    Hostname (optionnel)
-                                </label>
-                                <input type="text" class="form-control" id="project_hostname" name="project_hostname"
-                                    placeholder="mon-site.local">
-                                <div class="form-text">Sera généré automatiquement si vide</div>
-                            </div>
+
 
                             <!-- Option Next.js -->
                             <div class="form-group">
@@ -233,36 +225,7 @@
     </div>
 </div>
 
-<!-- Modal d'édition d'hostname -->
-<div class="modal fade" id="hostnameModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <i class="fas fa-globe me-2"></i>
-                    Modifier l'hostname
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <form id="hostname-form">
-                <div class="modal-body">
-                    <div class="form-group">
-                        <label for="new-hostname" class="form-label">Nouvel hostname</label>
-                        <input type="text" class="form-control" id="new-hostname" name="new_hostname" required>
-                        <div class="form-text">Format: example.local ou example.dev</div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn-modern btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                    <button type="submit" class="btn-modern btn-start">
-                        <i class="fas fa-save me-2"></i>
-                        Sauvegarder
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
+
 
 <!-- Modal mise à jour DB -->
 <div class="modal fade" id="updateDbModal" tabindex="-1">
@@ -595,17 +558,17 @@
             const response = await fetch('/projects_with_status');
             const data = await response.json();
             projects = data.projects || [];
-            
+
             // Trier les projets par ordre alphabétique croissant
             projects.sort((a, b) => a.name.localeCompare(b.name));
-            
+
             // Mettre à jour les données pour le filtrage
             if (typeof updateProjectsList === 'function') {
                 updateProjectsList(projects);
             }
-            
+
             updateStats();
-            
+
             // Si le système de filtrage n'est pas disponible, utiliser le rendu classique
             if (typeof filterAndRenderProjects === 'function') {
                 filterAndRenderProjects();
@@ -614,7 +577,7 @@
             } else {
                 renderProjects();
             }
-            
+
             // Vérifier le statut des boutons npm run dev après le rendu
             setTimeout(() => checkNextjsDevStatus(), 1500);
         } catch (error) {
@@ -639,7 +602,7 @@
     // Fonction pour rendre les projets (fallback si le système de filtrage n'est pas disponible)
     function renderProjects() {
         const container = document.getElementById('projects-grid');
-        
+
         if (projects.length === 0) {
             container.innerHTML = `
                 <div class="project-item fade-in">
@@ -652,19 +615,19 @@
             `;
             return;
         }
-        
+
         container.innerHTML = projects.map(project => createProjectHTML(project)).join('');
-        
+
         // Ajouter les animations
         const items = container.querySelectorAll('.project-item');
         items.forEach((item, index) => {
             item.style.animationDelay = `${index * 0.1}s`;
             item.classList.add('slide-in');
         });
-        
+
         // Restaurer l'état des projets (collapsed/expanded)
         setTimeout(() => restoreProjectStates(), 100);
-        
+
         // Vérifier le statut des boutons npm run dev
         setTimeout(() => checkNextjsDevStatus(), 1000);
     }
@@ -674,13 +637,12 @@
         // Services disponibles
         const services = [];
         if (project.status === 'active') {
-            // WordPress via reverse proxy hostname
-            const hostname = project.hostname || `${project.name}.local`;
+            // WordPress via IP:port direct
             services.push({
                 name: 'WordPress',
                 icon: 'fab fa-wordpress',
-                url: `http://${hostname}`,
-                display: hostname,
+                url: `http://192.168.1.21:${project.port}`,
+                display: `:${project.port}`,
                 isMain: true,
                 type: 'wordpress',
                 buttons: [
@@ -688,19 +650,13 @@
                         text: 'Site',
                         icon: 'fas fa-globe',
                         class: 'btn-primary',
-                        action: `openWordPressFrontend('${project.name}')`
+                        action: `window.open('http://192.168.1.21:${project.port}', '_blank')`
                     },
                     {
                         text: 'Admin',
-                        icon: 'fas fa-user-shield', 
+                        icon: 'fas fa-user-shield',
                         class: 'btn-primary',
-                        action: `openWordPressAdmin('${project.name}')`
-                    },
-                    {
-                        text: 'Hostname',
-                        icon: 'fas fa-edit',
-                        class: 'btn-secondary',
-                        action: `editHostname('${project.name}', '${project.hostname || project.name + '.local'}')`
+                        action: `window.open('http://192.168.1.21:${project.port}/wp-admin', '_blank')`
                     }
                 ]
             });
@@ -812,10 +768,7 @@
                             <i class="fas fa-chevron-down"></i>
                         </button>
                     </div>    
-                    <div class="project-hostname">
-                        <i class="fas fa-globe me-1"></i>
-                       <a href="http://${project.hostname || project.name + '.local'}" target="_blank" onclick="event.stopPropagation();"> ${project.hostname || project.name + '.local'}</a>
-                    </div>
+
                     ${project.status === 'active' ? `
                         <div class="project-ip-port">
                             <i class="fas fa-external-link-alt me-1"></i>
@@ -903,12 +856,12 @@
         const projectContent = document.getElementById(`project-content-${projectName}`);
         const projectItem = document.querySelector(`[data-project="${projectName}"]`);
         const toggleBtn = projectItem.querySelector('.project-toggle-btn i');
-        
+
         if (!projectContent) return;
-        
+
         // Toggle la classe collapsed
         projectContent.classList.toggle('collapsed');
-        
+
         // Animer l'icône du bouton toggle
         if (projectContent.classList.contains('collapsed')) {
             toggleBtn.style.transform = 'rotate(0deg)';
@@ -920,23 +873,23 @@
             saveProjectState(projectName, 'expanded');
         }
     }
-    
+
     // Sauvegarder l'état des projets dans le localStorage
     function saveProjectState(projectName, state) {
         const projectStates = JSON.parse(localStorage.getItem('projectStates') || '{}');
         projectStates[projectName] = state;
         localStorage.setItem('projectStates', JSON.stringify(projectStates));
     }
-    
+
     // Restaurer l'état des projets depuis le localStorage
     function restoreProjectStates() {
         const projectStates = JSON.parse(localStorage.getItem('projectStates') || '{}');
-        
+
         Object.entries(projectStates).forEach(([projectName, state]) => {
             const projectContent = document.getElementById(`project-content-${projectName}`);
             const projectItem = document.querySelector(`[data-project="${projectName}"]`);
             const toggleBtn = projectItem?.querySelector('.project-toggle-btn i');
-            
+
             if (projectContent && state === 'collapsed') {
                 projectContent.classList.add('collapsed');
                 if (toggleBtn) {
@@ -952,21 +905,25 @@
     }
 
     // Chargement initial
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', function () {
         loadProjects();
-        
+
         // Rafraîchir automatiquement toutes les 30 secondes
         setInterval(loadProjects, 30000);
-        
+
         // Vérifier le statut des boutons npm run dev toutes les 10 secondes
         setInterval(checkNextjsDevStatus, 10000);
-        
+
         // Initialiser la gestion des fichiers
         initFileUpload();
-        
+
         // Initialiser la gestion du formulaire
         initCreateProjectForm();
+
+
     });
+
+
 
     // Initialisation de l'upload de fichiers
     function initFileUpload() {
@@ -1076,7 +1033,7 @@
             submitButton.disabled = true;
 
             // Mettre à jour la tâche
-            taskManager.updateTask(task.id, { 
+            taskManager.updateTask(task.id, {
                 message: `Création du projet "${projectName}"...`,
                 details: `Nom: ${projectName}`,
                 progress: 10
@@ -1091,7 +1048,7 @@
                 .then(data => {
                     if (data.success) {
                         taskManager.completeTask(task.id, 'Projet créé avec succès !', true);
-                        
+
                         // Fermer le modal
                         const modal = bootstrap.Modal.getInstance(document.getElementById('createProjectModal'));
                         modal.hide();
@@ -1468,57 +1425,22 @@
         // Le reste du code existant...
     }
 
-    // Nouvelles fonctions pour WordPress et Next.js
-    async function openWordPressFrontend(projectName) {
-        try {
-            const response = await fetch(`/get_wordpress_urls/${projectName}`);
-            const data = await response.json();
 
-            if (data.success) {
-                window.open(data.urls.frontend, '_blank');
-            } else {
-                // URL par défaut si échec
-                window.open(`http://192.168.1.21:8080`, '_blank');
-            }
-        } catch (error) {
-            console.error('Erreur récupération URL frontend:', error);
-            // URL par défaut en cas d'erreur
-            window.open(`http://192.168.1.21:8080`, '_blank');
-        }
-    }
-
-    async function openWordPressAdmin(projectName) {
-        try {
-            const response = await fetch(`/get_wordpress_urls/${projectName}`);
-            const data = await response.json();
-
-            if (data.success) {
-                window.open(data.urls.admin, '_blank');
-            } else {
-                // URL par défaut si échec
-                window.open(`http://192.168.1.21:8080/wp-admin`, '_blank');
-            }
-        } catch (error) {
-            console.error('Erreur récupération URL admin:', error);
-            // URL par défaut en cas d'erreur
-            window.open(`http://192.168.1.21:8080/wp-admin`, '_blank');
-        }
-    }
 
     async function runNpmCommand(projectName, command) {
         // Créer une tâche dans le gestionnaire
         const task = startNpmTask(projectName, command);
         if (!task) return; // Tâche déjà en cours
-        
+
         const button = event.target.closest('button');
         const originalText = button.innerHTML;
-        
+
         // Vérifier si npm run dev est déjà en cours
         if (command === 'dev') {
             try {
                 const statusResponse = await fetch(`/check_nextjs_status/${projectName}`);
                 const statusData = await statusResponse.json();
-                
+
                 if (statusData.dev_running) {
                     taskManager.completeTask(task.id, 'npm run dev était déjà en cours', false);
                     showError('npm run dev est déjà en cours d\'exécution');
@@ -1526,23 +1448,23 @@
                 }
             } catch (error) {
                 console.error('Erreur lors de la vérification du statut:', error);
-                taskManager.updateTask(task.id, { 
+                taskManager.updateTask(task.id, {
                     message: 'Vérification du statut...',
-                    details: error.message 
+                    details: error.message
                 });
             }
         }
-        
+
         // Changer l'état du bouton
         button.disabled = true;
         button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>En cours...';
-        
+
         // Mettre à jour la tâche
-        taskManager.updateTask(task.id, { 
+        taskManager.updateTask(task.id, {
             message: `Exécution de npm ${command}...`,
             progress: 25
         });
-        
+
         try {
             const response = await fetch(`/nextjs_npm/${projectName}/${command}`, {
                 method: 'POST',
@@ -1550,13 +1472,13 @@
                     'Content-Type': 'application/json'
                 }
             });
-            
+
             const data = await response.json();
-            
+
             if (data.success) {
                 // Compléter la tâche avec succès
                 taskManager.completeTask(task.id, `✅ ${data.message}`, true);
-                
+
                 // Messages spécifiques selon la commande
                 if (command === 'dev') {
                     // Recharger les projets pour afficher l'IP Next.js
@@ -1590,7 +1512,7 @@
             const projectItem = document.querySelector(`[data-project="${projectName}"]`);
             const nextjsCard = projectItem?.querySelector('.service-nextjs');
             const devButtons = nextjsCard?.querySelectorAll('button') || [];
-            
+
             let devButton = null;
             for (const btn of devButtons) {
                 const text = btn.textContent || '';
@@ -1599,37 +1521,37 @@
                     break;
                 }
             }
-            
+
             if (devButton) {
                 devButton.disabled = true;
                 devButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i><span>Arrêt...</span>';
             }
 
             // Mettre à jour la tâche
-            taskManager.updateTask(task.id, { 
+            taskManager.updateTask(task.id, {
                 message: 'Arrêt de npm run dev...',
                 progress: 50
             });
-            
+
             const response = await fetch(`/stop_nextjs_dev/${projectName}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 }
             });
-            
+
             const data = await response.json();
-            
+
             if (data.success) {
                 taskManager.completeTask(task.id, data.message, true);
-                
+
                 // Attendre 1 seconde puis vérifier le statut pour mettre à jour le bouton
                 setTimeout(async () => {
                     await checkNextjsDevStatus();
                 }, 1000);
             } else {
                 taskManager.completeTask(task.id, data.message, false);
-                
+
                 // Restaurer le bouton en cas d'erreur
                 if (devButton) {
                     devButton.disabled = false;
@@ -1639,12 +1561,12 @@
         } catch (error) {
             console.error('Erreur lors de l\'arrêt npm dev:', error);
             taskManager.completeTask(task.id, 'Erreur lors de l\'arrêt de npm run dev', false);
-            
+
             // Restaurer le bouton en cas d'erreur
             const projectItem = document.querySelector(`[data-project="${projectName}"]`);
             const nextjsCard = projectItem?.querySelector('.service-nextjs');
             const devButtons = nextjsCard?.querySelectorAll('button') || [];
-            
+
             for (const btn of devButtons) {
                 const text = btn.textContent || '';
                 if (text.includes('Arrêt...')) {
@@ -1659,17 +1581,17 @@
     // Fonction pour vérifier le statut des boutons npm run dev
     async function checkNextjsDevStatus() {
         const projects = document.querySelectorAll('.project-item');
-        
+
         for (const projectItem of projects) {
             const projectName = projectItem.dataset.project;
-            
+
             // Chercher le bouton dans les service Next.js
             const nextjsCard = projectItem.querySelector('.service-nextjs');
             if (!nextjsCard) continue;
-            
+
             const devButtons = nextjsCard.querySelectorAll('button');
             let devButton = null;
-            
+
             // Trouver le bouton Run Dev ou Stop Dev
             for (const btn of devButtons) {
                 const text = btn.textContent || '';
@@ -1678,17 +1600,17 @@
                     break;
                 }
             }
-            
+
             // Chercher l'élément project-nextjs-ip
             const nextjsIpElement = projectItem.querySelector('.project-nextjs-ip');
-            
+
             if (devButton) {
                 try {
                     const response = await fetch(`/check_nextjs_status/${projectName}`);
                     const data = await response.json();
-                    
+
                     console.log(`Status for ${projectName}:`, data); // Debug
-                    
+
                     if (data.success && data.dev_running) {
                         // npm run dev est en cours - bouton Stop Dev
                         devButton.disabled = false;
@@ -1697,7 +1619,7 @@
                         devButton.classList.remove('btn-success');
                         devButton.title = 'Arrêter npm run dev';
                         devButton.setAttribute('onclick', `stopNpmDev('${projectName}')`);
-                        
+
                         // Afficher l'IP Next.js si npm dev est actif
                         if (nextjsIpElement) {
                             nextjsIpElement.style.display = 'block';
@@ -1710,7 +1632,7 @@
                         devButton.classList.remove('btn-running');
                         devButton.title = 'Démarrer le conteneur Next.js avec npm run dev';
                         devButton.setAttribute('onclick', `startNextjsContainer('${projectName}')`);
-                        
+
                         // Masquer l'IP Next.js si npm dev n'est pas actif
                         if (nextjsIpElement) {
                             nextjsIpElement.style.display = 'none';
@@ -1718,7 +1640,7 @@
                     }
                 } catch (error) {
                     console.error(`Erreur lors de la vérification du statut npm dev pour ${projectName}:`, error);
-                    
+
                     // En cas d'erreur, masquer l'IP Next.js par sécurité
                     if (nextjsIpElement) {
                         nextjsIpElement.style.display = 'none';
@@ -1728,71 +1650,7 @@
         }
     }
 
-    // Fonction pour configurer un domaine externe
-    function configureExternalDomain(projectName) {
-        const domain = prompt('Entrez votre domaine externe (ex: monsite.example.com):', '');
-        
-        if (!domain || domain.trim() === '') {
-            return;
-        }
-        
-        const cleanDomain = domain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
-        
-        // Validation basique du domaine
-        if (!cleanDomain.includes('.') || cleanDomain.includes(' ')) {
-            // Utiliser une tâche temporaire pour l'erreur de validation
-            const tempTask = startDomainConfigTask(projectName);
-            if (tempTask) {
-                taskManager.completeTask(tempTask.id, 'Format de domaine invalide', false);
-            }
-            return;
-        }
-        
-        // Confirmer l'action
-        if (!confirm(`Configurer le domaine "${cleanDomain}" pour le projet "${projectName}" ?\n\nCela nécessitera une configuration nginx et DNS.`)) {
-            return;
-        }
 
-        // Créer une tâche dans le gestionnaire
-        const task = startDomainConfigTask(projectName);
-        if (!task) return; // Tâche déjà en cours
-
-        // Mettre à jour la tâche
-        taskManager.updateTask(task.id, { 
-            message: `Configuration du domaine ${cleanDomain}...`,
-            progress: 50
-        });
-        
-        fetch(`/configure_external_domain/${projectName}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ domain: cleanDomain })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                taskManager.completeTask(task.id, data.message, true);
-                
-                // Afficher les étapes suivantes
-                const steps = data.next_steps.map((step, index) => `${index + 1}. ${step}`).join('\n');
-                
-                const message = `🎉 Domaine configuré !\n\n📋 ÉTAPES SUIVANTES :\n${steps}\n\n🖥️ Exécutez ces commandes sur votre serveur pour finaliser la configuration.`;
-                
-                // Utiliser une alerte pour afficher les instructions complètes
-                setTimeout(() => {
-                    alert(message);
-                }, 1000);
-            } else {
-                taskManager.completeTask(task.id, data.message, false);
-            }
-        })
-        .catch(error => {
-            console.error('Erreur:', error);
-            taskManager.completeTask(task.id, 'Erreur lors de la configuration du domaine', false);
-        });
-    }
 
     // Fonction pour redémarrer le conteneur Next.js
     async function startNextjsContainer(projectName) {
@@ -1802,7 +1660,7 @@
 
         try {
             // Mettre à jour la tâche
-            taskManager.updateTask(task.id, { 
+            taskManager.updateTask(task.id, {
                 message: 'Démarrage du conteneur Next.js...',
                 progress: 50
             });
@@ -1813,12 +1671,12 @@
                     'Content-Type': 'application/json'
                 }
             });
-            
+
             const data = await response.json();
-            
+
             if (data.success) {
                 taskManager.completeTask(task.id, data.message, true);
-                
+
                 // Attendre que le conteneur démarre puis vérifier le statut
                 setTimeout(async () => {
                     await checkNextjsDevStatus();

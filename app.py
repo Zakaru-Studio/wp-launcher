@@ -4,7 +4,7 @@ import shutil
 import subprocess
 import zipfile
 import sqlite3
-from flask import Flask, request, render_template, redirect, url_for, flash, jsonify, send_file
+from flask import Flask, request, render_template, redirect, url_for, flash, jsonify, send_file, send_from_directory
 from flask_socketio import SocketIO, emit
 from werkzeug.utils import secure_filename
 import tempfile
@@ -18,6 +18,7 @@ from services.docker_service import DockerService
 from services.port_service import PortService
 from services.database_service import DatabaseService
 from services.fast_import_service import FastImportService
+# DomainService supprimé - utilisation des IP:port directs
 
 app = Flask(__name__)
 app.secret_key = 'wp-launcher-secret-key-2024'
@@ -30,6 +31,7 @@ docker_service = DockerService()
 port_service = PortService()
 database_service = DatabaseService(socketio)
 fast_import_service = FastImportService(socketio)
+# domain_service supprimé - utilisation des IP:port directs
 
 # Configuration
 UPLOAD_FOLDER = 'uploads'
@@ -40,29 +42,7 @@ ALLOWED_EXTENSIONS = {'zip', 'sql', 'gz'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024 * 1024  # 5GB max
 
-def is_external_domain(domain):
-    """Vérifier si un domaine est un domaine externe valide"""
-    import re
-    
-    # Pattern pour valider un nom de domaine
-    domain_pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$'
-    
-    # Vérifier le format
-    if not re.match(domain_pattern, domain):
-        return False
-    
-    # Vérifier qu'il ne s'agit pas d'une IP
-    ip_pattern = r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$'
-    if re.match(ip_pattern, domain):
-        return False
-    
-    # Vérifier qu'il ne s'agit pas d'un domaine local
-    local_domains = ['.local', '.localhost', '.test', '.dev']
-    for local_tld in local_domains:
-        if domain.endswith(local_tld):
-            return False
-    
-    return True
+# Fonction supprimée - utilisation des IP:port directs uniquement
 
 def allowed_file(filename):
     return '.' in filename and \
@@ -580,6 +560,11 @@ def import_database(project_path, db_file_path, project_name):
 def index():
     return render_template('index.html')
 
+@app.route('/debug')
+def debug_interface():
+    """Page de debug pour identifier les problèmes de redirection de ports"""
+    return send_from_directory('.', 'debug_interface.html')
+
 @app.route('/favicon.png')
 def favicon():
     return '', 204  # Retourner une réponse vide avec code 204 (No Content)
@@ -591,7 +576,6 @@ def create_project():
         
         # Récupérer les données du formulaire
         project_name = request.form['project_name'].strip()
-        project_hostname = request.form.get('project_hostname', '').strip()
         enable_nextjs = request.form.get('enable_nextjs') == 'on'
         
         if not project_name:
@@ -600,19 +584,9 @@ def create_project():
         # Nettoyer le nom du projet
         project_name = secure_filename(project_name.replace(' ', '-').lower())
         
-        # Générer l'hostname s'il n'est pas fourni
-        if not project_hostname:
-            project_hostname = f"{project_name}.local"
-        else:
-            # Nettoyer l'hostname
-            project_hostname = project_hostname.lower().replace(' ', '-')
-            # Permettre les domaines externes avec TLD valides, sinon ajouter .local
-            if not project_hostname.endswith('.local') and not project_hostname.endswith('.dev') and not is_external_domain(project_hostname):
-                project_hostname += '.local'
-        
         print(f"📝 Nom du projet: {project_name}")
-        print(f"🌐 Hostname: {project_hostname}")
         print(f"⚛️ Next.js activé: {enable_nextjs}")
+        print(f"🌐 Accès via IP:port direct uniquement")
         
         # Vérifier le fichier uploadé (optionnel)
         wp_migrate_archive = request.files.get('wp_migrate_archive')
@@ -744,8 +718,8 @@ def create_project():
             with open(wp_config_template, 'r') as f:
                 wp_config_content = f.read()
             
-            # Remplacer les variables
-            wp_config_content = wp_config_content.replace('PROJECT_HOSTNAME', project_hostname)
+            # Remplacer les variables avec IP:port direct
+            wp_config_content = wp_config_content.replace('PROJECT_HOSTNAME', f"192.168.1.21:{project_port}")
             wp_config_content = wp_config_content.replace('PROJECT_PORT', str(project_port))
             
             with open(wp_config_dest, 'w') as f:
@@ -776,11 +750,8 @@ def create_project():
             f.write(str(smtp_port))
         print(f"✅ Port SMTP {smtp_port} sauvegardé")
         
-        # Sauvegarder l'hostname dans containers/
-        hostname_file = os.path.join(container_path, '.hostname')
-        with open(hostname_file, 'w') as f:
-            f.write(project_hostname)
-        print(f"✅ Hostname sauvegardé: {project_hostname}")
+        # Sauvegarde hostname supprimée - utilisation des IP:port directs uniquement
+        print("✅ Configuration IP:port direct - pas de hostname nécessaire")
         
         # 10. Configuration Next.js si activé
         if enable_nextjs and nextjs_port:
@@ -874,16 +845,13 @@ export default function Home() {{
             else:
                 success_message = f'Projet {project_name} créé avec succès ! Rendez-vous sur le site pour terminer l\'installation WordPress.'
         
-        # Ajouter l'hostname au fichier /etc/hosts
-        print(f"🌐 Ajout de l'hostname {project_hostname} au fichier /etc/hosts...")
-        try:
-            script_path = os.path.join(os.path.dirname(__file__), 'manage_hosts.sh')
-            subprocess.run(['sudo', script_path, 'add', project_hostname], check=True)
-            print(f"✅ Hostname {project_hostname} ajouté aux hosts")
-        except subprocess.CalledProcessError as e:
-            print(f"⚠️ Erreur lors de l'ajout de l'hostname: {e}")
-            print("💡 Vous pouvez ajouter manuellement l'entrée:")
-            print(f"   echo '127.0.0.1    {project_hostname}' | sudo tee -a /etc/hosts")
+        # Configuration supprimée - utilisation des IP:port directs
+        print(f"🌐 Projet accessible via IP:port direct")
+        print(f"   WordPress: http://192.168.1.21:{project_port}")
+        if enable_nextjs and nextjs_port:
+            print(f"   Next.js: http://192.168.1.21:{nextjs_port}")
+        print(f"   phpMyAdmin: http://192.168.1.21:{pma_port}")
+        print(f"   Mailpit: http://192.168.1.21:{mailpit_port}")
         
         # Nettoyer les fichiers temporaires
         print("🧹 Nettoyage des fichiers temporaires...")
@@ -1760,10 +1728,17 @@ def edit_hostname(project_name):
     try:
         print(f"✏️ Début édition hostname pour le projet: {project_name}")
         
-        # Vérifier que le projet existe
-        project_path = os.path.join(PROJECTS_FOLDER, project_name)
-        if not os.path.exists(project_path):
+        # Utiliser la nouvelle architecture Project
+        project = Project(project_name, PROJECTS_FOLDER, CONTAINERS_FOLDER)
+        
+        if not project.exists:
             return jsonify({'success': False, 'message': 'Projet non trouvé'})
+        
+        if not project.is_valid:
+            return jsonify({'success': False, 'message': 'Projet invalide (pas de docker-compose.yml)'})
+        
+        project_path = project.path  # Dossier projets/
+        compose_path = project.container_path  # Dossier containers/
         
         # Récupérer les données JSON
         data = request.get_json()
@@ -1782,15 +1757,15 @@ def edit_hostname(project_name):
         if new_hostname.startswith('http://') or new_hostname.startswith('https://') or new_hostname.startswith('@'):
             return jsonify({'success': False, 'message': 'Le hostname ne doit pas contenir de protocole (http://) ou de caractères spéciaux (@)'})
         
-        # Permettre les domaines externes avec TLD valides, sinon ajouter .local
-        if not (new_hostname.endswith('.local') or new_hostname.endswith('.dev') or is_external_domain(new_hostname)):
-            new_hostname += '.local'
+        # Si pas de domaine, ajouter .akdigital.fr par défaut
+        if '.' not in new_hostname:
+            new_hostname = f"{new_hostname}.akdigital.fr"
         
         print(f"🌐 Nouveau hostname: {new_hostname}")
         
         # Lire l'ancien hostname
-        hostname_file = os.path.join(project_path, '.hostname')
-        old_hostname = f"{project_name}.local"  # Valeur par défaut
+        hostname_file = os.path.join(compose_path, '.hostname')
+        old_hostname = f"{project_name}.akdigital.fr"  # Valeur par défaut
         
         if os.path.exists(hostname_file):
             try:
@@ -1805,8 +1780,8 @@ def edit_hostname(project_name):
         if old_hostname == new_hostname:
             return jsonify({'success': True, 'message': 'Hostname déjà correct'})
         
-        # Mettre à jour le fichier docker-compose.yml
-        compose_file = os.path.join(project_path, 'docker-compose.yml')
+        # Mettre à jour le fichier docker-compose.yml dans containers/
+        compose_file = os.path.join(compose_path, 'docker-compose.yml')
         if os.path.exists(compose_file):
             print("⚙️ Mise à jour du fichier docker-compose.yml...")
             
@@ -1829,95 +1804,61 @@ def edit_hostname(project_name):
         print(f"✅ Nouveau hostname sauvegardé: {new_hostname}")
         
         # Mettre à jour le wp-config.php avec le nouveau hostname
-        wp_config_file = os.path.join(project_path, 'wordpress', 'wp-config.php')
+        wp_config_file = os.path.join(project_path, 'wp-config.php')
         print(f"⚙️ Mise à jour WordPress config: {wp_config_file}")
         if os.path.exists(wp_config_file):
             with open(wp_config_file, 'r') as f:
                 wp_content = f.read()
             # Remplacer les URLs avec l'ancien hostname par le nouveau
-            wp_content = wp_content.replace(f'http://{old_hostname}:8080', f'http://{new_hostname}:8080')
+            wp_content = wp_content.replace(f'http://{old_hostname}', f'http://{new_hostname}')
             with open(wp_config_file, 'w') as f:
                 f.write(wp_content)
             print("✅ WordPress config mis à jour avec le nouveau hostname")
         else:
             print("⚠️ Fichier wp-config.php non trouvé")
         
-        # Mettre à jour les URLs dans la base de données WordPress
-        mysql_container = f"{project_name}_mysql_1"
-        print("🗃️ Mise à jour des URLs WordPress dans la base de données...")
-        try:
-            # Mettre à jour les options WordPress pour utiliser le nouveau hostname
-            update_sql = f"""
-                UPDATE wp_options SET option_value = 'http://{new_hostname}:8080' WHERE option_name = 'home';
-                UPDATE wp_options SET option_value = 'http://{new_hostname}:8080' WHERE option_name = 'siteurl';
-            """
-            
-            result = subprocess.run([
-                'docker', 'exec', mysql_container, 'mysql', 
-                '-u', 'wordpress', '-pwordpress', 'wordpress',
-                '-e', update_sql
-            ], capture_output=True, text=True, timeout=30)
-            
-            if result.returncode == 0:
-                print("✅ URLs WordPress mises à jour dans la base de données")
-            else:
-                print(f"⚠️ Erreur lors de la mise à jour des URLs WordPress: {result.stderr}")
-                
-        except Exception as e:
-            print(f"⚠️ Erreur lors de la mise à jour de la base de données: {e}")
+        # Obtenir le port du projet
+        port_file = os.path.join(compose_path, '.port')
+        if not os.path.exists(port_file):
+            return jsonify({'success': False, 'message': 'Port du projet non trouvé'})
         
-        # Mettre à jour le fichier /etc/hosts
-        print("🌐 Mise à jour du fichier /etc/hosts...")
-        try:
-            script_path = os.path.join(os.path.dirname(__file__), 'manage_hosts.sh')
-            
-            # Supprimer l'ancien hostname
-            subprocess.run(['sudo', script_path, 'remove', old_hostname], check=True)
-            print(f"✅ Ancien hostname {old_hostname} supprimé des hosts")
-            
-            # Ajouter le nouveau hostname
-            subprocess.run(['sudo', script_path, 'add', new_hostname], check=True)
-            print(f"✅ Nouveau hostname {new_hostname} ajouté aux hosts")
-            
-        except subprocess.CalledProcessError as e:
-            print(f"⚠️ Erreur lors de la mise à jour des hosts: {e}")
-            return jsonify({'success': False, 'message': 'Erreur lors de la mise à jour du fichier /etc/hosts'})
+        with open(port_file, 'r') as f:
+            project_port = f.read().strip()
+        
+        # Obtenir le port Next.js si activé
+        nextjs_port = None
+        if project.has_nextjs:
+            nextjs_port_file = os.path.join(compose_path, '.nextjs_port')
+            if os.path.exists(nextjs_port_file):
+                with open(nextjs_port_file, 'r') as f:
+                    nextjs_port = f.read().strip()
+        
+        # Configuration de domaine supprimée - utilisation des IP:port directs
+        print(f"🌐 Hostname mis à jour dans les fichiers de configuration")
+        print(f"   Accès direct: http://192.168.1.21:{project_port}")
+        if project.has_nextjs and nextjs_port:
+            print(f"   Next.js direct: http://192.168.1.21:{nextjs_port}")
+        print("💡 Utilisez les IP:port directs pour accéder au site")
         
         # Redémarrer les conteneurs pour appliquer les changements
         print("🔄 Redémarrage des conteneurs...")
         try:
-            original_cwd = os.getcwd()
-            os.chdir(project_path)
+            # Utiliser le DockerService pour redémarrer depuis containers/
+            docker_service.stop_containers(compose_path)
+            success, error = docker_service.start_containers(compose_path)
             
-            try:
-                # Arrêter les conteneurs
-                result = subprocess.run([
-                    'docker-compose', 'down'
-                ], capture_output=True, text=True)
-                
-                if result.returncode != 0:
-                    print(f"⚠️ Erreur lors de l'arrêt: {result.stderr}")
-                
-                # Relancer les conteneurs
-                result = subprocess.run([
-                    'docker-compose', 'up', '-d'
-                ], capture_output=True, text=True)
-                
-                if result.returncode != 0:
-                    print(f"⚠️ Erreur lors du redémarrage: {result.stderr}")
-                    return jsonify({'success': False, 'message': 'Erreur lors du redémarrage des conteneurs'})
-                
-                print("✅ Conteneurs redémarrés")
-                
-            finally:
-                os.chdir(original_cwd)
+            if not success:
+                print(f"⚠️ Erreur lors du redémarrage: {error}")
+                return jsonify({'success': False, 'message': f'Erreur lors du redémarrage des conteneurs: {error}'})
+            
+            print("✅ Conteneurs redémarrés")
                 
         except Exception as e:
             print(f"⚠️ Erreur lors du redémarrage: {e}")
             return jsonify({'success': False, 'message': 'Erreur lors du redémarrage des conteneurs'})
         
         print(f"✅ Hostname du projet {project_name} mis à jour avec succès")
-        return jsonify({'success': True, 'message': f'Hostname mis à jour avec succès. Le site est maintenant accessible sur {new_hostname}'})
+        return jsonify({'success': True, 'message': f'Hostname mis à jour vers {new_hostname} avec succès !'})
         
     except Exception as e:
         print(f"❌ Erreur lors de l'édition de l'hostname: {e}")
@@ -2554,48 +2495,7 @@ def stop_nextjs_dev(project_name):
         print(f"❌ Erreur arrêt npm dev: {e}")
         return jsonify({'success': False, 'message': f'Erreur: {str(e)}'})
 
-@app.route('/configure_external_domain/<project_name>', methods=['POST'])
-def configure_external_domain(project_name):
-    """Configure un domaine externe pour un projet"""
-    try:
-        data = request.get_json()
-        external_domain = data.get('domain', '').strip()
-        
-        if not external_domain:
-            return jsonify({'success': False, 'message': 'Domaine requis'})
-        
-        # Utiliser la nouvelle architecture
-        project = Project(project_name, PROJECTS_FOLDER, CONTAINERS_FOLDER)
-        
-        if not project.exists:
-            return jsonify({'success': False, 'message': 'Projet non trouvé'})
-        
-        # Vérifier que le domaine est valide
-        if not is_external_domain(external_domain):
-            return jsonify({'success': False, 'message': 'Domaine externe invalide (doit contenir un TLD comme .com, .fr, etc.)'})
-        
-        # Sauvegarder le domaine externe
-        external_domain_file = os.path.join(project.path, '.external_domain')
-        with open(external_domain_file, 'w') as f:
-            f.write(external_domain)
-        
-        print(f"✅ Domaine externe {external_domain} configuré pour {project_name}")
-        
-        return jsonify({
-            'success': True, 
-            'message': f'Domaine externe {external_domain} configuré avec succès',
-            'domain': external_domain,
-            'next_steps': [
-                f'Exécuter: ./setup_domain.sh {external_domain} {project_name}',
-                f'Configurer DNS: {external_domain} → Votre IP publique',
-                f'Vérifier redirection box: Port 80 → 192.168.1.21:80',
-                f'Optionnel: ./setup_https.sh {external_domain} votre@email.com'
-            ]
-        })
-        
-    except Exception as e:
-        print(f"❌ Erreur configuration domaine externe: {e}")
-        return jsonify({'success': False, 'message': f'Erreur: {str(e)}'})
+
 
 @app.route('/start_nextjs_container/<project_name>', methods=['POST'])
 def start_nextjs_container(project_name):
@@ -2648,6 +2548,8 @@ def start_nextjs_container(project_name):
     except Exception as e:
         print(f"❌ Erreur démarrage conteneur Next.js: {e}")
         return jsonify({'success': False, 'message': f'Erreur: {str(e)}'})
+
+# Fonctions nginx supprimées - utilisation des IP:port directs uniquement
 
 if __name__ == '__main__':
     # Créer les dossiers nécessaires
