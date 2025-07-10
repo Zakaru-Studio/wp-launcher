@@ -46,7 +46,11 @@ services:
       - ./wordpress:/var/www/html
       - ../../projets/{project_name}/wp-content:/var/www/html/wp-content
       - ../../projets/{project_name}/wp-config.php:/var/www/html/wp-config.php
+      - ../../projets/{project_name}/.htaccess:/var/www/html/.htaccess
       - ./php-config/php.ini:/usr/local/etc/php/conf.d/custom.ini
+      - ../../docker-template/init-permissions.sh:/usr/local/bin/init-permissions.sh
+    entrypoint: ["/usr/local/bin/init-permissions.sh"]
+    command: ["apache2-foreground"]
     networks:
       - wordpress_network
     ports:
@@ -96,23 +100,25 @@ services:
     cpus: '0.5'
 
   nextjs:
-    image: node:20
+    image: node:20-alpine  # Image plus légère
     container_name: PROJECT_NAME_nextjs_1
     restart: unless-stopped
     working_dir: /app
     volumes:
-      - ../../projets/{project_name}/nextjs:/app
+      - ../../projets/{project_name}/nextjs:/app:delegated  # Optimisation macOS/Windows
       - nextjs_node_modules:/app/node_modules
     networks:
       - wordpress_network
     ports:
-      - "0.0.0.0:PROJECT_NEXTJS_PORT:3000"  # Port Next.js
+      - "0.0.0.0:PROJECT_NEXTJS_PORT:3000"
     environment:
       - NODE_ENV=development
       - NEXT_TELEMETRY_DISABLED=1
-      - TURBOPACK=1
-    command: sh -c "if [ -f package.json ]; then npm ci --prefer-offline --no-audit && npm run dev -- --turbo; else echo 'Next.js non configuré - créez votre projet dans le dossier nextjs/'; tail -f /dev/null; fi"
-    # Allocations optimisées pour Next.js
+      - APOLLO_URI=192.168.1.21:8080
+      - WATCHPACK_POLLING=true  # Pour les volumes montés
+      - CHOKIDAR_USEPOLLING=true  # Pour la surveillance des fichiers
+    command: sh -c "npm ci --prefer-offline --no-audit && npm run dev"
+    # Allocations optimisées
     mem_limit: 2g
     cpus: '2'
     shm_size: '1g'

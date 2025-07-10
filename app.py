@@ -11,6 +11,8 @@ import tempfile
 import time
 import threading
 import re
+import secrets
+import string
 
 # Imports des services modularisés
 from models.project import Project
@@ -18,6 +20,7 @@ from services.docker_service import DockerService
 from services.port_service import PortService
 from services.database_service import DatabaseService
 from services.fast_import_service import FastImportService
+from utils.logger import wp_logger
 # DomainService supprimé - utilisation des IP:port directs
 
 app = Flask(__name__)
@@ -92,9 +95,12 @@ def extract_zip(zip_path, extract_to):
         zip_ref.extractall(extract_to)
 
 def copy_docker_template(project_path, enable_nextjs=False):
-    """Copie le template docker-compose dans le projet selon la configuration"""
+    """Copie le template docker-compose dans le projet selon la configuration (version robuste)"""
     template_path = 'docker-template'
-    if os.path.exists(template_path):
+    if not os.path.exists(template_path):
+        raise Exception(f"Template Docker non trouvé: {template_path}")
+    
+    try:
         for item in os.listdir(template_path):
             src = os.path.join(template_path, item)
             dst = os.path.join(project_path, item)
@@ -108,11 +114,66 @@ def copy_docker_template(project_path, enable_nextjs=False):
                 else:
                     dst = os.path.join(project_path, 'docker-compose.yml')  # Renommer
             
+            # Gestion robuste de la copie
             if os.path.isdir(src):
-                # Utiliser exist_ok=True pour éviter l'erreur "File exists"
+                # Si le dossier de destination existe déjà, le supprimer d'abord
+                if os.path.exists(dst):
+                    print(f"🗑️ Suppression du dossier existant: {dst}")
+                    try:
+                        # Essayer d'abord la suppression normale
+                        shutil.rmtree(dst)
+                    except (PermissionError, OSError) as e:
+                        print(f"⚠️ Suppression normale échouée: {e}")
+                        print(f"🔧 Suppression avec permissions étendues...")
+                        # Forcer les permissions puis supprimer
+                        try:
+                            # Changer les permissions récursivement
+                            for root, dirs, files in os.walk(dst):
+                                for d in dirs:
+                                    os.chmod(os.path.join(root, d), 0o777)
+                                for f in files:
+                                    os.chmod(os.path.join(root, f), 0o666)
+                            # Puis supprimer
+                            shutil.rmtree(dst)
+                        except Exception as e2:
+                            print(f"⚠️ Suppression avec permissions échouée: {e2}")
+                            # Dernière tentative avec sudo
+                            import subprocess
+                            result = subprocess.run(['sudo', 'rm', '-rf', dst], 
+                                                  capture_output=True, text=True)
+                            if result.returncode != 0:
+                                raise Exception(f"Impossible de supprimer {dst}: {result.stderr}")
+                            print(f"✅ Suppression avec sudo réussie")
+                
+                # Copier le dossier
+                print(f"📁 Copie du dossier: {src} → {dst}")
                 shutil.copytree(src, dst, dirs_exist_ok=True)
+                
             else:
+                # Gestion des fichiers
+                print(f"📄 Copie du fichier: {src} → {dst}")
+                # Si le fichier existe et est en lecture seule, le rendre modifiable
+                if os.path.exists(dst):
+                    try:
+                        os.chmod(dst, 0o666)
+                    except Exception:
+                        pass  # Ignorer les erreurs de permissions sur les fichiers
+                
                 shutil.copy2(src, dst)
+                
+                # S'assurer que le fichier copié a les bonnes permissions
+                try:
+                    os.chmod(dst, 0o664)
+                except Exception:
+                    pass  # Ignorer les erreurs de permissions
+                    
+    except Exception as e:
+        # Log détaillé pour le débogage
+        print(f"❌ Erreur lors de la copie du template Docker:")
+        print(f"   Source: {template_path}")
+        print(f"   Destination: {project_path}")
+        print(f"   Erreur: {e}")
+        raise Exception(f"Échec de la copie du template Docker: {e}")
 
 def create_default_wp_content(wp_content_dest):
     """Crée un wp-content vierge avec les éléments de base"""
@@ -139,6 +200,24 @@ def create_default_wp_content(wp_content_dest):
         f.write(index_content)
     
     print("✅ wp-content vierge créé avec succès")
+
+def generate_wordpress_security_keys():
+    """Génère des clés de sécurité WordPress aléatoires"""
+    def generate_key():
+        """Génère une clé aléatoire de 64 caractères"""
+        alphabet = string.ascii_letters + string.digits + '!@#$%^&*()_+-=[]{}|;:,.<>?'
+        return ''.join(secrets.choice(alphabet) for _ in range(64))
+    
+    return {
+        'AUTH_KEY': generate_key(),
+        'SECURE_AUTH_KEY': generate_key(),
+        'LOGGED_IN_KEY': generate_key(),
+        'NONCE_KEY': generate_key(),
+        'AUTH_SALT': generate_key(),
+        'SECURE_AUTH_SALT': generate_key(),
+        'LOGGED_IN_SALT': generate_key(),
+        'NONCE_SALT': generate_key(),
+    }
 
 def create_clean_wordpress_database(project_path, project_name):
     """Crée une base de données WordPress vierge prête pour l'installation"""
@@ -571,12 +650,21 @@ def favicon():
 
 @app.route('/create_project', methods=['POST'])
 def create_project():
+    project_name = "unknown"  # Initialisation pour le logging
     try:
         print("🚀 Début de création du projet")
         
         # Récupérer les données du formulaire
         project_name = request.form['project_name'].strip()
         enable_nextjs = request.form.get('enable_nextjs') == 'on'
+        
+        # Log du début de l'opération
+        wp_logger.log_operation_start(
+            'create', 
+            project_name, 
+            enable_nextjs=enable_nextjs,
+            user_ip=request.remote_addr
+        )
         
         if not project_name:
             return jsonify({'success': False, 'message': 'Le nom du projet est requis'})
@@ -709,7 +797,7 @@ def create_project():
                 f.write(compose_content)
             print("✅ docker-compose.yml configuré")
         
-        # 8. Créer le fichier wp-config.php externe
+        # 8. Créer le fichier wp-config.php externe avec clés de sécurité
         print("📄 Création du wp-config.php externe...")
         wp_config_template = os.path.join(container_path, 'wordpress', 'wp-config.php')
         wp_config_dest = os.path.join(editable_path, 'wp-config.php')
@@ -718,13 +806,49 @@ def create_project():
             with open(wp_config_template, 'r') as f:
                 wp_config_content = f.read()
             
+            # Générer des clés de sécurité aléatoires
+            print("🔐 Génération des clés de sécurité WordPress...")
+            security_keys = generate_wordpress_security_keys()
+            
             # Remplacer les variables avec IP:port direct
             wp_config_content = wp_config_content.replace('PROJECT_HOSTNAME', f"192.168.1.21:{project_port}")
             wp_config_content = wp_config_content.replace('PROJECT_PORT', str(project_port))
             
+            # Remplacer les clés de sécurité par défaut par les nouvelles clés générées
+            for key_name, key_value in security_keys.items():
+                wp_config_content = wp_config_content.replace(
+                    f"define('{key_name}', 'put your unique phrase here');",
+                    f"define('{key_name}', '{key_value}');"
+                )
+            
             with open(wp_config_dest, 'w') as f:
                 f.write(wp_config_content)
-            print("✅ wp-config.php externe créé")
+            print("✅ wp-config.php externe créé avec clés de sécurité")
+        
+        # 8.1. Créer le fichier .htaccess externe
+        print("📄 Création du .htaccess externe...")
+        htaccess_template = os.path.join('docker-template', 'wordpress', '.htaccess')
+        htaccess_dest = os.path.join(editable_path, '.htaccess')
+        
+        if os.path.exists(htaccess_template):
+            shutil.copy2(htaccess_template, htaccess_dest)
+            print("✅ .htaccess externe créé")
+        else:
+            # Créer un .htaccess par défaut si le template n'existe pas
+            default_htaccess = r"""# BEGIN WordPress
+
+RewriteEngine On
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+RewriteBase /
+RewriteRule ^index\.php$ - [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.php [L]
+
+# END WordPress"""
+            with open(htaccess_dest, 'w') as f:
+                f.write(default_htaccess)
+            print("✅ .htaccess par défaut créé")
         
         # 9. Sauvegarder les fichiers de configuration dans containers/
         print("💾 Sauvegarde des fichiers de ports...")
@@ -899,10 +1023,32 @@ export default function Home() {{
             print(f"   sudo chown -R dev-server:dev-server {editable_path}")
             print(f"   sudo chmod -R 755 {editable_path}")
         
+        # Log du succès de la création
+        wp_logger.log_operation_success(
+            'create', 
+            project_name, 
+            "Projet créé avec succès",
+            port=project_port,
+            pma_port=pma_port,
+            mailpit_port=mailpit_port,
+            nextjs_enabled=enable_nextjs
+        )
+        
         return jsonify({'success': True, 'message': success_message})
         
     except Exception as e:
         print(f"❌ Erreur lors de la création du projet: {str(e)}")
+        
+        # Log de l'erreur de création
+        wp_logger.log_operation_error(
+            'create', 
+            project_name, 
+            e,
+            context="Erreur lors de la création du projet",
+            user_ip=request.remote_addr,
+            enable_nextjs=enable_nextjs if 'enable_nextjs' in locals() else None
+        )
+        
         return jsonify({'success': False, 'message': f'Erreur lors de la création du projet: {str(e)}'})
 
 @app.route('/projects')
@@ -1446,6 +1592,13 @@ def delete_project(project_name):
     try:
         print(f"🗑️ Début suppression du projet: {project_name}")
         
+        # Log du début de l'opération de suppression
+        wp_logger.log_operation_start(
+            'delete', 
+            project_name,
+            user_ip=request.remote_addr
+        )
+        
         # Créer l'objet Project
         project = Project(project_name, PROJECTS_FOLDER)
         
@@ -1703,6 +1856,15 @@ def delete_project(project_name):
         # ÉTAPE 9: Vérification finale et retour du résultat
         if project_deleted:
             print(f"✅ Suppression du projet {project_name} terminée avec succès")
+            
+            # Log du succès de la suppression
+            wp_logger.log_operation_success(
+                'delete', 
+                project_name, 
+                "Projet supprimé avec succès - conteneurs, volumes et fichiers supprimés",
+                user_ip=request.remote_addr
+            )
+            
             return jsonify({
                 'success': True,
                 'message': 'Projet supprimé avec succès',
@@ -1710,6 +1872,16 @@ def delete_project(project_name):
             })
         else:
             print(f"⚠️ Suppression du projet {project_name} incomplète - dossier non supprimé")
+            
+            # Log de la suppression partielle
+            wp_logger.log_operation_error(
+                'delete', 
+                project_name, 
+                Exception("Suppression partielle - dossier non supprimé"),
+                context="Suppression Docker réussie mais dossier physique persistant",
+                user_ip=request.remote_addr
+            )
+            
             return jsonify({
                 'success': False,
                 'message': 'Suppression partiellement échouée',
@@ -1720,6 +1892,16 @@ def delete_project(project_name):
         print(f"❌ Erreur lors de la suppression du projet: {e}")
         import traceback
         traceback.print_exc()
+        
+        # Log de l'erreur de suppression
+        wp_logger.log_operation_error(
+            'delete', 
+            project_name, 
+            e,
+            context="Erreur complète lors de la suppression du projet",
+            user_ip=request.remote_addr
+        )
+        
         return jsonify({'success': False, 'message': f'Erreur: {str(e)}'})
 
 @app.route('/edit_hostname/<project_name>', methods=['POST'])
@@ -1870,6 +2052,13 @@ def start_project(project_name):
     try:
         print(f"🚀 Démarrage du projet: {project_name}")
         
+        # Log du début de l'opération de démarrage
+        wp_logger.log_operation_start(
+            'start', 
+            project_name,
+            user_ip=request.remote_addr
+        )
+        
         # Utiliser le modèle Project avec la nouvelle architecture
         project = Project(project_name, PROJECTS_FOLDER, 'containers')
         
@@ -1884,13 +2073,44 @@ def start_project(project_name):
         
         if success:
             print(f"✅ Projet {project_name} démarré avec succès")
+            
+            # Log du succès du démarrage
+            wp_logger.log_operation_success(
+                'start', 
+                project_name, 
+                "Projet démarré avec succès",
+                user_ip=request.remote_addr,
+                port=project.port,
+                has_nextjs=project.has_nextjs
+            )
+            
             return jsonify({'success': True, 'message': f'Projet {project_name} démarré avec succès'})
         else:
             print(f"❌ Erreur lors du démarrage: {error}")
+            
+            # Log de l'erreur de démarrage Docker
+            wp_logger.log_docker_operation(
+                'start', 
+                project_name, 
+                False,
+                error=str(error) if error else "Erreur Docker inconnue",
+                user_ip=request.remote_addr
+            )
+            
             return jsonify({'success': False, 'message': f'Erreur lors du démarrage: {error}'})
             
     except Exception as e:
         print(f"❌ Erreur lors du démarrage du projet: {e}")
+        
+        # Log de l'erreur générale de démarrage
+        wp_logger.log_operation_error(
+            'start', 
+            project_name, 
+            e,
+            context="Erreur lors du démarrage du projet",
+            user_ip=request.remote_addr
+        )
+        
         return jsonify({'success': False, 'message': f'Erreur: {str(e)}'})
 
 @app.route('/stop_project/<project_name>', methods=['POST'])
@@ -1898,6 +2118,13 @@ def stop_project(project_name):
     """Arrête un projet WordPress"""
     try:
         print(f"🛑 Arrêt du projet: {project_name}")
+        
+        # Log du début de l'opération d'arrêt
+        wp_logger.log_operation_start(
+            'stop', 
+            project_name,
+            user_ip=request.remote_addr
+        )
         
         # Utiliser le modèle Project avec la nouvelle architecture
         project = Project(project_name, PROJECTS_FOLDER, 'containers')
@@ -1913,13 +2140,44 @@ def stop_project(project_name):
         
         if success:
             print(f"✅ Projet {project_name} arrêté avec succès")
+            
+            # Log du succès de l'arrêt
+            wp_logger.log_operation_success(
+                'stop', 
+                project_name, 
+                "Projet arrêté avec succès",
+                user_ip=request.remote_addr,
+                port=project.port,
+                has_nextjs=project.has_nextjs
+            )
+            
             return jsonify({'success': True, 'message': f'Projet {project_name} arrêté avec succès'})
         else:
             print(f"❌ Erreur lors de l'arrêt: {error}")
+            
+            # Log de l'erreur d'arrêt Docker
+            wp_logger.log_docker_operation(
+                'stop', 
+                project_name, 
+                False,
+                error=str(error) if error else "Erreur Docker inconnue",
+                user_ip=request.remote_addr
+            )
+            
             return jsonify({'success': False, 'message': f'Erreur lors de l\'arrêt: {error}'})
             
     except Exception as e:
         print(f"❌ Erreur lors de l'arrêt du projet: {e}")
+        
+        # Log de l'erreur générale d'arrêt
+        wp_logger.log_operation_error(
+            'stop', 
+            project_name, 
+            e,
+            context="Erreur lors de l'arrêt du projet",
+            user_ip=request.remote_addr
+        )
+        
         return jsonify({'success': False, 'message': f'Erreur: {str(e)}'})
 
 @app.route('/add_nextjs/<project_name>', methods=['POST'])

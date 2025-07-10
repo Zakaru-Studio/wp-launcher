@@ -46,7 +46,11 @@ services:
       - ./wordpress:/var/www/html
       - ../../projets/{project_name}/wp-content:/var/www/html/wp-content
       - ../../projets/{project_name}/wp-config.php:/var/www/html/wp-config.php
+      - ../../projets/{project_name}/.htaccess:/var/www/html/.htaccess
       - ./php-config/php.ini:/usr/local/etc/php/conf.d/custom.ini
+      - ../../docker-template/init-permissions.sh:/usr/local/bin/init-permissions.sh
+    entrypoint: ["/usr/local/bin/init-permissions.sh"]
+    command: ["apache2-foreground"]
     networks:
       - wordpress_network
     ports:
