@@ -1,0 +1,43 @@
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+api:
+  dashboard: true
+  insecure: true
+
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entrypoint:
+          to: websecure
+          scheme: https
+  websecure:
+    address: ":443"
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: traefik-network
+  file:
+    filename: /dynamic.yml
+    watch: true
+
+# Configuration désactivée pour utiliser les certificats existants
+# certificatesResolvers:
+#   letsencrypt:
+#     acme:
+#       email: admin@akdigital.fr
+#       storage: acme.json
+#       httpChallenge:
+#         entryPoint: web
+
+log:
+  level: INFO
+  format: common
+
+accessLog:
+  format: common 

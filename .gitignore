@@ -5,3 +5,4 @@ projets
 projets/*
 .env
 containers
+logs

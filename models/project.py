@@ -21,6 +21,11 @@ class Project:
         self.container_path = os.path.join(containers_folder, name)  # Configuration Docker
     
     @property
+    def editable_path(self):
+        """Chemin vers les fichiers éditables du projet"""
+        return self.path
+    
+    @property
     def exists(self):
         """Vérifie si le projet existe (dans projets/ ou containers/)"""
         return os.path.exists(self.path) or os.path.exists(self.container_path)
@@ -116,6 +121,26 @@ class Project:
         nextjs_port_file = os.path.join(self.container_path, '.nextjs_port')
         nextjs_dir = os.path.join(self.path, 'nextjs')
         return os.path.exists(nextjs_port_file) and os.path.exists(nextjs_dir)
+    
+    @property
+    def project_type(self):
+        """Détermine le type de projet"""
+        # Vérifier s'il y a un marqueur de type
+        type_marker = os.path.join(self.path, '.project_type')
+        if os.path.exists(type_marker):
+            try:
+                with open(type_marker, 'r') as f:
+                    return f.read().strip()
+            except:
+                pass
+        
+        # Détecter le type selon la structure
+        if os.path.exists(os.path.join(self.path, 'nextjs')):
+            return 'nextjs'
+        elif os.path.exists(os.path.join(self.path, 'wp-content')):
+            return 'wordpress'
+        else:
+            return 'unknown'
     
     def _get_port(self, port_file, default=None):
         """Récupère un port depuis un fichier dans containers/"""

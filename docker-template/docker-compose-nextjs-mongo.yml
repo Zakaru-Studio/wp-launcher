@@ -1,0 +1,145 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: PROJECT_NAME_mongodb_1
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: adminpassword
+      MONGO_INITDB_DATABASE: PROJECT_NAME
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    networks:
+      - app_network
+    ports:
+      - "0.0.0.0:8080:27017"  # Port MongoDB exposé
+    command: ["mongod", "--auth", "--bind_ip_all"]
+    # Allocations raisonnables pour MongoDB
+    mem_limit: 1g
+    cpus: '2'
+    healthcheck:
+      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
+      timeout: 10s
+      retries: 5
+      interval: 30s
+      start_period: 40s
+
+  nextjs:
+    image: node:20-alpine
+    container_name: PROJECT_NAME_nextjs_1
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - ../../projets/{project_name}/nextjs:/app:delegated
+      - nextjs_node_modules:/app/node_modules
+    networks:
+      - app_network
+      - traefik-network
+    ports:
+      - "0.0.0.0:8081:3000"  # Port Next.js frontend
+    environment:
+      - NODE_ENV=development
+      - NEXT_TELEMETRY_DISABLED=1
+      - WATCHPACK_POLLING=true
+      - CHOKIDAR_USEPOLLING=true
+      - MONGODB_URI=mongodb://admin:adminpassword@mongodb:27017/PROJECT_NAME?authSource=admin
+      - JWT_SECRET=your-jwt-secret-key-here
+      - NEXTAUTH_SECRET=your-nextauth-secret-here
+      - NEXTAUTH_URL=https://{project_hostname}.dev.akdigital.fr
+    command: sh -c "cd /app && npm ci --prefer-offline --no-audit && npm run dev"
+    depends_on:
+      mongodb:
+        condition: service_started
+    # Allocations optimisées pour Next.js
+    mem_limit: 2g
+    cpus: '2'
+    shm_size: '1g'
+
+  api:
+    image: node:20-alpine
+    container_name: PROJECT_NAME_api_1
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - ../../projets/{project_name}/nextjs/api:/app:delegated
+      - api_node_modules:/app/node_modules
+    networks:
+      - app_network
+      - traefik-network
+    ports:
+      - "0.0.0.0:8082:3001"  # Port API Express
+    environment:
+      - NODE_ENV=development
+      - MONGODB_URI=mongodb://admin:adminpassword@mongodb:27017/PROJECT_NAME?authSource=admin
+      - JWT_SECRET=your-jwt-secret-key-here
+      - CORS_ORIGIN=https://{project_hostname}.dev.akdigital.fr
+      - API_PORT=3001
+      - SMTP_HOST=mailpit
+      - SMTP_PORT=1025
+      - SMTP_USER=noreply@PROJECT_NAME.test
+      - SMTP_PASS=
+    command: sh -c "cd /app && npm ci --prefer-offline --no-audit && npm run dev"
+    depends_on:
+      mongodb:
+        condition: service_started
+      mailpit:
+        condition: service_started
+    # Allocations pour l'API
+    mem_limit: 1g
+    cpus: '1'
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: PROJECT_NAME_mailpit_1
+    restart: unless-stopped
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    networks:
+      - app_network
+    ports:
+      - "0.0.0.0:8083:8025"  # Port interface web Mailpit
+      - "0.0.0.0:8084:1025"     # Port SMTP Mailpit
+    # Allocations légères
+    mem_limit: 128M
+    cpus: '0.5'
+
+  mongo-express:
+    image: mongo-express:latest
+    container_name: PROJECT_NAME_mongo_express_1
+    restart: unless-stopped
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: adminpassword
+      ME_CONFIG_MONGODB_URL: mongodb://admin:adminpassword@mongodb:27017/
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: adminpassword
+    networks:
+      - app_network
+    ports:
+      - "0.0.0.0:8085:8081"  # Port Mongo Express
+    depends_on:
+      mongodb:
+        condition: service_started
+    # Allocations légères
+    mem_limit: 256M
+    cpus: '0.5'
+
+volumes:
+  mongodb_data:
+    driver: local
+  mongodb_config:
+    driver: local
+  nextjs_node_modules:
+    driver: local
+  api_node_modules:
+    driver: local
+
+networks:
+  app_network:
+    driver: bridge
+  traefik-network:
+    external: true 

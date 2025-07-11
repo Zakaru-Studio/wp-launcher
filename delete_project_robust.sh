@@ -179,7 +179,68 @@ else
     sudo find "$PROJECT_PATH" -type d -exec chmod 777 {} + 2>/dev/null || true
 fi
 
-# Étape 8.5: Vérification finale des permissions
+# Étape 8.5: Traitement spécifique des fichiers .htaccess
+log "🔧 Traitement spécifique des fichiers .htaccess..."
+
+# Rechercher tous les fichiers et dossiers .htaccess
+HTACCESS_FILES=$(find "$PROJECT_PATH" -name ".htaccess" 2>/dev/null)
+if [ -n "$HTACCESS_FILES" ]; then
+    log "📋 Fichiers .htaccess trouvés, traitement spécial..."
+    
+    # Traiter chaque fichier/dossier .htaccess individuellement
+    echo "$HTACCESS_FILES" | while read htaccess_item; do
+        if [ -e "$htaccess_item" ]; then
+            log "🔧 Traitement: $htaccess_item"
+            
+            # Supprimer les attributs spéciaux spécifiquement pour .htaccess
+            if command -v chattr >/dev/null 2>&1; then
+                sudo chattr -R -i "$htaccess_item" 2>/dev/null || true
+                sudo chattr -R -a "$htaccess_item" 2>/dev/null || true
+                sudo chattr -R -u "$htaccess_item" 2>/dev/null || true
+            fi
+            
+            # Supprimer les ACL spécifiquement pour .htaccess
+            if command -v setfacl >/dev/null 2>&1; then
+                sudo setfacl -R -b "$htaccess_item" 2>/dev/null || true
+            fi
+            
+            # Forcer les permissions pour .htaccess
+            if [ -f "$htaccess_item" ]; then
+                # Si c'est un fichier
+                sudo chown dev-server:dev-server "$htaccess_item" 2>/dev/null || true
+                sudo chmod 666 "$htaccess_item" 2>/dev/null || true
+            elif [ -d "$htaccess_item" ]; then
+                # Si c'est un dossier (cas inhabituel mais possible)
+                sudo chown -R dev-server:dev-server "$htaccess_item" 2>/dev/null || true
+                sudo chmod -R 777 "$htaccess_item" 2>/dev/null || true
+            fi
+            
+            # Tentative de suppression immédiate
+            if sudo rm -rf "$htaccess_item" 2>/dev/null; then
+                log "✅ .htaccess supprimé: $htaccess_item"
+            else
+                log "⚠️ .htaccess résistant: $htaccess_item"
+                
+                # Méthode alternative pour .htaccess récalcitrants
+                if [ -f "$htaccess_item" ]; then
+                    # Vider le fichier puis le supprimer
+                    sudo truncate -s 0 "$htaccess_item" 2>/dev/null || true
+                    sudo rm -f "$htaccess_item" 2>/dev/null || true
+                elif [ -d "$htaccess_item" ]; then
+                    # Supprimer le contenu du dossier puis le dossier
+                    sudo find "$htaccess_item" -mindepth 1 -delete 2>/dev/null || true
+                    sudo rmdir "$htaccess_item" 2>/dev/null || true
+                fi
+            fi
+        fi
+    done
+    
+    log "✅ Traitement des fichiers .htaccess terminé"
+else
+    log "📁 Aucun fichier .htaccess trouvé"
+fi
+
+# Étape 8.6: Vérification finale des permissions
 REMAINING_PROTECTED=$(find "$PROJECT_PATH" ! -user dev-server 2>/dev/null | wc -l)
 if [ "$REMAINING_PROTECTED" -gt 0 ]; then
     log "⚠️ $REMAINING_PROTECTED fichiers encore protégés, forçage final..."
@@ -247,8 +308,17 @@ else
                     
                     # Méthode 5: Suppression par types de fichiers
                     log "🔧 Suppression par types de fichiers..."
-                    # Supprimer d'abord les fichiers problématiques courants
-                    sudo find "$PROJECT_PATH" -name ".htaccess" -delete 2>/dev/null || true
+                    # Supprimer d'abord les fichiers problématiques courants avec traitement spécial
+                    
+                    # Traitement spécial des fichiers .htaccess récalcitrants
+                    log "🔧 Suppression forcée des fichiers .htaccess..."
+                    sudo find "$PROJECT_PATH" -name ".htaccess" -type f -exec chmod 666 {} + 2>/dev/null || true
+                    sudo find "$PROJECT_PATH" -name ".htaccess" -type d -exec chmod 777 {} + 2>/dev/null || true
+                    sudo find "$PROJECT_PATH" -name ".htaccess" -exec chattr -R -i {} + 2>/dev/null || true
+                    sudo find "$PROJECT_PATH" -name ".htaccess" -exec chattr -R -a {} + 2>/dev/null || true
+                    sudo find "$PROJECT_PATH" -name ".htaccess" -exec rm -rf {} + 2>/dev/null || true
+                    
+                    # Autres fichiers problématiques
                     sudo find "$PROJECT_PATH" -name "*.log" -delete 2>/dev/null || true
                     sudo find "$PROJECT_PATH" -name "*.php" -delete 2>/dev/null || true
                     
@@ -260,23 +330,23 @@ else
                         log "✅ Suppression par types réussie"
                     else
                         log "⚠️ Suppression par types partielle, essai méthode 6..."
-                        
+                    
                         # Méthode 6: Suppression brutale avec mv puis rm en arrière-plan
-                        TEMP_PATH="/tmp/delete_${PROJECT_NAME}_$(date +%s)"
-                        log "🔄 Déplacement vers dossier temporaire: $TEMP_PATH"
-                        if sudo mv "$PROJECT_PATH" "$TEMP_PATH" 2>/dev/null; then
-                            log "✅ Déplacement réussi, suppression en arrière-plan..."
-                            (sudo rm -rf "$TEMP_PATH" 2>/dev/null) &
-                            log "✅ Suppression en arrière-plan démarrée"
-                        else
+                    TEMP_PATH="/tmp/delete_${PROJECT_NAME}_$(date +%s)"
+                    log "🔄 Déplacement vers dossier temporaire: $TEMP_PATH"
+                    if sudo mv "$PROJECT_PATH" "$TEMP_PATH" 2>/dev/null; then
+                        log "✅ Déplacement réussi, suppression en arrière-plan..."
+                        (sudo rm -rf "$TEMP_PATH" 2>/dev/null) &
+                        log "✅ Suppression en arrière-plan démarrée"
+                    else
                             log "❌ Déplacement impossible, essai méthode 7..."
                             
                             # Méthode 7: Dernière tentative avec truncate puis suppression
-                            if [ "$FORCE_MODE" = "force" ]; then
-                                log "🔥 Mode force activé - dernière tentative"
+                        if [ "$FORCE_MODE" = "force" ]; then
+                            log "🔥 Mode force activé - dernière tentative"
                                 # Tronquer tous les fichiers puis supprimer
                                 sudo find "$PROJECT_PATH" -type f -exec truncate -s 0 {} + 2>/dev/null || true
-                                sudo find "$PROJECT_PATH" -mindepth 1 -delete 2>/dev/null || true
+                            sudo find "$PROJECT_PATH" -mindepth 1 -delete 2>/dev/null || true
                                 
                                 # Si le dossier existe encore, le renommer pour masquer
                                 if [ -d "$PROJECT_PATH" ]; then
