@@ -160,9 +160,6 @@ class DockerService:
     def get_container_status(self, project_name):
         """Vérifie le statut des conteneurs d'un projet"""
         try:
-            mysql_container = f"{project_name}_mysql_1"
-            wp_container = f"{project_name}_wordpress_1"
-            
             # Vérifier si les conteneurs sont en cours d'exécution
             result = subprocess.run([
                 'docker', 'ps', '--format', '{{.Names}}'
@@ -170,12 +167,42 @@ class DockerService:
             
             running_containers = result.stdout.strip().split('\n')
             
-            if mysql_container in running_containers and wp_container in running_containers:
+            # Compter les conteneurs en cours d'exécution pour ce projet
+            project_containers = [c for c in running_containers if c.startswith(f"{project_name}_")]
+            
+            if len(project_containers) >= 2:  # Au moins 2 conteneurs actifs
                 return 'active'
             else:
                 return 'inactive'
         except Exception:
             return 'inactive'
+    
+    def get_individual_container_status(self, container_name):
+        """Vérifie le statut d'un conteneur individuel"""
+        try:
+            # Vérifier si le conteneur est en cours d'exécution
+            result = subprocess.run([
+                'docker', 'ps', '--format', '{{.Names}}'
+            ], capture_output=True, text=True)
+            
+            running_containers = result.stdout.strip().split('\n')
+            
+            if container_name in running_containers:
+                return 'active'
+            else:
+                # Vérifier si le conteneur existe mais est arrêté
+                result_all = subprocess.run([
+                    'docker', 'ps', '-a', '--format', '{{.Names}}'
+                ], capture_output=True, text=True)
+                
+                all_containers = result_all.stdout.strip().split('\n')
+                
+                if container_name in all_containers:
+                    return 'stopped'
+                else:
+                    return 'not_found'
+        except Exception:
+            return 'error'
     
     def get_container_logs(self, project_name, service_name, lines=50):
         """Récupère les logs d'un conteneur"""

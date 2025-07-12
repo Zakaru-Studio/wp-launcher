@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}WordPress Launcher - Dashboard{% endblock %}
+{% block title %}App Manager AK Digital - Dashboard{% endblock %}
 
 {% block content %}
 <!-- Header avec design amélioré -->
 <header class="header">
     <div class="header-top">
         <div class="header-left">
-            <h1 class="header-title">WordPress Launcher</h1>
+            <h1 class="header-title"><a href="http://192.168.1.21:5000/">App Manager</a></h1>
             <span class="app-version" id="app-version">v0.2.0</span>
         </div>
         <div class="header-right">
@@ -110,73 +110,177 @@
             </div>
             <form id="createProjectForm" action="/create_project" method="post" enctype="multipart/form-data">
                 <div class="modal-body">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <!-- Nom du projet -->
-                            <div class="form-group">
-                                <label for="project_name" class="form-label">
-                                    <i class="fas fa-tag me-1"></i>
-                                    Nom du projet *
-                                </label>
-                                <input type="text" class="form-control" id="project_name" name="project_name" required
-                                    placeholder="mon-site-wordpress" pattern="[a-zA-Z0-9-_]+"
-                                    title="Lettres, chiffres, tirets et underscores uniquement">
-                                <div class="form-text">Lettres, chiffres, tirets et underscores uniquement</div>
-                            </div>
+                    <!-- Nom du projet -->
+                    <div class="form-group">
+                        <label for="project_name" class="form-label">
+                            <i class="fas fa-tag me-1"></i>
+                            Nom du projet *
+                        </label>
+                        <input type="text" class="form-control" id="project_name" name="project_name" required
+                            placeholder="mon-site-wordpress" pattern="[a-zA-Z0-9-_]+"
+                            title="Lettres, chiffres, tirets et underscores uniquement"
+                            onchange="updateHostnamePreview()" oninput="updateHostnamePreview()">
+                        <div class="form-text">Lettres, chiffres, tirets et underscores uniquement</div>
+                    </div>
 
-
-
-                            <!-- Option Next.js -->
-                            <div class="form-group">
-                                <div class="form-check form-switch">
-                                    <input class="form-check-input" type="checkbox" id="enable_nextjs"
-                                        name="enable_nextjs">
-                                    <label class="form-check-label" for="enable_nextjs">
-                                        <i class="fab fa-react me-1"></i>
-                                        Activer Next.js (frontend headless)
-                                    </label>
-                                </div>
-                                <div class="form-text">Ajoute un conteneur Next.js pour du développement headless</div>
-                            </div>
+                    <!-- Hostname pour l'exposition SSL -->
+                    <div class="form-group">
+                        <label for="project_hostname" class="form-label">
+                            <i class="fas fa-globe me-1"></i>
+                            Nom de domaine (hostname) *
+                        </label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="project_hostname" name="project_hostname" required
+                                placeholder="mon-site" pattern="[a-zA-Z0-9-]+"
+                                title="Lettres, chiffres et tirets uniquement"
+                                onchange="updateHostnamePreview()" oninput="updateHostnamePreview()">
+                            <span class="input-group-text">.dev.akdigital.fr</span>
                         </div>
-                        <div class="col-md-6">
-                            <!-- Archive WP Migrate Pro -->
-                            <div class="form-group">
-                                <label for="wp_migrate_archive" class="form-label">
-                                    <i class="fas fa-file-archive me-1"></i>
-                                    Archive WP Migrate Pro (optionnel)
-                                </label>
-                                <div class="upload-zone" id="upload-zone">
-                                    <input type="file" class="form-control" id="wp_migrate_archive"
-                                        name="wp_migrate_archive" accept=".zip,.sql,.gz" style="display: none;">
-                                    <div class="upload-content text-center">
-                                        <i class="fas fa-cloud-upload-alt"></i>
-                                        <p class="mb-1">Glissez-déposez votre archive</p>
-                                        <p class="small">ou cliquez pour sélectionner</p>
-                                        <div class="upload-types">
-                                            <span class="badge">ZIP</span>
-                                            <span class="badge">SQL</span>
-                                            <span class="badge">GZ</span>
+                        <div class="form-text">
+                            <i class="fas fa-shield-alt me-1 text-success"></i>
+                            Le site sera automatiquement accessible via <strong>https://<span id="hostname-preview">mon-site</span>.dev.akdigital.fr</strong> avec certificat SSL
+                        </div>
+                    </div>
+
+                    <!-- Type de projet -->
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i class="fas fa-cogs me-1"></i>
+                            Type de projet *
+                        </label>
+                        <div class="project-type-selector">
+                            <div class="project-type-option">
+                                <input type="radio" id="project_type_wordpress" name="project_type" value="wordpress" checked onchange="updateProjectTypeInterface()">
+                                <label for="project_type_wordpress" class="project-type-card">
+                                    <div class="project-type-icon">
+                                        <i class="fab fa-wordpress-simple"></i>
+                                    </div>
+                                    <div class="project-type-info">
+                                        <h5>WordPress</h5>
+                                        <p>Site WordPress traditionnel avec MySQL</p>
+                                        <div class="tech-stack">
+                                            <span class="tech-badge">WordPress</span>
+                                            <span class="tech-badge">MySQL</span>
+                                            <span class="tech-badge">PHP</span>
                                         </div>
                                     </div>
-                                    <div class="upload-file-info d-none">
-                                        <i class="fas fa-file me-2"></i>
-                                        <span class="file-name"></span>
-                                        <button type="button" class="btn btn-sm btn-danger ms-2" onclick="clearFile()">
-                                            <i class="fas fa-times"></i>
-                                        </button>
+                                </label>
+                            </div>
+                            <div class="project-type-option">
+                                <input type="radio" id="project_type_nextjs" name="project_type" value="nextjs" onchange="updateProjectTypeInterface()">
+                                <label for="project_type_nextjs" class="project-type-card">
+                                    <div class="project-type-icon">
+                                        <i class="fab fa-react"></i>
                                     </div>
-                                </div>
-                                <div class="form-text">Archive d'export WP Migrate Pro ou fichier SQL (jusqu'à 8GB)
-                                </div>
-                                <div class="alert alert-info mt-2" style="font-size: 0.85rem;">
-                                    <i class="fas fa-info-circle me-1"></i>
-                                    <strong>Import automatique :</strong> Les archives WP Migrate Pro et WP Umbrella
-                                    sont automatiquement traitées.
-                                    Le contenu wp-content et la base de données sont extraits et importés dans votre
-                                    nouveau projet.
+                                    <div class="project-type-info">
+                                        <h5>App Next.js</h5>
+                                        <p>Application Next.js moderne</p>
+                                        <div class="tech-stack" id="nextjs_tech_stack">
+                                            <span class="tech-badge">Next.js</span>
+                                            <span class="tech-badge">MongoDB</span>
+                                            <span class="tech-badge">Express</span>
+                                        </div>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Option Next.js pour WordPress (affiché seulement si WordPress sélectionné) -->
+                    <div class="form-group" id="wordpress_nextjs_option">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="enable_nextjs"
+                                name="enable_nextjs">
+                            <label class="form-check-label" for="enable_nextjs">
+                                <i class="fab fa-react me-1"></i>
+                                Ajouter Next.js (frontend headless)
+                            </label>
+                        </div>
+                        <div class="form-text">Ajoute un conteneur Next.js pour du développement headless avec WordPress</div>
+                    </div>
+
+                    <!-- Choix de base de données pour Next.js App -->
+                    <div class="form-group" id="nextjs_database_section" style="display: none;">
+                        <label class="form-label">
+                            <i class="fas fa-database me-1"></i>
+                            Base de données *
+                        </label>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" id="db_type_mongodb" name="database_type" value="mongodb" checked onchange="updateDatabaseChoice()">
+                                    <label class="form-check-label" for="db_type_mongodb">
+                                        <i class="fas fa-leaf me-1 text-success"></i>
+                                        <strong>MongoDB</strong>
+                                        <div class="form-text">Base NoSQL moderne, flexible</div>
+                                    </label>
                                 </div>
                             </div>
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" id="db_type_mysql" name="database_type" value="mysql" onchange="updateDatabaseChoice()">
+                                    <label class="form-check-label" for="db_type_mysql">
+                                        <i class="fas fa-database me-1 text-primary"></i>
+                                        <strong>MySQL</strong>
+                                        <div class="form-text">Base relationnelle traditionnelle</div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Archive WP Migrate Pro (seulement pour WordPress) -->
+                    <div class="form-group" id="wordpress_archive_section">
+                        <label for="wp_migrate_archive" class="form-label">
+                            <i class="fas fa-file-archive me-1"></i>
+                            Archive WP Migrate Pro (optionnel)
+                        </label>
+                        <div class="upload-zone" id="upload-zone">
+                            <input type="file" class="form-control" id="wp_migrate_archive"
+                                name="wp_migrate_archive" accept=".zip,.sql,.gz" style="display: none;">
+                            <div class="upload-content text-center">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                                <p class="mb-1">Glissez-déposez votre archive</p>
+                                <p class="small">ou cliquez pour sélectionner</p>
+                                <div class="upload-types">
+                                    <span class="badge">ZIP</span>
+                                    <span class="badge">SQL</span>
+                                    <span class="badge">GZ</span>
+                                </div>
+                            </div>
+                            <div class="upload-file-info d-none">
+                                <i class="fas fa-file me-2"></i>
+                                <span class="file-name"></span>
+                                <button type="button" class="btn btn-sm btn-danger ms-2" onclick="clearFile()">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="form-text">Archive d'export WP Migrate Pro ou fichier SQL (jusqu'à 8GB)</div>
+                        <div class="alert alert-info mt-2" style="font-size: 0.85rem;">
+                            <i class="fas fa-info-circle me-1"></i>
+                            <strong>Import automatique :</strong> Les archives WP Migrate Pro et WP Umbrella
+                            sont automatiquement traitées.
+                            Le contenu wp-content et la base de données sont extraits et importés dans votre
+                            nouveau projet.
+                        </div>
+                    </div>
+
+                    <!-- Informations Next.js App (seulement pour Next.js) -->
+                    <div class="form-group" id="nextjs_info_section" style="display: none;">
+                        <div class="alert alert-success">
+                            <i class="fab fa-react me-2"></i>
+                            <strong>Application Next.js complète</strong>
+                            <ul class="mt-2 mb-0" id="nextjs_features_list">
+                                <li><strong>Frontend :</strong> Next.js avec TailwindCSS, SSR, Next Router</li>
+                                <li><strong>API :</strong> Express.js avec JWT, Zod, Nodemailer</li>
+                                <li><strong>Base de données :</strong> <span id="nextjs_db_info">MongoDB</span></li>
+                                <li><strong>Développement :</strong> Structure client/api séparée</li>
+                            </ul>
+                        </div>
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            L'application sera créée avec une structure complète prête pour le développement moderne.
                         </div>
                     </div>
                 </div>
@@ -354,9 +458,178 @@
         </div>
     </div>
 </div>
+<!-- Modal d'exposition de site -->
+<div class="modal fade" id="exposeSiteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-globe me-2"></i>
+                    Exposer le site sur internet
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="exposeSiteForm">
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Votre site sera accessible depuis internet via un sous-domaine sécurisé.
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="expose-hostname" class="form-label">
+                            <i class="fas fa-link me-1"></i>
+                            Nom de domaine *
+                        </label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="expose-hostname" name="hostname" 
+                                   placeholder="monsite" required pattern="[a-zA-Z0-9-]+" 
+                                   title="Lettres, chiffres et tirets uniquement">
+                            <span class="input-group-text">.dev.akdigital.fr</span>
+                        </div>
+                        <div class="form-text">
+                            Le site sera accessible via https://monsite.dev.akdigital.fr avec certificat SSL automatique
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i class="fas fa-server me-1"></i>
+                            Informations du site
+                        </label>
+                        <div class="bg-dark p-3 rounded">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <strong>Projet :</strong> <span id="expose-project-name">-</span>
+                                </div>
+                                <div class="col-md-6">
+                                    <strong>Port local :</strong> <span id="expose-project-port">-</span>
+                                </div>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-12">
+                                    <strong>URL locale :</strong> <span id="expose-project-url">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i class="fas fa-shield-alt me-1"></i>
+                            Sécurité
+                        </label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="expose-ssl" checked disabled>
+                            <label class="form-check-label" for="expose-ssl">
+                                Certificat SSL automatique (Let's Encrypt)
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="expose-security" checked disabled>
+                            <label class="form-check-label" for="expose-security">
+                                Protection contre les exploits
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Attention :</strong> Le site sera accessible publiquement sur internet. 
+                        Assurez-vous que votre contenu est prêt pour la production.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-modern btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-2"></i>
+                        Annuler
+                    </button>
+                    <button type="submit" class="btn-modern btn-primary">
+                        <i class="fas fa-globe me-2"></i>
+                        Exposer le site
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de confirmation de retrait d'exposition -->
+<div class="modal fade" id="unexposeSiteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-eye-slash me-2"></i>
+                    Retirer le site d'internet
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Êtes-vous sûr de vouloir retirer le site <strong id="unexpose-project-name">-</strong> d'internet ?</p>
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Le site ne sera plus accessible via <strong id="unexpose-project-url">-</strong>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-modern btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn-modern btn-warning" id="confirm-unexpose">
+                    <i class="fas fa-eye-slash me-2"></i>
+                    Retirer d'internet
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
+<style>
+    .exposed-url {
+        margin-left: 8px;
+        display: inline-block;
+        vertical-align: middle;
+    }
+    
+    .ssl-url-link {
+        color: #28a745;
+        text-decoration: none;
+        font-size: 0.875rem;
+        font-weight: 500;
+        padding: 4px 8px;
+        border-radius: 6px;
+        background: rgba(40, 167, 69, 0.1);
+        border: 1px solid rgba(40, 167, 69, 0.2);
+        transition: all 0.2s ease;
+    }
+    
+    .ssl-url-link:hover {
+        color: #ffffff;
+        background: #28a745;
+        border-color: #28a745;
+        text-decoration: none;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
+    }
+    
+    .ssl-url-link i {
+        font-size: 0.75rem;
+        opacity: 0.8;
+    }
+    
+    .ssl-url-text {
+        margin-left: 2px;
+    }
+    
+    .project-header-right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+</style>
+
 <script src="{{ url_for('static', filename='js/projects.js') }}"></script>
 <script src="{{ url_for('static', filename='js/upload.js') }}"></script>
 
@@ -545,11 +818,146 @@
 
     // Variables globales
     let projects = [];
+    let exposedSites = {};
+    let currentExposeProject = null;
+
+    // Fonction pour mettre à jour l'aperçu du hostname
+    function updateHostnamePreview() {
+        const projectNameInput = document.getElementById('project_name');
+        const hostnameInput = document.getElementById('project_hostname');
+        const hostnamePreview = document.getElementById('hostname-preview');
+        
+        if (projectNameInput && hostnameInput && hostnamePreview) {
+            let projectName = projectNameInput.value.trim();
+            
+            // Si le hostname est vide ou identique au nom du projet, le synchroniser
+            if (!hostnameInput.value.trim() || hostnameInput.value === hostnameInput.dataset.lastProjectName) {
+                hostnameInput.value = projectName;
+                hostnameInput.dataset.lastProjectName = projectName;
+            }
+            
+            // Mettre à jour l'aperçu
+            const hostnameValue = hostnameInput.value.trim() || projectName || 'mon-site';
+            hostnamePreview.textContent = hostnameValue;
+        }
+    }
+
+    // Fonction pour gérer l'interface selon le type de projet sélectionné
+    function updateProjectTypeInterface() {
+        const wordpressSelected = document.getElementById('project_type_wordpress').checked;
+        const nextjsSelected = document.getElementById('project_type_nextjs').checked;
+        
+        // Éléments à montrer/cacher
+        const wordpressNextjsOption = document.getElementById('wordpress_nextjs_option');
+        const wordpressArchiveSection = document.getElementById('wordpress_archive_section');
+        const nextjsInfoSection = document.getElementById('nextjs_info_section');
+        const nextjsDatabaseSection = document.getElementById('nextjs_database_section');
+        
+        if (wordpressSelected) {
+            // Afficher les options WordPress uniquement
+            wordpressNextjsOption.style.display = 'block';
+            wordpressArchiveSection.style.display = 'block';
+            nextjsInfoSection.style.display = 'none';
+            nextjsDatabaseSection.style.display = 'none';
+        } else if (nextjsSelected) {
+            // Afficher les options Next.js App uniquement
+            wordpressNextjsOption.style.display = 'none';
+            wordpressArchiveSection.style.display = 'none';
+            nextjsInfoSection.style.display = 'block';
+            nextjsDatabaseSection.style.display = 'block';
+            
+            // Décocher l'option Next.js pour WordPress si elle était cochée
+            document.getElementById('enable_nextjs').checked = false;
+            
+            // Mettre à jour l'affichage selon la base de données sélectionnée
+            updateDatabaseChoice();
+        }
+    }
+
+    // Fonction pour gérer le choix de base de données pour Next.js
+    function updateDatabaseChoice() {
+        const mongoSelected = document.getElementById('db_type_mongodb').checked;
+        const mysqlSelected = document.getElementById('db_type_mysql').checked;
+        
+        // Mettre à jour les tech badges
+        const techStack = document.getElementById('nextjs_tech_stack');
+        const dbInfo = document.getElementById('nextjs_db_info');
+        
+        if (mongoSelected) {
+            techStack.innerHTML = `
+                <span class="tech-badge">Next.js</span>
+                <span class="tech-badge">MongoDB</span>
+                <span class="tech-badge">Express</span>
+            `;
+            dbInfo.textContent = 'MongoDB avec Mongo Express';
+        } else if (mysqlSelected) {
+            techStack.innerHTML = `
+                <span class="tech-badge">Next.js</span>
+                <span class="tech-badge">MySQL</span>
+                <span class="tech-badge">Express</span>
+            `;
+            dbInfo.textContent = 'MySQL avec phpMyAdmin';
+        }
+    }
 
     // Fonction pour afficher le modal de création
     function showCreateProjectModal() {
         const modal = new bootstrap.Modal(document.getElementById('createProjectModal'));
         modal.show();
+        
+        // S'assurer que l'interface est correctement initialisée
+        updateProjectTypeInterface();
+        
+        // Initialiser l'aperçu du hostname
+        updateHostnamePreview();
+    }
+
+    // Fonction pour vérifier le statut de Traefik
+    async function checkTraefikStatus() {
+        try {
+            const response = await fetch('/traefik_status');
+            const data = await response.json();
+            
+            if (data.success && data.status.traefik_running) {
+                console.log('✅ Traefik is running');
+                return true;
+            } else {
+                console.log('⚠️ Traefik is not running');
+                return false;
+            }
+        } catch (error) {
+            console.error('Error checking Traefik status:', error);
+            return false;
+        }
+    }
+
+    // Fonction pour démarrer Traefik si nécessaire
+    async function ensureTraefikRunning() {
+        const isRunning = await checkTraefikStatus();
+        if (!isRunning) {
+            console.log('🚀 Starting Traefik...');
+            try {
+                const response = await fetch('/start_traefik', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    console.log('✅ Traefik started successfully');
+                    return true;
+                } else {
+                    console.error('❌ Failed to start Traefik:', data.message);
+                    return false;
+                }
+            } catch (error) {
+                console.error('Error starting Traefik:', error);
+                return false;
+            }
+        }
+        return true;
     }
 
     // Fonction pour charger les projets
@@ -580,6 +988,9 @@
 
             // Vérifier le statut des boutons npm run dev après le rendu
             setTimeout(() => checkNextjsDevStatus(), 1500);
+            
+            // Mettre à jour les boutons d'exposition après le rendu
+            setTimeout(() => updateExposeButtons(), 200);
         } catch (error) {
             console.error('Erreur lors du chargement des projets:', error);
             showError('Erreur lors du chargement des projets');
@@ -775,6 +1186,15 @@
                             <a href="http://192.168.1.21:${project.port}" target="_blank" class="ip-port-link" onclick="event.stopPropagation();">
                                 192.168.1.21:${project.port}
                             </a>
+                            <button class="btn-expose" data-project="${project.name}" data-port="${project.port}" onclick="event.stopPropagation(); showExposeSiteModal('${project.name}', ${project.port})" title="Exposer sur internet">
+                                <i class="fas fa-globe"></i>
+                            </button>
+                            <span class="exposed-url" id="exposed-url-${project.name}" style="display: none;">
+                                <a href="#" target="_blank" class="ssl-url-link">
+                                    <i class="fas fa-external-link-alt me-1"></i>
+                                    <span class="ssl-url-text"></span>
+                                </a>
+                            </span>
                         </div>
                     ` : ''}
                     ${project.status === 'active' && project.nextjs_enabled && project.nextjs_port ? `
@@ -907,6 +1327,10 @@
     // Chargement initial
     document.addEventListener('DOMContentLoaded', function () {
         loadProjects();
+        loadExposedSites();
+
+        // Vérifier le statut de Traefik au démarrage
+        checkTraefikStatus();
 
         // Rafraîchir automatiquement toutes les 30 secondes
         setInterval(loadProjects, 30000);
@@ -914,12 +1338,17 @@
         // Vérifier le statut des boutons npm run dev toutes les 10 secondes
         setInterval(checkNextjsDevStatus, 10000);
 
+        // Vérifier le statut de Traefik toutes les 60 secondes
+        setInterval(checkTraefikStatus, 60000);
+
         // Initialiser la gestion des fichiers
         initFileUpload();
 
         // Initialiser la gestion du formulaire
         initCreateProjectForm();
 
+        // Initialiser les formulaires d'exposition
+        initExposeForms();
 
     });
 
@@ -1076,6 +1505,8 @@
         modal.addEventListener('hidden.bs.modal', function () {
             form.reset();
             clearFile();
+            // Réinitialiser l'aperçu
+            updateHostnamePreview();
         });
     }
 
@@ -1423,6 +1854,242 @@
         showProjectCreationLoader();
 
         // Le reste du code existant...
+    }
+
+    // Fonctions pour l'exposition des sites
+    function loadExposedSites() {
+        fetch('/get_exposed_sites')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    exposedSites = data.sites;
+                    updateExposeButtons();
+                }
+            })
+            .catch(error => {
+                console.error('Erreur lors du chargement des sites exposés:', error);
+            });
+    }
+
+    function updateExposeButtons() {
+        // Mettre à jour les boutons d'exposition selon l'état
+        document.querySelectorAll('.btn-expose').forEach(button => {
+            const projectName = button.getAttribute('data-project');
+            const exposedUrlElement = document.getElementById(`exposed-url-${projectName}`);
+            
+            if (projectName && exposedSites[projectName]) {
+                // Site déjà exposé
+                button.classList.add('exposed');
+                button.innerHTML = '<i class="fas fa-eye-slash"></i>';
+                button.title = 'Retirer d\'internet';
+                button.setAttribute('onclick', `event.stopPropagation(); showUnexposeSiteModal('${projectName}')`);
+                
+                // Afficher l'URL SSL
+                if (exposedUrlElement) {
+                    const siteData = exposedSites[projectName];
+                    const sslUrl = `https://${siteData.hostname}`;
+                    const urlLink = exposedUrlElement.querySelector('.ssl-url-link');
+                    const urlText = exposedUrlElement.querySelector('.ssl-url-text');
+                    
+                    if (urlLink && urlText) {
+                        urlLink.href = sslUrl;
+                        urlText.textContent = siteData.hostname;
+                        exposedUrlElement.style.display = 'inline-block';
+                    }
+                }
+            } else {
+                // Site non exposé
+                button.classList.remove('exposed');
+                button.innerHTML = '<i class="fas fa-globe"></i>';
+                button.title = 'Exposer sur internet';
+                const port = button.getAttribute('data-port');
+                button.setAttribute('onclick', `event.stopPropagation(); showExposeSiteModal('${projectName}', ${port})`);
+                
+                // Cacher l'URL SSL
+                if (exposedUrlElement) {
+                    exposedUrlElement.style.display = 'none';
+                }
+            }
+        });
+    }
+
+    function showExposeSiteModal(projectName, port) {
+        currentExposeProject = { name: projectName, port: port };
+        
+        // Remplir les informations du modal
+        document.getElementById('expose-project-name').textContent = projectName;
+        document.getElementById('expose-project-port').textContent = port;
+        document.getElementById('expose-project-url').textContent = `http://192.168.1.21:${port}`;
+        
+        // Suggérer un hostname par défaut
+        document.getElementById('expose-hostname').value = projectName;
+        
+        // Afficher le modal
+        const modal = new bootstrap.Modal(document.getElementById('exposeSiteModal'));
+        modal.show();
+    }
+
+    function showUnexposeSiteModal(projectName) {
+        currentExposeProject = { name: projectName };
+        
+        const siteData = exposedSites[projectName];
+        if (siteData) {
+            document.getElementById('unexpose-project-name').textContent = projectName;
+            document.getElementById('unexpose-project-url').textContent = `https://${siteData.hostname}`;
+        }
+        
+        // Afficher le modal
+        const modal = new bootstrap.Modal(document.getElementById('unexposeSiteModal'));
+        modal.show();
+    }
+
+    async function exposeSite(projectName, hostname) {
+        try {
+            // S'assurer que Traefik est en cours d'exécution
+            const traefikReady = await ensureTraefikRunning();
+            if (!traefikReady) {
+                showError('Impossible de démarrer Traefik. Vérifiez la configuration.');
+                return { success: false, message: 'Traefik non disponible' };
+            }
+
+            const response = await fetch('/expose_site', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    project_name: projectName,
+                    hostname: hostname
+                })
+            });
+
+            const data = await response.json();
+            
+            if (data.success) {
+                showSuccess(`Site exposé avec succès sur https://${hostname}`);
+                loadExposedSites(); // Recharger les sites exposés
+                setTimeout(() => {
+                    loadProjects(); // Recharger les projets
+                    updateExposeButtons(); // Mettre à jour les boutons d'exposition
+                }, 500);
+            } else {
+                showError(data.message);
+            }
+            
+            return data;
+        } catch (error) {
+            console.error('Erreur lors de l\'exposition du site:', error);
+            showError('Erreur lors de l\'exposition du site');
+            throw error;
+        }
+    }
+
+    function unexposeSite(projectName) {
+        return fetch('/unexpose_site', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                project_name: projectName
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showSuccess(data.message);
+                loadExposedSites(); // Recharger les sites exposés
+                setTimeout(() => {
+                    loadProjects(); // Recharger les projets
+                    updateExposeButtons(); // Mettre à jour les boutons d'exposition
+                }, 500);
+            } else {
+                showError(data.message);
+            }
+            return data;
+        })
+        .catch(error => {
+            console.error('Erreur lors du retrait du site:', error);
+            showError('Erreur lors du retrait du site');
+            throw error;
+        });
+    }
+
+    // Initialiser les formulaires d'exposition
+    function initExposeForms() {
+        // Formulaire d'exposition
+        const exposeForm = document.getElementById('exposeSiteForm');
+        if (exposeForm) {
+            exposeForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                if (!currentExposeProject) {
+                    showError('Aucun projet sélectionné');
+                    return;
+                }
+                
+                const hostnameInput = document.getElementById('expose-hostname');
+                const hostname = hostnameInput.value.trim();
+                
+                if (!hostname) {
+                    showError('Nom de domaine requis');
+                    return;
+                }
+                
+                if (!/^[a-zA-Z0-9-]+$/.test(hostname)) {
+                    showError('Le nom de domaine ne peut contenir que des lettres, chiffres et tirets');
+                    return;
+                }
+                
+                const fullHostname = `${hostname}.dev.akdigital.fr`;
+                
+                // Désactiver le formulaire
+                const submitButton = exposeForm.querySelector('button[type="submit"]');
+                submitButton.disabled = true;
+                submitButton.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Exposition en cours...';
+                
+                exposeSite(currentExposeProject.name, fullHostname)
+                    .finally(() => {
+                        // Réactiver le formulaire
+                        submitButton.disabled = false;
+                        submitButton.innerHTML = '<i class="fas fa-globe me-2"></i>Exposer le site';
+                        
+                        // Fermer le modal
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('exposeSiteModal'));
+                        if (modal) {
+                            modal.hide();
+                        }
+                    });
+            });
+        }
+        
+        // Bouton de confirmation de retrait
+        const confirmUnexposeButton = document.getElementById('confirm-unexpose');
+        if (confirmUnexposeButton) {
+            confirmUnexposeButton.addEventListener('click', function() {
+                if (!currentExposeProject) {
+                    showError('Aucun projet sélectionné');
+                    return;
+                }
+                
+                // Désactiver le bouton
+                confirmUnexposeButton.disabled = true;
+                confirmUnexposeButton.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Retrait en cours...';
+                
+                unexposeSite(currentExposeProject.name)
+                    .finally(() => {
+                        // Réactiver le bouton
+                        confirmUnexposeButton.disabled = false;
+                        confirmUnexposeButton.innerHTML = '<i class="fas fa-eye-slash me-2"></i>Retirer d\'internet';
+                        
+                        // Fermer le modal
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('unexposeSiteModal'));
+                        if (modal) {
+                            modal.hide();
+                        }
+                    });
+            });
+        }
     }
 
 

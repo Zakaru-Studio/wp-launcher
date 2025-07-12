@@ -53,8 +53,16 @@ services:
     command: ["apache2-foreground"]
     networks:
       - wordpress_network
+      - traefik-network
     ports:
-      - "0.0.0.0:PROJECT_PORT:80"  # Port exposé sur toutes les interfaces
+      - "0.0.0.0:{wordpress_port}:80"  # Port exposé sur toutes les interfaces
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.{project_name}-wordpress.rule=Host(`{project_hostname}.dev.akdigital.fr`)"
+      - "traefik.http.routers.{project_name}-wordpress.entrypoints=websecure"
+      - "traefik.http.routers.{project_name}-wordpress.tls=true"
+      - "traefik.http.services.{project_name}-wordpress.loadbalancer.server.port=80"
+      - "traefik.docker.network=traefik-network"
     # Allocations raisonnables pour Docker
     mem_limit: 1g
     cpus: '2'
@@ -72,13 +80,13 @@ services:
       PMA_USER: wordpress
       PMA_PASSWORD: wordpress
       MYSQL_ROOT_PASSWORD: rootpassword
-      PMA_ABSOLUTE_URI: http://192.168.1.21:PROJECT_PMA_PORT/
+      PMA_ABSOLUTE_URI: http://192.168.1.21:{phpmyadmin_port}/
     volumes:
       - ./phpmyadmin-config/php.ini:/usr/local/etc/php/conf.d/phpmyadmin.ini
     networks:
       - wordpress_network
     ports:
-      - "0.0.0.0:PROJECT_PMA_PORT:80"  # Port phpMyAdmin
+      - "0.0.0.0:{phpmyadmin_port}:80"  # Port phpMyAdmin
     # Allocations raisonnables
     mem_limit: 256M
     cpus: '1'
@@ -93,8 +101,8 @@ services:
     networks:
       - wordpress_network
     ports:
-      - "0.0.0.0:PROJECT_MAILPIT_PORT:8025"  # Port interface web Mailpit
-      - "0.0.0.0:PROJECT_SMTP_PORT:1025"     # Port SMTP Mailpit
+      - "0.0.0.0:{mailpit_port}:8025"  # Port interface web Mailpit
+      - "0.0.0.0:{smtp_port}:1025"     # Port SMTP Mailpit
     # Allocations légères
     mem_limit: 128M
     cpus: '0.5'
@@ -109,8 +117,9 @@ services:
       - nextjs_node_modules:/app/node_modules
     networks:
       - wordpress_network
+      - traefik-network
     ports:
-      - "0.0.0.0:PROJECT_NEXTJS_PORT:3000"
+      - "0.0.0.0:8084:3000"
     environment:
       - NODE_ENV=development
       - NEXT_TELEMETRY_DISABLED=1
@@ -130,4 +139,7 @@ volumes:
     driver: local
 
 networks:
-  wordpress_network: 
+  wordpress_network:
+    driver: bridge
+  traefik-network:
+    external: true 

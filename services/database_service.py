@@ -6,7 +6,8 @@ Service de gestion des bases de données
 import os
 import tempfile
 import threading
-from utils.file_utils import extract_zip, detect_file_encoding, get_file_size_mb
+from utils.file_utils import extract_zip, get_file_size_mb
+from utils.database_utils import detect_file_encoding
 from services.docker_service import DockerService
 
 class DatabaseService:
