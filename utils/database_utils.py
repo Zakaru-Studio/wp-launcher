@@ -287,7 +287,7 @@ def update_wordpress_urls(container_path, project_name, new_url):
         except Exception as e:
             print(f"⚠️ Impossible de détecter l'URL actuelle: {e}")
         
-        # Ajouter les URLs communes à remplacer
+        # Ajouter les URLs communes à remplacer (accès local uniquement)
         old_urls.extend([
             'http://localhost',
             'http://192.168.1.21:8087',
@@ -295,8 +295,7 @@ def update_wordpress_urls(container_path, project_name, new_url):
             'http://192.168.1.21:8091',
             'http://192.168.1.21:8081',
             'http://192.168.1.21:8082',
-            'http://192.168.1.21:8083',
-            'https://pace.akdigital.fr'
+            'http://192.168.1.21:8083'
         ])
         
         # Nettoyer les doublons
@@ -435,7 +434,7 @@ UPDATE wp_options SET option_value = REPLACE(option_value, 'http://192.168.1.21:
 UPDATE wp_options SET option_value = REPLACE(option_value, 'http://192.168.1.21:8082', '{new_url}') WHERE option_value LIKE '%http://192.168.1.21:8082%';
 UPDATE wp_options SET option_value = REPLACE(option_value, 'http://192.168.1.21:8083', '{new_url}') WHERE option_value LIKE '%http://192.168.1.21:8083%';
 UPDATE wp_options SET option_value = REPLACE(option_value, 'http://localhost', '{new_url}') WHERE option_value LIKE '%http://localhost%';
-UPDATE wp_options SET option_value = REPLACE(option_value, 'https://pace.akdigital.fr', 'https://nonasolution.dev.akdigital.fr') WHERE option_value LIKE '%https://pace.akdigital.fr%';
+
 
 -- Nettoyage du contenu des posts
 UPDATE wp_posts SET post_content = REPLACE(post_content, 'http://192.168.1.21:8087', '{new_url}');
@@ -445,26 +444,19 @@ UPDATE wp_posts SET post_content = REPLACE(post_content, 'http://192.168.1.21:80
 UPDATE wp_posts SET post_content = REPLACE(post_content, 'http://192.168.1.21:8082', '{new_url}');
 UPDATE wp_posts SET post_content = REPLACE(post_content, 'http://192.168.1.21:8083', '{new_url}');
 UPDATE wp_posts SET post_content = REPLACE(post_content, 'http://localhost', '{new_url}');
-UPDATE wp_posts SET post_content = REPLACE(post_content, 'https://pace.akdigital.fr', 'https://nonasolution.dev.akdigital.fr');
-
 UPDATE wp_posts SET post_excerpt = REPLACE(post_excerpt, 'http://192.168.1.21:8087', '{new_url}');
 UPDATE wp_posts SET post_excerpt = REPLACE(post_excerpt, 'http://localhost', '{new_url}');
-UPDATE wp_posts SET post_excerpt = REPLACE(post_excerpt, 'https://pace.akdigital.fr', 'https://nonasolution.dev.akdigital.fr');
 
 -- Nettoyage des métadonnées
 UPDATE wp_postmeta SET meta_value = REPLACE(meta_value, 'http://192.168.1.21:8087', '{new_url}') WHERE meta_value LIKE '%http://192.168.1.21:8087%';
 UPDATE wp_postmeta SET meta_value = REPLACE(meta_value, 'http://192.168.1.21:8090', '{new_url}') WHERE meta_value LIKE '%http://192.168.1.21:8090%';
 UPDATE wp_postmeta SET meta_value = REPLACE(meta_value, 'http://192.168.1.21:8091', '{new_url}') WHERE meta_value LIKE '%http://192.168.1.21:8091%';
 UPDATE wp_postmeta SET meta_value = REPLACE(meta_value, 'http://localhost', '{new_url}') WHERE meta_value LIKE '%http://localhost%';
-UPDATE wp_postmeta SET meta_value = REPLACE(meta_value, 'https://pace.akdigital.fr', 'https://nonasolution.dev.akdigital.fr') WHERE meta_value LIKE '%https://pace.akdigital.fr%';
-
 UPDATE wp_commentmeta SET meta_value = REPLACE(meta_value, 'http://192.168.1.21:8087', '{new_url}') WHERE meta_value LIKE '%http://192.168.1.21:8087%';
 UPDATE wp_commentmeta SET meta_value = REPLACE(meta_value, 'http://localhost', '{new_url}') WHERE meta_value LIKE '%http://localhost%';
-UPDATE wp_commentmeta SET meta_value = REPLACE(meta_value, 'https://pace.akdigital.fr', 'https://nonasolution.dev.akdigital.fr') WHERE meta_value LIKE '%https://pace.akdigital.fr%';
 
 UPDATE wp_usermeta SET meta_value = REPLACE(meta_value, 'http://192.168.1.21:8087', '{new_url}') WHERE meta_value LIKE '%http://192.168.1.21:8087%';
 UPDATE wp_usermeta SET meta_value = REPLACE(meta_value, 'http://localhost', '{new_url}') WHERE meta_value LIKE '%http://localhost%';
-UPDATE wp_usermeta SET meta_value = REPLACE(meta_value, 'https://pace.akdigital.fr', 'https://nonasolution.dev.akdigital.fr') WHERE meta_value LIKE '%https://pace.akdigital.fr%';
 
 -- Nettoyage du cache
 DELETE FROM wp_options WHERE option_name LIKE '%_transient_%';

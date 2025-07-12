@@ -19,11 +19,13 @@ from routes.nginx import nginx_bp
 app = create_app()
 socketio = create_socketio(app)
 
-# Initialiser les services
+# Initialiser les services (sans Traefik - accès local uniquement)
 services = init_services(socketio)
 
 # Stocker les services dans les extensions de l'app pour un accès global
-app.extensions.update(services)
+# On exclut le service Traefik car l'exposition publique est désactivée
+filtered_services = {k: v for k, v in services.items() if k != 'traefik'}
+app.extensions.update(filtered_services)
 app.extensions['socketio'] = socketio
 
 # Enregistrer les blueprints (modules de routes)

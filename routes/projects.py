@@ -17,7 +17,7 @@ from utils.project_utils import (
     create_nextjs_app_structure, project_exists, create_project_marker, update_project_wordpress_urls_in_files
 )
 from utils.database_utils import (
-    create_clean_wordpress_database, intelligent_mysql_wait, update_wordpress_urls, update_wordpress_urls_simple
+    create_clean_wordpress_database, intelligent_mysql_wait
 )
 from utils.logger import wp_logger
 from models.project import Project
@@ -101,16 +101,6 @@ def list_projects_with_status():
         
         urls = _get_project_urls(project_name, ports)
         
-        # Vérifier si le projet est exposé via Traefik
-        traefik_service = current_app.extensions.get('traefik')
-        exposed_url = None
-        if traefik_service:
-            exposed_sites = traefik_service.get_exposed_sites()
-            if project_name in exposed_sites:
-                site_info = exposed_sites[project_name]
-                if site_info.get('hostname'):
-                    exposed_url = f"https://{site_info['hostname']}"
-        
         project_info = {
             'name': project_name,
             'port': project.port,
@@ -124,8 +114,7 @@ def list_projects_with_status():
             'smtp_port': project.smtp_port,
             'nextjs_port': project.nextjs_port if project.has_nextjs else None,
             'nextjs_enabled': project.has_nextjs,
-            'urls': urls,
-            'exposed_url': exposed_url
+            'urls': urls
         }
         
         projects.append(project_info)
@@ -234,7 +223,7 @@ def _create_wordpress_project(project_name, project_hostname, editable_path, con
     create_wordpress_base_files(editable_path)
     
     # Mettre à jour les URLs dans les fichiers WordPress
-    update_project_wordpress_urls_in_files(editable_path, project_hostname)
+    update_project_wordpress_urls_in_files(editable_path, project_hostname, ports['wordpress'])
     
     # Traiter le fichier selon son type
     db_path = None
@@ -269,15 +258,11 @@ def _create_wordpress_project(project_name, project_hostname, editable_path, con
             return jsonify({'success': False, 'message': 'Erreur lors de la création de la base de données'})
         success_message = f'Projet WordPress {project_name} créé avec succès ! Installation WordPress à terminer.'
     
-    # Exposer automatiquement le site via Traefik
-    _auto_expose_site(project_name, project_hostname, ports['wordpress'])
-    
     return jsonify({
         'success': True, 
         'message': success_message,
         'project_name': project_name,
-        'urls': _get_project_urls(project_name, ports),
-        'ssl_url': f'https://{project_hostname}.dev.akdigital.fr'
+        'urls': _get_project_urls(project_name, ports)
     })
 
 
@@ -408,34 +393,7 @@ def _save_project_ports(project_name, ports):
         print(f"❌ Erreur lors de la sauvegarde des ports pour {project_name}: {e}")
 
 
-def _auto_expose_site(project_name, project_hostname, port):
-    """Expose automatiquement le site via Traefik"""
-    try:
-        print(f"🌐 [AUTO_EXPOSE] Exposition automatique du site {project_name} sur {project_hostname}.dev.akdigital.fr")
-        
-        # Récupérer le service Traefik
-        traefik_service = current_app.extensions.get('traefik')
-        if not traefik_service:
-            print(f"⚠️ [AUTO_EXPOSE] Service Traefik non disponible")
-            return False
-        
-        # Exposer le site
-        result = traefik_service.expose_site(
-            project_name=project_name,
-            hostname=f"{project_hostname}.dev.akdigital.fr",
-            port=port
-        )
-        
-        if result['success']:
-            print(f"✅ [AUTO_EXPOSE] Site exposé avec succès: {result['url']}")
-            return True
-        else:
-            print(f"❌ [AUTO_EXPOSE] Erreur lors de l'exposition: {result['message']}")
-            return False
-            
-    except Exception as e:
-        print(f"❌ [AUTO_EXPOSE] Exception lors de l'exposition automatique: {e}")
-        return False
+
 
 
 @projects_bp.route('/start_project/<project_name>', methods=['POST'])
@@ -915,73 +873,4 @@ def start_nextjs_container(project_name):
     except Exception as e:
         return jsonify({'success': False, 'message': f'Erreur: {str(e)}'}) 
 
-@projects_bp.route('/update_wordpress_urls/<project_name>', methods=['POST'])
-def update_project_wordpress_urls(project_name):
-    """Met à jour les URLs WordPress d'un projet exposé"""
-    try:
-        print(f"🔄 Demande de mise à jour des URLs pour {project_name}")
-        
-        # Vérifier si le projet existe
-        project = Project(project_name, PROJECTS_FOLDER, CONTAINERS_FOLDER)
-        if not project.exists:
-            return jsonify({'success': False, 'message': 'Projet non trouvé'})
-        
-        # Vérifier si le projet est de type WordPress
-        if project.project_type != 'wordpress':
-            return jsonify({'success': False, 'message': 'Cette fonction ne fonctionne que pour les projets WordPress'})
-        
-        # Vérifier si le projet est actif
-        docker_service = current_app.extensions.get('docker')
-        if docker_service:
-            container_status = docker_service.get_container_status(project_name)
-            if container_status != 'active':
-                return jsonify({'success': False, 'message': 'Le projet doit être démarré pour mettre à jour les URLs'})
-        
-        # Vérifier si le projet est exposé
-        traefik_service = current_app.extensions.get('traefik')
-        if not traefik_service:
-            return jsonify({'success': False, 'message': 'Service Traefik non disponible'})
-        
-        exposed_sites = traefik_service.get_exposed_sites()
-        if project_name not in exposed_sites:
-            return jsonify({'success': False, 'message': 'Le projet n\'est pas exposé via Traefik'})
-        
-        # Récupérer l'URL d'exposition
-        site_info = exposed_sites[project_name]
-        hostname = site_info.get('hostname')
-        if not hostname:
-            return jsonify({'success': False, 'message': 'Hostname non trouvé pour le projet exposé'})
-        
-        new_url = f'https://{hostname}'
-        
-        # Mettre à jour les URLs WordPress
-        
-        container_path = os.path.join(CONTAINERS_FOLDER, project_name)
-        success = update_wordpress_urls_simple(container_path, project_name, new_url)
-        
-        if success:
-            return jsonify({
-                'success': True,
-                'message': f'URLs WordPress mises à jour vers {new_url}',
-                'new_url': new_url,
-                'recommendations': [
-                    'Videz le cache de vos plugins de cache (WP Rocket, W3 Total Cache, etc.)',
-                    'Videz le cache de votre CDN si vous en utilisez un',
-                    'Vérifiez que tous les plugins sont compatibles HTTPS',
-                    'Rechargez complètement la page (Ctrl+F5) pour voir les changements'
-                ]
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'message': 'Erreur lors de la mise à jour des URLs WordPress'
-            })
-            
-    except Exception as e:
-        print(f"❌ Erreur lors de la mise à jour des URLs: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({
-            'success': False,
-            'message': f'Erreur: {str(e)}'
-        }) 
+ 

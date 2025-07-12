@@ -274,9 +274,9 @@ $table_prefix = 'wp_';
 // Mode debug (désactivé par défaut)
 define('WP_DEBUG', false);
 
-// Configuration des URLs - Utilise l'URL SSL lors de l'exposition
-define('WP_HOME', 'https://{project_hostname}.dev.akdigital.fr');
-define('WP_SITEURL', 'https://{project_hostname}.dev.akdigital.fr');
+// Configuration des URLs - Accès local uniquement
+define('WP_HOME', 'http://192.168.1.21:PROJECT_PORT');
+define('WP_SITEURL', 'http://192.168.1.21:PROJECT_PORT');
 
 // Configuration des fichiers
 define('DISALLOW_FILE_EDIT', false);
@@ -299,9 +299,6 @@ define('WP_AUTO_UPDATE_CORE', false);
 
 // Configuration du système de fichiers
 define('FS_METHOD', 'direct');
-
-// Configuration SSL
-define('FORCE_SSL_ADMIN', true);
 
 // Configuration des cookies
 define('COOKIEPATH', '/');
@@ -327,25 +324,9 @@ if (!defined('ABSPATH')) {
     define('ABSPATH', __DIR__ . '/');
 }
 
-// Configuration des chemins - Utilise l'URL SSL
+// Configuration des chemins - Accès local uniquement
 define('WP_CONTENT_DIR', ABSPATH . 'wp-content');
-define('WP_CONTENT_URL', 'https://{project_hostname}.dev.akdigital.fr/wp-content');
-
-// Configuration pour proxy HTTPS (Traefik)
-if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
-    $_SERVER['HTTPS'] = 'on';
-    $_SERVER['SERVER_PORT'] = 443;
-}
-
-// Force HTTPS detection
-if (isset($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-    $_SERVER['HTTPS'] = 'on';
-    $_SERVER['SERVER_PORT'] = 443;
-}
-
-// Configuration pour reverse proxy
-define('WP_HOME_SSL', true);
-define('WP_SITEURL_SSL', true);
+define('WP_CONTENT_URL', 'http://192.168.1.21:PROJECT_PORT/wp-content');
 
 // Chargement des réglages WordPress
 require_once ABSPATH . 'wp-settings.php';
@@ -491,10 +472,10 @@ def create_project_marker(project_path, project_type):
         f.write(project_type) 
 
 
-def update_project_wordpress_urls_in_files(project_path, project_hostname):
+def update_project_wordpress_urls_in_files(project_path, project_hostname, port=None):
     """Met à jour les URLs dans les fichiers du projet WordPress après création"""
     try:
-        print(f"🔧 Mise à jour des URLs dans les fichiers pour {project_hostname}")
+        print(f"🔧 Mise à jour des URLs dans les fichiers pour l'accès local")
         
         # Mettre à jour wp-config.php
         wp_config_path = os.path.join(project_path, 'wp-config.php')
@@ -502,11 +483,13 @@ def update_project_wordpress_urls_in_files(project_path, project_hostname):
             with open(wp_config_path, 'r') as f:
                 content = f.read()
             
-            content = content.replace('{project_hostname}', project_hostname)
+            # Remplacer les placeholders par des URLs locales
+            if port:
+                content = content.replace('PROJECT_PORT', str(port))
+                print(f"✅ wp-config.php mis à jour avec le port {port}")
             
             with open(wp_config_path, 'w') as f:
                 f.write(content)
-            print(f"✅ wp-config.php mis à jour avec {project_hostname}")
         
         return True
     except Exception as e:
