@@ -10,7 +10,7 @@ import subprocess
 from flask import Blueprint, request, jsonify, current_app
 from werkzeug.utils import secure_filename
 from utils.file_utils import allowed_file, extract_zip, is_sql_file, is_zip_file
-from utils.port_utils import find_free_port_for_project, get_used_ports
+from utils.port_utils import find_free_port_for_project, get_used_ports, get_comprehensive_used_ports
 from utils.project_utils import (
     secure_project_name, copy_docker_template, copy_docker_template_nextjs_mongo,
     copy_docker_template_nextjs_mysql, create_default_wp_content, create_wordpress_base_files,
@@ -149,12 +149,10 @@ def create_project():
         if not project_name:
             return jsonify({'success': False, 'message': 'Le nom du projet est requis'})
         
-        if not project_hostname:
-            return jsonify({'success': False, 'message': 'Le hostname est requis'})
+    
         
         # Nettoyer le nom du projet et le hostname
         project_name = secure_project_name(project_name)
-        project_hostname = secure_project_name(project_hostname)
         
         print(f"📝 Nom du projet: {project_name}")
         print(f"🎯 Type de projet: {project_type}")
@@ -178,9 +176,9 @@ def create_project():
         
         # Traitement selon le type de projet
         if project_type == 'wordpress':
-            return _create_wordpress_project(project_name, project_hostname, editable_path, container_path, enable_nextjs)
+            return _create_wordpress_project(project_name, editable_path, container_path, enable_nextjs)
         else:
-            return _create_nextjs_project(project_name, project_hostname, editable_path, container_path, database_type)
+            return _create_nextjs_project(project_name, editable_path, container_path, database_type)
             
     except Exception as e:
         print(f"❌ Erreur lors de la création du projet: {e}")
@@ -189,7 +187,7 @@ def create_project():
         return jsonify({'success': False, 'message': f'Erreur lors de la création: {str(e)}'})
 
 
-def _create_wordpress_project(project_name, project_hostname, editable_path, container_path, enable_nextjs):
+def _create_wordpress_project(project_name, editable_path, container_path, enable_nextjs):
     """Crée un projet WordPress"""
     print("📋 Copie du template Docker pour WordPress...")
     
@@ -197,9 +195,9 @@ def _create_wordpress_project(project_name, project_hostname, editable_path, con
     ports = _configure_wordpress_ports(project_name, enable_nextjs)
     
     if enable_nextjs:
-        copy_docker_template(container_path, project_name, project_hostname, ports, enable_nextjs=True)
+        copy_docker_template(container_path, project_name, project_name, ports, enable_nextjs=True)
     else:
-        copy_docker_template(container_path, project_name, project_hostname, ports, enable_nextjs=False)
+        copy_docker_template(container_path, project_name, project_name, ports, enable_nextjs=False)
     
     # Gérer le fichier uploadé
     wp_migrate_archive = request.files.get('wp_migrate_archive')
@@ -223,7 +221,7 @@ def _create_wordpress_project(project_name, project_hostname, editable_path, con
     create_wordpress_base_files(editable_path)
     
     # Mettre à jour les URLs dans les fichiers WordPress
-    update_project_wordpress_urls_in_files(editable_path, project_hostname, ports['wordpress'])
+    update_project_wordpress_urls_in_files(editable_path, project_name, ports['wordpress'])
     
     # Traiter le fichier selon son type
     db_path = None
@@ -266,14 +264,14 @@ def _create_wordpress_project(project_name, project_hostname, editable_path, con
     })
 
 
-def _create_nextjs_project(project_name, project_hostname, editable_path, container_path, database_type):
+def _create_nextjs_project(project_name, editable_path, container_path, database_type):
     """Crée un projet Next.js"""
     print("📋 Copie du template Docker pour Next.js...")
     
     if database_type == 'mongodb':
-        copy_docker_template_nextjs_mongo(container_path, project_name, project_hostname)
+        copy_docker_template_nextjs_mongo(container_path, project_name, project_name)
     else:
-        copy_docker_template_nextjs_mysql(container_path, project_name, project_hostname)
+        copy_docker_template_nextjs_mysql(container_path, project_name, project_name)
     
     # Créer la structure Next.js
     print("📦 Création de la structure Next.js App...")
@@ -302,19 +300,44 @@ def _create_nextjs_project(project_name, project_hostname, editable_path, contai
 def _configure_wordpress_ports(project_name, enable_nextjs):
     """Configure les ports pour un projet WordPress avec sauvegarde automatique"""
     ports = {}
+    used_ports = set()
     
     # Port principal WordPress
     ports['wordpress'] = find_free_port_for_project()
-    ports['phpmyadmin'] = find_free_port_for_project(ports['wordpress'] + 1)
+    used_ports.add(ports['wordpress'])
+    
+    # Trouver le port suivant libre pour phpmyadmin
+    port = ports['wordpress'] + 1
+    while port in used_ports or port in get_comprehensive_used_ports():
+        port += 1
+    ports['phpmyadmin'] = port
+    used_ports.add(port)
     
     # Port Next.js si activé
     if enable_nextjs:
-        ports['nextjs'] = find_free_port_for_project(ports['phpmyadmin'] + 1)
-        ports['mailpit'] = find_free_port_for_project(ports['nextjs'] + 1)
+        port = ports['phpmyadmin'] + 1
+        while port in used_ports or port in get_comprehensive_used_ports():
+            port += 1
+        ports['nextjs'] = port
+        used_ports.add(port)
+        
+        port = ports['nextjs'] + 1
+        while port in used_ports or port in get_comprehensive_used_ports():
+            port += 1
+        ports['mailpit'] = port
+        used_ports.add(port)
     else:
-        ports['mailpit'] = find_free_port_for_project(ports['phpmyadmin'] + 1)
+        port = ports['phpmyadmin'] + 1
+        while port in used_ports or port in get_comprehensive_used_ports():
+            port += 1
+        ports['mailpit'] = port
+        used_ports.add(port)
     
-    ports['smtp'] = find_free_port_for_project(ports['mailpit'] + 1)
+    port = ports['mailpit'] + 1
+    while port in used_ports or port in get_comprehensive_used_ports():
+        port += 1
+    ports['smtp'] = port
+    used_ports.add(port)
     
     # Sauvegarder les ports alloués
     _save_project_ports(project_name, ports)

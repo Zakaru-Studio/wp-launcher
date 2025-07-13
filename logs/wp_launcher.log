@@ -123,3 +123,6 @@ Encountered errors while bringing up the project.
 2025-07-11 15:43:22 | INFO | START | CREATE | Project: test | project_type=wordpress | enable_nextjs=False | database_type=None | user_ip=192.168.1.13
 2025-07-11 15:46:13 | INFO | START | CREATE | Project: test | project_type=wordpress | enable_nextjs=False | database_type=None | user_ip=192.168.1.13
 2025-07-11 16:25:39 | INFO | START | CREATE | Project: test-ssl | project_type=wordpress | enable_nextjs=False | database_type=None | user_ip=127.0.0.1
+2025-07-13 10:25:52 | INFO | START | CREATE | Project: test | project_type=wordpress | enable_nextjs=True | database_type=None | user_ip=192.168.1.13
+2025-07-13 10:27:53 | INFO | START | CREATE | Project: test | project_type=wordpress | enable_nextjs=True | database_type=None | user_ip=192.168.1.13
+2025-07-13 10:28:13 | INFO | START | CREATE | Project: test | project_type=wordpress | enable_nextjs=True | database_type=None | user_ip=192.168.1.13
