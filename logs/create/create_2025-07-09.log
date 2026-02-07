@@ -1,2 +1,0 @@
-2025-07-09 17:38:59 | START | CREATE | Project: akdigital | enable_nextjs=False | user_ip=192.168.1.13
-2025-07-09 17:39:21 | SUCCESS | CREATE | Project: akdigital | Projet créé avec succès | port=8081 | pma_port=8086 | mailpit_port=8088 | nextjs_enabled=False

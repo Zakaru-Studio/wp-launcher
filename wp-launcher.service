@@ -11,7 +11,7 @@ Group=dev-server
 WorkingDirectory=/home/dev-server/Sites/wp-launcher
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/home/dev-server/Sites/wp-launcher/start.sh
+ExecStart=/home/dev-server/Sites/wp-launcher/scripts/start.sh
 Restart=always
 RestartSec=10
 StandardOutput=journal

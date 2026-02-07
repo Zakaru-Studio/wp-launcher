@@ -1,9 +1,41 @@
-__pycache__
-uploads
-uploads/*
-projets
-projets/*
-.env
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+venv/
+config/__pycache__/
+routes/__pycache__/
+services/__pycache__/
+utils/__pycache__/
+
+# Gros dossiers de données
+projets/
+uploads/
+containers/
 containers
-logs
-.history
+data/
+logs/
+snapshots/
+
+# Symlinks
+app/utils/projets
+app/utils/containers
+
+# Configuration sensible
+.env
+
+# Historique et cache
+.claude/
+.history/
+
+# WordPress - Template Docker
+docker-template/wordpress/wp-content/plugins/*
+docker-template/wordpress/wp-content/themes/*
+docker-template/wordpress/wp-content/upgrade/*
+docker-template/wordpress/wp-content/languages/*
+
+# Garder les dossiers vides avec un fichier .gitkeep si nécessaire
+!docker-template/wordpress/wp-content/plugins/.gitkeep
+!docker-template/wordpress/wp-content/themes/.gitkeep

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Gestion des Logs - WordPress Launcher{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/logs.css') }}">
+{% endblock %}
+
+{% block content %}
+    <div class="logs-container">
+        <!-- Panneau de gauche -->
+        <div class="logs-left-panel">
+            <!-- Actions et Tabs -->
+            <div class="logs-actions">
+                <!-- Tabs -->
+                <div class="logs-tabs" id="logsTabs">
+                    <!-- Les onglets seront générés dynamiquement -->
+                </div>
+                
+                <!-- Boutons d'action -->
+                <div class="action-buttons">
+                    <button class="btn-refresh" onclick="refreshLogs()">
+                        <i class="fas fa-sync-alt"></i>
+                        Actualiser
+                    </button>
+                    <button class="btn-delete-all" onclick="deleteAllLogs()">
+                        <i class="fas fa-trash-alt"></i>
+                        Tout supprimer
+                    </button>
+                </div>
+            </div>
+            <!-- Content -->
+            <div class="logs-content">
+                <div id="logsTabsContent">
+                    <!-- Le contenu des onglets sera généré dynamiquement -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Panneau de droite - Log Viewer -->
+        <div class="logs-right-panel">
+            <div class="log-viewer" id="logViewer">
+                <div class="log-viewer-header">
+                    <h3 class="log-viewer-title" id="logViewerTitle">Aucun fichier sélectionné</h3>
+                    <div class="log-viewer-controls">
+                        <label for="linesSelector">Lignes:</label>
+                        <select class="lines-selector" id="linesSelector" onchange="loadLogContent()">
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                            <option value="200">200</option>
+                            <option value="500" selected>500</option>
+                            <option value="1000">1000</option>
+                        </select>
+                        <button class="btn-refresh" onclick="loadLogContent()">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="log-content" id="logContent">
+                    Sélectionnez un fichier de log pour voir son contenu...
+                </div>
+                <div class="log-stats" id="logStats"></div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/logs-viewer.js') }}"></script>
+<script>
+    window.initialLogStructure = {{ log_structure | tojson | safe }};
+</script>
+{% endblock %}

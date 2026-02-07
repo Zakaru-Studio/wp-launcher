@@ -1,0 +1,35 @@
+<!-- Barre latérale des tâches -->
+<div id="task-sidebar" class="task-sidebar">
+    <div class="task-sidebar-header">
+        <div class="task-sidebar-title">
+            <i class="fas fa-tasks me-2"></i>
+            Tâches
+            <span class="task-count" id="task-count">0</span>
+        </div>
+    </div>
+    <div class="task-sidebar-content" id="task-sidebar-content">
+        <div class="task-sidebar-empty" id="task-sidebar-empty">
+            <i class="fas fa-inbox"></i>
+            <p>Aucune tâche en cours</p>
+        </div>
+    </div>
+    <div class="task-sidebar-footer">
+        <div class="d-flex gap-2 w-100">
+            <button class="flex-1 delete-all-tasks" onclick="clearAllTasks()" title="Supprimer toutes les tâches">
+                <i class="fas fa-trash me-1"></i>Supprimer les notifications
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Badge flottant pour les tâches -->
+<button id="task-sidebar-badge" class="task-sidebar-badge" onclick="toggleTaskSidebar()">
+    <i class="fas fa-tasks"></i>
+    <span class="task-badge-count" id="task-badge-count" style="display: none;">0</span>
+</button>
+
+
+
+
+
+

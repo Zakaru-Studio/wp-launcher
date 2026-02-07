@@ -1,0 +1,541 @@
+{% extends "base.html" %}
+
+{% block title %}App Manager AK Digital - Dashboard{% endblock %}
+
+{% block content %}
+<!-- Task Sidebar (uniquement sur la page Sites) -->
+{% include '_task_sidebar.html' %}
+
+<!-- Barre de recherche, filtres et bouton sur une seule ligne -->
+<div class="header-bottom-unified">
+    <div class="search-bar">
+        <i class="fas fa-search search-icon"></i>
+        <input type="text" id="search-input" placeholder="Rechercher un projet..." autocomplete="off">
+        <button class="clear-search" id="clear-search" style="display: none;" onclick="clearSearch()">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+    
+    <!-- Stats Section compactes comme filtres rapides -->
+    <div class="stats-section fade-in">
+        <div class="stats-section-left">Filtres</div>
+        <div class="stat-card" data-filter="all" onclick="filterProjects('all')">
+            <div class="stat-number" id="total-projects">-</div>
+            <div class="stat-label">Tous</div>
+        </div>
+        <div class="stat-card" data-filter="active" onclick="filterProjects('active')">
+            <div class="stat-number" id="active-projects">-</div>
+            <div class="stat-label">Actifs</div>
+        </div>
+        <div class="stat-card" data-filter="inactive" onclick="filterProjects('inactive')">
+            <div class="stat-number" id="inactive-projects">-</div>
+            <div class="stat-label">Arrêtés</div>
+        </div>
+        <div class="stat-card" data-filter="wordpress" onclick="filterProjects('wordpress')">
+            <div class="stat-number" id="wordpress-projects">-</div>
+            <div class="stat-label">WordPress</div>
+        </div>
+        <div class="stat-card" data-filter="nextjs" onclick="filterProjects('nextjs')">
+            <div class="stat-number" id="nextjs-projects">-</div>
+            <div class="stat-label">Next.js</div>
+        </div>
+    </div>
+    
+    <!-- Bouton Ajouter un site -->
+    <button class="add-site-btn" onclick="showCreateProjectModal()">
+        <i class="fas fa-plus"></i> Ajouter un site
+    </button>
+</div>
+
+<div class="projects-grid-container">
+    <!-- Projects Grid -->
+    <div class="projects-grid" id="projects-grid">
+        <div class="project-item fade-in">
+            <div class="empty-state">
+                <i class="fas fa-box-open"></i>
+                <h3>Aucun projet pour le moment</h3>
+                <p>Créez votre premier projet WordPress pour commencer</p>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Bouton flottant retiré - création uniquement via le header -->
+
+<!-- Progress bar pour import DB -->
+<div id="import-progress" class="d-none import-progress-sticky">
+    <div class="import-progress-container">
+        <div class="import-progress-header">
+            <div class="import-progress-title">
+                <i class="fas fa-database me-2"></i>
+                Import de base de données
+            </div>
+            <div class="import-progress-subtitle">
+                <span id="progress-project-name">-</span>
+            </div>
+        </div>
+        <div class="progress mb-2">
+            <div id="progress-bar" class="progress-bar" role="progressbar" style="width: 0%"></div>
+        </div>
+        <p id="progress-message" class="mb-0 import-progress-message">Initialisation...</p>
+        <button type="button" class="btn-close-progress" onclick="hideImportProgress()">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+</div>
+{% endblock %}
+
+{% block modals %}
+<!-- Modal Créer Projet -->
+<div class="modal fade" id="createProjectModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-plus-circle me-2"></i>
+                    Créer un nouveau projet
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="createProjectForm" action="/create_project" method="post" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <!-- Nom du projet -->
+                    <div class="form-group">
+                        <label for="project_name" class="form-label">
+                            <i class="fas fa-tag me-1"></i>
+                            Nom du projet *
+                        </label>
+                        <input type="text" class="form-control" id="project_name" name="project_name" required
+                            placeholder="mon-site-wordpress" pattern="[a-zA-Z0-9_\-]+"
+                            title="Lettres, chiffres, tirets et underscores uniquement">
+                        <div class="form-text">Lettres, chiffres, tirets et underscores uniquement</div>
+                    </div>
+
+
+                    <!-- Type de projet -->
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i class="fas fa-cogs me-1"></i>
+                            Type de projet *
+                        </label>
+                        <div class="project-type-selector">
+                            <div class="project-type-option">
+                                <input type="radio" id="project_type_wordpress" name="project_type" value="wordpress"
+                                    checked onchange="updateProjectTypeInterface()">
+                                <label for="project_type_wordpress" class="project-type-card">
+                                    <div class="project-type-icon">
+                                        <i class="fab fa-wordpress-simple"></i>
+                                    </div>
+                                    <div class="project-type-info">
+                                        <h5>WordPress</h5>
+                                        <div class="tech-stack">
+                                            <span class="tech-badge">WordPress</span>
+                                            <span class="tech-badge">MySQL</span>
+                                            <span class="tech-badge">PHP</span>
+                                        </div>
+                                    </div>
+                                </label>
+                            </div>
+                            <div class="project-type-option">
+                                <input type="radio" id="project_type_nextjs" name="project_type" value="nextjs"
+                                    onchange="updateProjectTypeInterface()">
+                                <label for="project_type_nextjs" class="project-type-card">
+                                    <div class="project-type-icon">
+                                        <i class="fab fa-react"></i>
+                                    </div>
+                                    <div class="project-type-info">
+                                        <h5>App Next.js</h5>
+                                        <div class="tech-stack" id="nextjs_tech_stack">
+                                            <span class="tech-badge">Next.js</span>
+                                            <span class="tech-badge">MongoDB</span>
+                                            <span class="tech-badge">Express</span>
+                                        </div>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Type WordPress (affiché seulement si WordPress sélectionné) -->
+                    <div class="form-group" id="wordpress_type_option">
+                        <label class="form-label">
+                            <i class="fas fa-server me-1"></i>
+                            Type de site WordPress *
+                        </label>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-check wordpress-type-check">
+                                    <input class="form-check-input" type="radio" id="wp_type_showcase" 
+                                           name="wordpress_type" value="showcase" checked>
+                                    <label class="form-check-label" for="wp_type_showcase">
+                                        <i class="fas fa-globe me-1"></i>
+                                        <strong>WordPress Vitrine</strong>
+                                        <small class="text-info">256Mo RAM • 1 CPU</small>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check wordpress-type-check">
+                                    <input class="form-check-input" type="radio" id="wp_type_woocommerce" 
+                                           name="wordpress_type" value="woocommerce">
+                                    <label class="form-check-label" for="wp_type_woocommerce">
+                                        <i class="fas fa-shopping-cart me-1"></i>
+                                        <strong>WordPress WooCommerce</strong>
+                                        <small class="text-info">512Mo RAM • 2 CPU</small>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-text">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Vous pourrez modifier ce paramètre ultérieurement dans la configuration
+                        </div>
+                    </div>
+
+                    <!-- Option Next.js pour WordPress (affiché seulement si WordPress sélectionné) -->
+                    <div class="form-group" id="wordpress_nextjs_option">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="enable_nextjs" name="enable_nextjs">
+                            <label class="form-check-label" for="enable_nextjs">
+                                <i class="fab fa-react me-1"></i>
+                                Ajouter Next.js (frontend headless)
+                            </label>
+                        </div>
+                        <div class="form-text">Ajoute un conteneur Next.js pour du développement headless avec WordPress
+                        </div>
+                    </div>
+
+                    <!-- Choix de base de données pour Next.js App -->
+                    <div class="form-group" id="nextjs_database_section" style="display: none;">
+                        <label class="form-label">
+                            <i class="fas fa-database me-1"></i>
+                            Base de données *
+                        </label>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" id="db_type_mongodb"
+                                        name="database_type" value="mongodb" checked onchange="updateDatabaseChoice()">
+                                    <label class="form-check-label" for="db_type_mongodb">
+                                        <i class="fas fa-leaf me-1 text-success"></i>
+                                        <strong>MongoDB</strong>
+                                        <div class="form-text">Base NoSQL moderne, flexible</div>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" id="db_type_mysql" name="database_type"
+                                        value="mysql" onchange="updateDatabaseChoice()">
+                                    <label class="form-check-label" for="db_type_mysql">
+                                        <i class="fas fa-database me-1 text-primary"></i>
+                                        <strong>MySQL</strong>
+                                        <div class="form-text">Base relationnelle traditionnelle</div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+
+
+                    <!-- Informations Next.js App (seulement pour Next.js) -->
+                    <div class="form-group" id="nextjs_info_section" style="display: none;">
+                        <div class="alert alert-success">
+                            <i class="fab fa-react me-2"></i>
+                            <strong>Application Next.js complète</strong>
+                            <ul class="mt-2 mb-0" id="nextjs_features_list">
+                                <li><strong>Frontend :</strong> Next.js avec TailwindCSS, SSR, Next Router</li>
+                                <li><strong>API :</strong> Express.js avec JWT, Zod, Nodemailer</li>
+                                <li><strong>Base de données :</strong> <span id="nextjs_db_info">MongoDB</span></li>
+                                <li><strong>Développement :</strong> Structure client/api séparée</li>
+                            </ul>
+                        </div>
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            L'application sera créée avec une structure complète prête pour le développement moderne.
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-modern btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-2"></i>
+                        Annuler
+                    </button>
+                    <button type="submit" class="btn-modern btn-start">
+                        <i class="fas fa-rocket me-2"></i>
+                        Créer le projet
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de confirmation de suppression -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Confirmer la suppression
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Êtes-vous sûr de vouloir supprimer le projet <strong id="delete-project-name"></strong> ?</p>
+                <div class="alert alert-warning"
+                    style="background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); color: var(--text-primary); border-radius: 12px;">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Cette action est irréversible. Tous les fichiers et la base de données seront supprimés.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-modern btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn-modern btn-danger" id="confirm-delete">
+                    <i class="fas fa-trash me-2"></i>
+                    Supprimer définitivement
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+<!-- Modal mise à jour DB -->
+<div class="modal fade" id="updateDbModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-database me-2"></i>
+                    Importer une base de données
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="update-db-form" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <div class="alert alert-warning"
+                        style="background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); color: var(--text-primary); border-radius: 12px;">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Attention :</strong> L'ancienne base de données sera complètement supprimée et remplacée
+                        par la nouvelle.
+                    </div>
+                    <div class="form-group">
+                        <label for="db-file" class="form-label">Fichier de base de données</label>
+                        <input type="file" class="form-control" id="db-file" name="db_file"
+                            accept=".sql,.zip,.gz,.sql.gz" required>
+                        <div class="form-text">Formats acceptés: SQL, ZIP (contenant un .sql), .sql.gz</div>
+                        <div class="form-text text-info">
+                            <i class="fas fa-rocket me-1"></i>
+                            Import ultra-rapide jusqu'à 100x plus performant que phpMyAdmin
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-modern btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn-modern btn-start">
+                        <i class="fas fa-upload me-2"></i>
+                        Remplacer la base de données
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de progrès d'import -->
+<div class="modal fade" id="importProgressModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-rocket me-2"></i>
+                    Import Ultra-Rapide
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" id="progress-close-btn"
+                    style="display: none;"></button>
+            </div>
+            <div class="modal-body">
+                <div class="text-center mb-4">
+                    <div class="spinner-border text-primary" role="status" id="progress-spinner">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <div id="progress-success-icon" style="display: none;" class="text-success fs-1">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div id="progress-error-icon" style="display: none;" class="text-danger fs-1">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                </div>
+
+                <div class="progress mb-3" style="height: 30px;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"
+                        style="width: 0%;" id="import-progress-bar">
+                        <span id="progress-percentage">0%</span>
+                    </div>
+                </div>
+
+                <div class="text-center">
+                    <h6 id="progress-message" class="text-muted">Initialisation...</h6>
+                    <div id="progress-details" class="mt-2"></div>
+                </div>
+
+                <div class="mt-4" id="tables-container" style="display: none;">
+                    <h6 class="text-primary">
+                        <i class="fas fa-table me-2"></i>
+                        Tables importées
+                    </h6>
+                    <div id="imported-tables" class="row g-2">
+                        <!-- Les tables importées seront ajoutées ici -->
+                    </div>
+                </div>
+
+                <div class="mt-4" id="import-stats" style="display: none;">
+                    <div class="row text-center">
+                        <div class="col-md-3">
+                            <div class="stat-item">
+                                <div class="stat-value text-primary" id="stat-duration">-</div>
+                                <div class="stat-label">Durée</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stat-item">
+                                <div class="stat-value text-success" id="stat-speed">-</div>
+                                <div class="stat-label">Vitesse</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stat-item">
+                                <div class="stat-value text-info" id="stat-size">-</div>
+                                <div class="stat-label">Taille</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stat-item">
+                                <div class="stat-value text-warning" id="stat-tables">-</div>
+                                <div class="stat-label">Tables</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" id="progress-footer" style="display: none;">
+                <button type="button" class="btn-modern btn-success" data-bs-dismiss="modal">
+                    <i class="fas fa-check me-2"></i>
+                    Terminé
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal des logs d'import -->
+<div class="modal fade" id="importLogsModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content" style="background: var(--card-bg); border: 1px solid var(--glass-border);">
+            <div class="modal-header" style="border-bottom: 1px solid var(--glass-border);">
+                <h5 class="modal-title">
+                    <i class="fas fa-terminal me-2"></i>
+                    Logs d'import - <span id="import-logs-project-name">-</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="padding: 0;">
+                <div id="import-logs-content" style="background: #1e1e1e; color: #d4d4d4; font-family: 'Consolas', 'Monaco', 'Courier New', monospace; font-size: 13px; padding: 1rem; max-height: 70vh; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word;">
+                    <div style="color: #6a9fb5;">📡 Connexion aux logs...</div>
+                </div>
+            </div>
+            <div class="modal-footer" style="border-top: 1px solid var(--glass-border);">
+                <button type="button" class="btn btn-danger" id="stop-import-btn" onclick="stopImport()" style="display: none;">
+                    <i class="fas fa-stop me-1"></i> Arrêter l'import
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="clearImportLogs()">
+                    <i class="fas fa-eraser me-1"></i> Effacer les logs
+                </button>
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i> Fermer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal des logs de rollback -->
+<div class="modal fade" id="rollbackLogsModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content" style="background: var(--card-bg); border: 1px solid var(--glass-border);">
+            <div class="modal-header" style="border-bottom: 1px solid var(--glass-border);">
+                <h5 class="modal-title">
+                    <i class="fas fa-history me-2"></i>
+                    Rollback Snapshot - <span id="rollback-logs-project-name">-</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="padding: 0;">
+                <div id="rollback-logs-content" style="background: #1e1e1e; color: #d4d4d4; font-family: 'Consolas', 'Monaco', 'Courier New', monospace; font-size: 13px; padding: 1rem; max-height: 70vh; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word;">
+                    <div style="color: #6a9fb5;">📡 Connexion aux logs...</div>
+                </div>
+            </div>
+            <div class="modal-footer" style="border-top: 1px solid var(--glass-border);">
+                <button type="button" class="btn btn-secondary" onclick="clearRollbackLogs()">
+                    <i class="fas fa-eraser me-1"></i> Effacer les logs
+                </button>
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i> Fermer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Include modales -->
+{% include '_wpcli_modal.html' %}
+{% include '_clone_modal.html' %}
+{% include '_snapshots_modal.html' %}
+
+<!-- Modal Créer Instance (Admin) -->
+<div class="modal fade" id="createInstanceModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark text-light">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-server me-2"></i>
+                    Créer une instance de développement
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="create-instance-project">
+                <div class="mb-3">
+                    <label for="create-instance-user" class="form-label">Pour quel développeur ?</label>
+                    <select class="form-select bg-secondary text-light border-secondary" 
+                            id="create-instance-user" required>
+                        <option value="">Chargement...</option>
+                    </select>
+                </div>
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <small>L'instance sera créée avec une copie des fichiers et de la base de données du projet parent.</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="submitCreateInstance()">
+                    <i class="fas fa-plus me-2"></i>Créer l'instance
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+
+<!-- Scripts spécifiques à la page d'accueil -->
+<!-- project-management.js est maintenant chargé dans base.html -->
+<script src="{{ url_for('static', filename='js/upload.js') }}"></script>
+
+{% endblock %}

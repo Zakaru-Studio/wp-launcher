@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Gestion utilisateurs - Admin{% endblock %}
+{% block content %}
+<div class="container mt-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="text-light mb-0"><i class="fas fa-users-cog me-2"></i>Gestion des utilisateurs</h2>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createUserModal">
+            <i class="fas fa-plus me-2"></i>Ajouter un utilisateur
+        </button>
+    </div>
+    <div class="card bg-dark text-light">
+        <div class="card-body">
+            <table class="table table-dark">
+                <thead>
+                    <tr>
+                        <th>Avatar</th>
+                        <th>Nom d'utilisateur</th>
+                        <th>Email</th>
+                        <th>Rôle</th>
+                        <th>GitHub</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td><img src="{{ user.get_avatar_url() }}" class="rounded-circle" width="32" height="32"></td>
+                        <td>{{ user.username }}</td>
+                        <td>{{ user.email }}</td>
+                        <td><span class="badge bg-{{ 'danger' if user.role == 'admin' else 'primary' }}">{{ user.role }}</span></td>
+                        <td>{% if user.github_username %}<i class="fab fa-github me-1"></i>{{ user.github_username }}{% endif %}</td>
+                        <td>
+                            {% if user.username != g.current_user.username %}
+                            <button class="btn btn-sm btn-danger" onclick="deleteUser('{{ user.username }}')">Supprimer</button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Créer Utilisateur -->
+<div class="modal fade" id="createUserModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark text-light">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-user-plus me-2"></i>Ajouter un utilisateur</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="createUserForm" onsubmit="createUser(event)">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="username" class="form-label">Nom d'utilisateur *</label>
+                        <input type="text" class="form-control bg-secondary text-light border-secondary" id="username" name="username" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email *</label>
+                        <input type="email" class="form-control bg-secondary text-light border-secondary" id="email" name="email" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Mot de passe *</label>
+                        <input type="password" class="form-control bg-secondary text-light border-secondary" id="password" name="password" required minlength="6">
+                        <small class="text-muted">Minimum 6 caractères</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="role" class="form-label">Rôle *</label>
+                        <select class="form-select bg-secondary text-light border-secondary" id="role" name="role" required>
+                            <option value="developer">Developer</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary">Créer l'utilisateur</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+async function createUser(event) {
+    event.preventDefault();
+    const form = event.target;
+    const formData = {
+        username: form.username.value,
+        email: form.email.value,
+        password: form.password.value,
+        role: form.role.value
+    };
+    
+    try {
+        const response = await fetch('/admin/api/users/create', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(formData)
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Erreur: ' + data.error);
+        }
+    } catch (error) {
+        alert('Erreur: ' + error.message);
+    }
+}
+
+async function deleteUser(username) {
+    if (!confirm(`Supprimer l'utilisateur ${username} ?`)) return;
+    const response = await fetch(`/admin/api/users/${username}`, {method: 'DELETE'});
+    if (response.ok) {
+        alert('Utilisateur supprimé avec succès');
+        location.reload();
+    } else {
+        alert('Erreur lors de la suppression');
+    }
+}
+</script>
+{% endblock %}
+
