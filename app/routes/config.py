@@ -9,6 +9,20 @@ import json
 
 config_bp = Blueprint('config', __name__, url_prefix='/api/config')
 
+
+@config_bp.route('/app', methods=['GET'])
+def get_app_config():
+    """Returns app-level configuration for the frontend"""
+    from app.config.docker_config import DockerConfig
+    return jsonify({
+        'app_host': DockerConfig.LOCAL_IP,
+        'app_port': DockerConfig.APP_PORT,
+        'app_url': f"http://{DockerConfig.LOCAL_IP}:{DockerConfig.APP_PORT}",
+        'wp_admin_user': DockerConfig.WP_ADMIN_USER,
+        'wp_admin_password': DockerConfig.WP_ADMIN_PASSWORD
+    })
+
+
 @config_bp.route('/php/<project_name>', methods=['GET'])
 def get_php_config(project_name):
     """Récupère la configuration PHP d'un projet"""

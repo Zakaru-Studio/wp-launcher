@@ -9,6 +9,7 @@ import shutil
 import tempfile
 from werkzeug.utils import secure_filename
 from app.utils.file_utils import extract_zip
+from app.config.docker_config import DockerConfig
 
 class Project:
     """Modèle pour la gestion des projets WordPress avec architecture containers/projets séparée"""
@@ -359,7 +360,7 @@ Ce dossier contient le frontend Next.js pour le projet {self.name}.
 ## Démarrage rapide
 
 1. Le conteneur Next.js va automatiquement installer les dépendances
-2. Votre application sera disponible sur http://192.168.1.21:{self.nextjs_port}
+2. Votre application sera disponible sur http://{DockerConfig.LOCAL_IP}:{self.nextjs_port}
 3. Modifiez les fichiers dans ce dossier pour développer votre frontend
 
 ## Structure recommandée
@@ -380,7 +381,7 @@ Pour connecter Next.js à WordPress, utilisez l'API REST WordPress :
 
 ```javascript
 // Exemple de récupération des posts
-const response = await fetch('http://192.168.1.21:{self.port}/wp-json/wp/v2/posts');
+const response = await fetch('http://{DockerConfig.LOCAL_IP}:{self.port}/wp-json/wp/v2/posts');
 const posts = await response.json();
 ```
 """

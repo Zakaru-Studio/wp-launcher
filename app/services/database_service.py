@@ -11,6 +11,7 @@ from app.utils.file_utils import extract_zip, get_file_size_mb
 from app.utils.database_utils import detect_file_encoding
 from app.services.docker_service import DockerService
 from app.utils.logger import wp_logger
+from app.config.docker_config import DockerConfig
 
 class DatabaseService:
     """Service pour la gestion des bases de données MySQL"""
@@ -924,7 +925,7 @@ class DatabaseService:
                 })
             
             # 4. Mettre à jour les URLs WordPress
-            update_url_cmd = f"""docker exec {mysql_container} mysql -u root -prootpassword {target_db_name} -e "UPDATE wp_options SET option_value = 'http://192.168.1.21:{target_port}' WHERE option_name IN ('siteurl', 'home');" """
+            update_url_cmd = f"""docker exec {mysql_container} mysql -u root -prootpassword {target_db_name} -e "UPDATE wp_options SET option_value = 'http://{DockerConfig.LOCAL_IP}:{target_port}' WHERE option_name IN ('siteurl', 'home');" """
             subprocess.run(update_url_cmd, shell=True, check=True)
             
             if socketio:

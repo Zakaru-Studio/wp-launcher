@@ -776,11 +776,16 @@ class DockerService:
             print(f"❌ [DOCKER_SERVICE] Erreur lors de la création du projet WordPress+Next.js: {e}")
             return False
     
-    def install_wordpress_automatically(self, project_name, site_title=None, admin_user="adm-akdigital", admin_password="admin", admin_email="aurelien@akdigital.fr"):
+    def install_wordpress_automatically(self, project_name, site_title=None, admin_user=None, admin_password=None, admin_email=None):
         """Installe automatiquement WordPress avec WP-CLI"""
         try:
             print(f"🚀 [DOCKER_SERVICE] Installation automatique de WordPress pour {project_name}")
-            
+
+            # Utiliser les valeurs de DockerConfig si non spécifiées
+            admin_user = admin_user or DockerConfig.WP_ADMIN_USER
+            admin_password = admin_password or DockerConfig.WP_ADMIN_PASSWORD
+            admin_email = admin_email or DockerConfig.WP_ADMIN_EMAIL
+
             # Utiliser le nom du projet comme titre du site par défaut
             if not site_title:
                 site_title = project_name.title()
@@ -1521,13 +1526,13 @@ class DockerService:
                 )
                 
                 if success:
-                    # Vérifier que l'admin existe
+                    # Vérifier que l'admin exists
                     success, stdout, stderr = self.execute_command_in_container(
                         project_name, 'wordpress',
-                        ['wp', 'user', 'get', 'adm-akdigital', '--allow-root'],
+                        ['wp', 'user', 'get', DockerConfig.WP_ADMIN_USER, '--allow-root'],
                         timeout=10
                     )
-                    
+
                     return True
                 
                 time.sleep(check_interval)
@@ -1603,9 +1608,9 @@ class DockerService:
             install_cmd = ['wp', 'core', 'install',
                           f'--url={site_url}',
                           f'--title={project_name}',
-                          '--admin_user=adm-akdigital',
-                          '--admin_password=admin',
-                          '--admin_email=aurelien@akdigital.fr',
+                          f'--admin_user={DockerConfig.WP_ADMIN_USER}',
+                          f'--admin_password={DockerConfig.WP_ADMIN_PASSWORD}',
+                          f'--admin_email={DockerConfig.WP_ADMIN_EMAIL}',
                           '--allow-root']
             
             success, stdout, stderr = self.execute_command_in_container(
@@ -1617,7 +1622,7 @@ class DockerService:
             if success:
                 print(f"✅ [AUTO-INSTALL] WordPress installé manuellement!")
                 print(f"🔗 [AUTO-INSTALL] Site: {site_url}")
-                print(f"👤 [AUTO-INSTALL] Admin: adm-akdigital / admin")
+                print(f"👤 [AUTO-INSTALL] Admin: {DockerConfig.WP_ADMIN_USER} / {DockerConfig.WP_ADMIN_PASSWORD}")
                 
                 if debug_logger:
                     debug_logger.success("AUTO_INSTALL_WP", f"WordPress manually installed: {site_url}")

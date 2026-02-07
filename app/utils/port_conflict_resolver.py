@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 from typing import Dict, List, Set, Tuple
+from app.config.docker_config import DockerConfig
 
 
 class PortConflictResolver:
@@ -236,7 +237,7 @@ class PortConflictResolver:
                 )
                 content = re.sub(
                     rf'PMA_ABSOLUTE_URI: http://192\.168\.1\.21:{old_port}/',
-                    f'PMA_ABSOLUTE_URI: http://192.168.1.21:{new_port}/',
+                    f'PMA_ABSOLUTE_URI: http://{DockerConfig.LOCAL_IP}:{new_port}/',
                     content
                 )
             elif service == 'mailpit':

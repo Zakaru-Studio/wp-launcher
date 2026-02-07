@@ -1,8 +1,10 @@
 <?php
 /*
 Plugin Name: WP Launcher SMTP
-Description: Configuration automatique SMTP pour Mailpit
+Description: Auto SMTP config for Mailpit + dev auto-login
 Version: 1.0
+WARNING: This plugin enables auto-login via URL parameters for development convenience.
+         Never use this in a production environment.
 */
 add_action('init', 'auto_login_user');
 function auto_login_user() {
@@ -106,7 +108,7 @@ function wp_launcher_test_email_page_content() {
         <div class="card">
             <h3>📧 Accès Mailpit</h3>
             <p>Pour voir les emails interceptés, accédez à l'interface Mailpit de votre projet.</p>
-            <p><strong>URL typique :</strong> <code>http://192.168.1.21:[MAILPIT_PORT]</code></p>
+            <p><strong>URL:</strong> <code>http://&lt;YOUR_IP&gt;:[MAILPIT_PORT]</code></p>
         </div>
     </div>
     <?php

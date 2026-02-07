@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import json
 from werkzeug.utils import secure_filename
+from app.config.docker_config import DockerConfig
 
 
 def secure_project_name(project_name):
@@ -101,6 +102,13 @@ def _copy_file_robust(src, dst, project_name=None, ports=None, resource_limits=N
             content = content.replace('{mongo_express_port}', str(ports['mongo_express']))
         print(f"🔄 Ports remplacés: {ports}")
     
+    # Remplacer les placeholders de configuration DockerConfig
+    content = content.replace('{local_ip}', DockerConfig.LOCAL_IP)
+    content = content.replace('{wp_admin_user}', DockerConfig.WP_ADMIN_USER)
+    content = content.replace('{wp_admin_password}', DockerConfig.WP_ADMIN_PASSWORD)
+    content = content.replace('{wp_admin_email}', DockerConfig.WP_ADMIN_EMAIL)
+    content = content.replace('{wp_locale}', DockerConfig.WP_LOCALE)
+
     # Remplacer les placeholders de ressources si fournis
     if resource_limits:
         content = content.replace('{wordpress_memory}', resource_limits.get('wordpress_memory', '384m'))
@@ -461,8 +469,8 @@ $table_prefix = 'wp_';
 define('WP_DEBUG', false);
 
 // Configuration des URLs - Accès local uniquement
-define('WP_HOME', 'http://192.168.1.21:PROJECT_PORT');
-define('WP_SITEURL', 'http://192.168.1.21:PROJECT_PORT');
+define('WP_HOME', 'http://{local_ip}:PROJECT_PORT');
+define('WP_SITEURL', 'http://{local_ip}:PROJECT_PORT');
 
 // Configuration des fichiers
 define('DISALLOW_FILE_EDIT', false);
@@ -503,7 +511,7 @@ define('UPLOAD_MAX_FILESIZE', '1024M');
 define('POST_MAX_SIZE', '1024M');
 
 // Configuration des langues
-define('WPLANG', 'fr_FR');
+define('WPLANG', '{wp_locale}');
 
 // Configuration du chemin absolu vers WordPress
 if (!defined('ABSPATH')) {
@@ -512,23 +520,27 @@ if (!defined('ABSPATH')) {
 
 // Protection WP-CLI : définir les variables SERVER manquantes
 if (defined('WP_CLI') && WP_CLI) {
-    $_SERVER['SERVER_NAME'] = '192.168.1.21';
+    $_SERVER['SERVER_NAME'] = '{local_ip}';
     $_SERVER['SERVER_PORT'] = 'PROJECT_PORT';
-    $_SERVER['HTTP_HOST'] = '192.168.1.21:PROJECT_PORT';
+    $_SERVER['HTTP_HOST'] = '{local_ip}:PROJECT_PORT';
     $_SERVER['REQUEST_URI'] = '/';
     $_SERVER['REQUEST_METHOD'] = 'GET';
 }
 
 // Configuration des chemins - Accès local uniquement
 define('WP_CONTENT_DIR', ABSPATH . 'wp-content');
-define('WP_CONTENT_URL', 'http://192.168.1.21:PROJECT_PORT/wp-content');
+define('WP_CONTENT_URL', 'http://{local_ip}:PROJECT_PORT/wp-content');
 
 // Chargement des réglages WordPress
 require_once ABSPATH . 'wp-settings.php';
 """
     
+    # Remplacer les placeholders DockerConfig dans le contenu wp-config
+    wp_config_content = wp_config_content.replace('{local_ip}', DockerConfig.LOCAL_IP)
+    wp_config_content = wp_config_content.replace('{wp_locale}', DockerConfig.WP_LOCALE)
+
     wp_config_path = os.path.join(project_path, 'wp-config.php')
-    
+
     # Vérification de sécurité : supprimer wp-config.php s'il existe comme dossier
     if os.path.exists(wp_config_path) and os.path.isdir(wp_config_path):
         print(f"⚠️ wp-config.php existe comme dossier, suppression...")
@@ -1114,8 +1126,8 @@ DB_PASSWORD=projectpassword
 JWT_SECRET=your-jwt-secret-key-here-{project_name}
 
 # CORS
-CLIENT_URL=http://192.168.1.21:3000
-CORS_ORIGIN=http://192.168.1.21:3000
+CLIENT_URL=http://{DockerConfig.LOCAL_IP}:3000
+CORS_ORIGIN=http://{DockerConfig.LOCAL_IP}:3000
 
 # Email (Mailpit)
 SMTP_HOST=mailpit

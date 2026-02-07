@@ -5,7 +5,12 @@ Script pour ajouter la protection WP-CLI à tous les projets WordPress existants
 
 import os
 import re
+import sys
 from pathlib import Path
+
+# Add parent directory to path for app imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from app.config.docker_config import DockerConfig
 
 def get_project_port(project_name):
     """Récupère le port d'un projet depuis le fichier .port"""
@@ -46,13 +51,14 @@ def add_wpcli_protection(wp_config_path, project_name):
         # Insérer la protection après ABSPATH
         insert_pos = match.end()
         
+        local_ip = DockerConfig.LOCAL_IP
         wpcli_protection = f"""
 
 // Protection WP-CLI : définir les variables SERVER manquantes
 if (defined('WP_CLI') && WP_CLI) {{
-    $_SERVER['SERVER_NAME'] = '192.168.1.21';
+    $_SERVER['SERVER_NAME'] = '{local_ip}';
     $_SERVER['SERVER_PORT'] = '{port}';
-    $_SERVER['HTTP_HOST'] = '192.168.1.21:{port}';
+    $_SERVER['HTTP_HOST'] = '{local_ip}:{port}';
     $_SERVER['REQUEST_URI'] = '/';
     $_SERVER['REQUEST_METHOD'] = 'GET';
 }}

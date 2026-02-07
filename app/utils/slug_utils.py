@@ -13,7 +13,7 @@ def clean_username_for_slug(username):
     Nettoie un username pour créer un slug valide
     
     Examples:
-        nicolas.tombal@akdigital.fr -> nicolas-tombal
+        nicolas.tombal@example.com -> nicolas-tombal
         john.doe@example.com -> john-doe
         alice_wonder -> alice-wonder
     """
@@ -92,7 +92,7 @@ def generate_instance_slug(parent_project, owner_username):
     Génère un slug pour une instance dev
     
     Examples:
-        test, nicolas.tombal@akdigital.fr -> test-dev-nicolas-tombal
+        test, nicolas.tombal@example.com -> test-dev-nicolas-tombal
         myproject, alice -> myproject-dev-alice
     
     Args:
@@ -117,7 +117,7 @@ def sanitize_container_name(name):
         - hyphens (-)
     
     Examples:
-        test-dev-nicolas.tombal@akdigital.fr -> test-dev-nicolas_tombal_akdigital_fr
+        test-dev-nicolas.tombal@example.com -> test-dev-nicolas_tombal_example_com
     """
     # Remplacer @ et autres caractères spéciaux par des underscores
     clean_name = re.sub(r'[^a-zA-Z0-9._-]', '_', name)

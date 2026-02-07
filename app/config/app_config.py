@@ -33,7 +33,7 @@ def create_app():
     app = Flask(__name__, 
                 template_folder=os.path.join(app_path, 'templates'),
                 static_folder=os.path.join(app_path, 'static'))
-    app.secret_key = 'wp-launcher-secret-key-2024'
+    app.secret_key = os.getenv('SECRET_KEY', 'change-me-in-production')
     
     # Configuration Flask
     app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER

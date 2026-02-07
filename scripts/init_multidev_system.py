@@ -9,6 +9,7 @@ import sqlite3
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from app.config.docker_config import DockerConfig
 from app.services.user_service import UserService
 
 
@@ -97,8 +98,8 @@ def display_github_oauth_instructions():
     print("2. Cliquer sur 'New OAuth App'")
     print("3. Remplir le formulaire :")
     print("   - Application name: WP Launcher")
-    print("   - Homepage URL: http://192.168.1.21:5000")
-    print("   - Authorization callback URL: http://192.168.1.21:5000/login/github/callback")
+    print(f"   - Homepage URL: http://{DockerConfig.LOCAL_IP}:5000")
+    print(f"   - Authorization callback URL: http://{DockerConfig.LOCAL_IP}:5000/login/github/callback")
     print("\n4. Après création, copier le Client ID et Client Secret")
     print("\n5. Créer un fichier .env à la racine du projet (s'il n'existe pas):")
     print("   GITHUB_CLIENT_ID=your_client_id_here")

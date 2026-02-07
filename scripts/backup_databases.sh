@@ -9,7 +9,7 @@ BACKUP_DIR="/home/dev-server/backups"
 LOG_FILE="/home/dev-server/logs/backup_databases.log"
 RETENTION_DAYS=7
 MAX_BACKUPS_PER_PROJECT=6  # 6 backups * 4h = 24h de couverture
-LOCAL_IP="192.168.1.21"
+LOCAL_IP="${APP_HOST:-$(hostname -I | awk '{print $1}')}"
 
 # Couleurs pour l'affichage
 RED='\033[0;31m'

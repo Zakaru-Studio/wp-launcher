@@ -252,9 +252,9 @@ def export_database(project_name):
         mysql_container = f"{project_name}_mysql_1"
         
         # Déterminer les paramètres de connexion selon le type de projet
-        # Pour les projets Next.js+MySQL, utiliser les paramètres akdigital
+        # Pour les projets Next.js+MySQL, utiliser les paramètres du projet
         # Pour les projets WordPress, utiliser les paramètres wordpress
-        if project_name == 'akdigital' or os.path.exists(os.path.join(project_path, 'client')):
+        if os.path.exists(os.path.join(project_path, 'client')):
             # Projet Next.js+MySQL
             db_user = project_name
             db_password = 'projectpassword'
