@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}Monitoring Système - WordPress Launcher{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/monitoring.css') }}">
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 1400px; margin: 0 auto; padding: 2rem;">
+        <!-- Onglets principaux -->
+        <div class="monitoring-tabs">
+            <button class="monitoring-tab active" onclick="switchTab('serveur')">
+                <i class="fas fa-server"></i> Serveur
+            </button>
+            <button class="monitoring-tab" onclick="switchTab('docker')">
+                <i class="fab fa-docker"></i> Docker
+            </button>
+            <button class="monitoring-tab" onclick="switchTab('processus')">
+                <i class="fas fa-tasks"></i> Processus
+            </button>
+        </div>
+
+        <!-- Contenu onglet Serveur -->
+        <div id="tab-serveur" class="tab-content-pane active">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2><i class="fas fa-server"></i> Ressources du Serveur</h2>
+                <div class="d-flex gap-2 align-items-center">
+                    <label for="refresh-interval" style="color: var(--text-secondary); font-size: 0.9rem;">
+                        Actualisation :
+                    </label>
+                    <select id="refresh-interval" class="form-select form-select-sm" style="width: auto; background: var(--glass-bg); border-color: var(--glass-border); color: var(--text-primary);" onchange="updateRefreshInterval()">
+                        <option value="2000">2 sec</option>
+                        <option value="5000" selected>5 sec</option>
+                        <option value="10000">10 sec</option>
+                        <option value="30000">30 sec</option>
+                        <option value="60000">1 min</option>
+                    </select>
+                    <button class="refresh-btn" onclick="refreshServerStats()">
+                        <i class="fas fa-sync-alt"></i> Actualiser
+                    </button>
+                </div>
+            </div>
+
+            <div class="monitoring-grid">
+                <!-- CPU -->
+                <div class="monitor-card">
+                    <h3><i class="fas fa-microchip"></i> CPU</h3>
+                    <div class="chart-container">
+                        <canvas id="cpuChart"></canvas>
+                    </div>
+                    <div class="text-center mt-2">
+                        <div class="stat-value" id="cpu-value">--</div>
+                        <div class="stat-label">Utilisation</div>
+                    </div>
+                </div>
+
+                <!-- RAM -->
+                <div class="monitor-card">
+                    <h3><i class="fas fa-memory"></i> Mémoire RAM</h3>
+                    <div class="chart-container">
+                        <canvas id="memoryChart"></canvas>
+                    </div>
+                    <div class="text-center mt-2">
+                        <div class="stat-value" id="memory-value">--</div>
+                        <div class="stat-label"><span id="memory-used">--</span> / <span id="memory-total">--</span> GB</div>
+                    </div>
+                </div>
+
+                <!-- Disque -->
+                <div class="monitor-card">
+                    <h3><i class="fas fa-hdd"></i> Disque</h3>
+                    <div class="chart-container">
+                        <canvas id="diskChart"></canvas>
+                    </div>
+                    <div class="text-center mt-2">
+                        <div class="stat-value" id="disk-value">--</div>
+                        <div class="stat-label"><span id="disk-used">--</span> / <span id="disk-total">--</span> GB</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Contenu onglet Docker -->
+        <div id="tab-docker" class="tab-content-pane">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2><i class="fab fa-docker"></i> Conteneurs Docker</h2>
+                <div class="d-flex gap-2 align-items-center">
+                    <span class="badge bg-primary" id="docker-count">0 conteneurs</span>
+                    <button class="refresh-btn" onclick="refreshDockerStats()">
+                        <i class="fas fa-sync-alt"></i> Actualiser
+                    </button>
+                </div>
+            </div>
+            <div class="docker-list" id="docker-containers-list">
+                <p class="text-muted text-center">Cliquez sur Actualiser pour charger les conteneurs Docker</p>
+            </div>
+        </div>
+
+        <!-- Contenu onglet Processus -->
+        <div id="tab-processus" class="tab-content-pane">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2><i class="fas fa-tasks"></i> Processus Système</h2>
+                <div class="d-flex gap-2 align-items-center">
+                    <span class="badge bg-info" id="process-count">0 processus</span>
+                    <div class="d-flex gap-1">
+                        <button class="refresh-btn" style="padding: 0.5rem 0.8rem;" onclick="previousProcessPage()" id="btn-prev-page" disabled>
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <span style="color: var(--text-secondary); padding: 0.5rem 1rem; background: var(--glass-bg); border-radius: 8px; font-size: 0.9rem;">
+                            Page <span id="current-page">1</span> / <span id="total-pages">1</span>
+                        </span>
+                        <button class="refresh-btn" style="padding: 0.5rem 0.8rem;" onclick="nextProcessPage()" id="btn-next-page">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                    <button class="refresh-btn" onclick="refreshProcessList()">
+                        <i class="fas fa-sync-alt"></i> Actualiser
+                    </button>
+                </div>
+            </div>
+            <div class="monitor-card">
+                <div class="process-list" id="process-list">
+                    <p class="text-muted text-center">Cliquez sur Actualiser pour charger la liste des processus</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/monitoring.js') }}"></script>
+{% endblock %}
+

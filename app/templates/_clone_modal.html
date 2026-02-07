@@ -1,0 +1,98 @@
+<!-- Modale de clonage de projet -->
+<div class="modal fade" id="cloneModal" tabindex="-1" aria-labelledby="cloneModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="cloneModalLabel">
+                    <i class="fas fa-clone me-2"></i>
+                    Cloner le projet - <span id="clone-source-name"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="clone-project-form">
+                <div class="modal-body">
+                    <div class="form-group mb-3">
+                        <label for="clone-target-name" class="form-label">
+                            Nom du nouveau projet <span class="text-danger">*</span>
+                        </label>
+                        <input type="text" class="form-control" id="clone-target-name" required 
+                               placeholder="mon-nouveau-projet">
+                        <div class="form-text">Le nom sera automatiquement nettoyé (minuscules, tirets).</div>
+                        <div id="clone-name-validation" class="form-text"></div>
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="clone-database" checked>
+                            <label class="form-check-label" for="clone-database">
+                                <i class="fas fa-database me-2"></i>
+                                Cloner la base de données
+                            </label>
+                        </div>
+                        <div class="form-text">Inclut l'export/import de la DB et le search-replace des URLs.</div>
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="clone-plugins" checked>
+                            <label class="form-check-label" for="clone-plugins">
+                                <i class="fas fa-plug me-2"></i>
+                                Cloner le dossier plugins
+                            </label>
+                        </div>
+                        <div class="form-text">Copie le dossier wp-content/plugins.</div>
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="clone-themes" checked>
+                            <label class="form-check-label" for="clone-themes">
+                                <i class="fas fa-palette me-2"></i>
+                                Cloner le dossier themes
+                            </label>
+                        </div>
+                        <div class="form-text">Copie le dossier wp-content/themes.</div>
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="clone-uploads">
+                            <label class="form-check-label" for="clone-uploads">
+                                <i class="fas fa-images me-2"></i>
+                                Cloner les fichiers uploads
+                            </label>
+                        </div>
+                        <div class="form-text">Copie le dossier wp-content/uploads (peut prendre du temps).</div>
+                    </div>
+
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Temps estimé :</strong>
+                        <ul class="mb-0 mt-2">
+                            <li>Sans DB ni uploads : ~30s</li>
+                            <li>Avec DB : ~1-2 min</li>
+                            <li>Avec DB + uploads : ~3-5 min</li>
+                        </ul>
+                    </div>
+
+                    <div id="clone-progress" class="mt-3" style="display: none;">
+                        <div class="progress">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 role="progressbar" style="width: 100%">
+                                Clonage en cours...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary" id="clone-submit-btn">
+                        <i class="fas fa-clone me-2"></i>
+                        Cloner le projet
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+

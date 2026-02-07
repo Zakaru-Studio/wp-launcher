@@ -1,6 +1,17 @@
-Flask==2.3.3
-Flask-SocketIO==5.3.6
-Werkzeug==2.3.7
-chardet==5.2.0
-python-socketio==5.9.0
+# WordPress Launcher - Dépendances Python
+# Framework web
+Flask==3.0.0
+Werkzeug==3.0.1
+
+# WebSocket temps réel
+Flask-SocketIO==5.4.0
+python-socketio==5.11.0
 eventlet==0.33.3
+
+# Utilitaires
+chardet==5.2.0
+python-dotenv==1.0.0
+psutil==5.9.8
+
+# Sécurité et performance
+gunicorn==21.2.0

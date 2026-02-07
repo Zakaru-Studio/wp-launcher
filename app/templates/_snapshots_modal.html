@@ -1,0 +1,62 @@
+<!-- Modale de gestion des snapshots -->
+<div class="modal fade" id="snapshotsModal" tabindex="-1" aria-labelledby="snapshotsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="snapshotsModalLabel">
+                    <i class="fas fa-camera me-2"></i>
+                    Snapshots & Rollback - <span id="snapshots-project-name"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <button class="btn btn-primary" id="btn-create-snapshot">
+                        <i class="fas fa-plus me-2"></i>
+                        Créer un nouveau snapshot
+                    </button>
+                </div>
+
+                <!-- Vue Liste des snapshots -->
+                <div id="snapshots-list">
+                    <div class="text-center py-4">
+                        <span class="spinner-border" role="status"></span>
+                        <p class="mt-2">Chargement des snapshots...</p>
+                    </div>
+                </div>
+
+                <!-- Formulaire de création (caché par défaut) -->
+                <div id="create-snapshot-form" style="display: none;">
+                    <div class="card mb-3 bg-dark border-secondary">
+                        <div class="card-body">
+                            <h6 class="text-light"><i class="fas fa-plus-circle me-2"></i>Nouveau snapshot</h6>
+                            <div class="form-group mb-3">
+                                <input type="text" class="form-control bg-darker text-light border-secondary" id="snapshot-description" 
+                                       placeholder="Ex: Avant mise à jour WooCommerce">
+                            </div>
+                            
+                            <!-- Liste des fichiers qui seront inclus -->
+                            <div id="snapshot-files-preview" class="mb-3">
+                                <div class="text-center">
+                                    <span class="spinner-border spinner-border-sm text-light" role="status"></span>
+                                    <span class="text-light ms-2">Détection des fichiers Git...</span>
+                                </div>
+                            </div>
+                            <div class="d-flex justify-content-end gap-2">  
+                                <button class="btn-modern btn-secondary" id="btn-cancel-snapshot">
+                                    <i class="fas fa-times me-2"></i>Annuler
+                                </button>
+                                <button class="btn-modern btn-primary" id="btn-save-snapshot">
+                                    <i class="fas fa-save me-2"></i>Créer le snapshot
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+            </div>
+        </div>
+    </div>
+</div>

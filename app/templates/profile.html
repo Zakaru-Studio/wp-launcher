@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Mon profil - WP Launcher{% endblock %}
+
+{% block content %}
+<div class="container mt-5" style="max-height: calc(100vh - 150px); overflow-y: auto; padding-bottom: 3rem;">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <h2 class="mb-4 text-light">
+                <i class="fas fa-user-circle me-2"></i>Mon profil
+            </h2>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <!-- Avatar Section -->
+            <div class="card bg-dark text-light mb-4">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-image me-2"></i>Photo de profil</h5>
+                    <div class="text-center mb-3">
+                        <img src="{{ g.current_user.get_avatar_url() }}" alt="Avatar" 
+                             class="rounded-circle" style="width: 150px; height: 150px; object-fit: cover; border: 3px solid #667eea;">
+                    </div>
+                    <form method="POST" action="{{ url_for('auth.upload_avatar') }}" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <input type="file" class="form-control bg-secondary text-light border-secondary" 
+                                   name="avatar" accept="image/*" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-upload me-2"></i>Changer la photo
+                        </button>
+                    </form>
+                    {% if g.current_user.github_username %}
+                        <small class="text-muted d-block mt-2">
+                            <i class="fab fa-github me-1"></i>Photo importée depuis GitHub
+                        </small>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Profile Information -->
+            <div class="card bg-dark text-light mb-4">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-info-circle me-2"></i>Informations personnelles</h5>
+                    <form method="POST" action="{{ url_for('auth.update_profile') }}">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="first_name" class="form-label">Prénom</label>
+                                <input type="text" class="form-control bg-secondary text-light border-secondary" 
+                                       id="first_name" name="first_name" value="{{ g.current_user.first_name or '' }}">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="last_name" class="form-label">Nom</label>
+                                <input type="text" class="form-control bg-secondary text-light border-secondary" 
+                                       id="last_name" name="last_name" value="{{ g.current_user.last_name or '' }}">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Email</label>
+                            <input type="email" class="form-control bg-secondary text-light border-secondary" 
+                                   id="email" name="email" value="{{ g.current_user.email }}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Nom d'utilisateur</label>
+                            <input type="text" class="form-control bg-secondary text-light border-secondary" 
+                                   value="{{ g.current_user.username }}" disabled>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Rôle</label>
+                            <input type="text" class="form-control bg-secondary text-light border-secondary" 
+                                   value="{{ g.current_user.role }}" disabled>
+                        </div>
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-save me-2"></i>Enregistrer les modifications
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- SSH Key Section -->
+            <div class="card bg-dark text-light mb-4">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-key me-2"></i>Clé SSH publique</h5>
+                    {% if g.current_user.github_username %}
+                        <div class="alert alert-info">
+                            <i class="fab fa-github me-2"></i>Clé SSH importée automatiquement depuis GitHub
+                        </div>
+                    {% endif %}
+                    <div class="mb-3">
+                        <label for="ssh_key" class="form-label">Votre clé SSH publique</label>
+                        <textarea class="form-control bg-secondary text-light border-secondary" 
+                                  id="ssh_key" rows="5" 
+                                  placeholder="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ...">{{ g.current_user.ssh_public_key or '' }}</textarea>
+                        <small class="text-muted">
+                            Cette clé sera utilisée pour l'accès SSH à vos instances de développement.
+                            <br>Pour générer une clé: <code>ssh-keygen -t rsa -b 4096 -C "votre@email.com"</code>
+                        </small>
+                    </div>
+                    <button type="button" class="btn btn-primary" onclick="updateSSHKey()">
+                        <i class="fas fa-save me-2"></i>Mettre à jour la clé SSH
+                    </button>
+                </div>
+            </div>
+
+            <div class="text-center">
+                <a href="{{ url_for('main.index') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left me-2"></i>Retour au dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+async function updateSSHKey() {
+    const sshKey = document.getElementById('ssh_key').value.trim();
+    
+    try {
+        const response = await fetch('{{ url_for("auth.update_ssh_key") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ ssh_key: sshKey })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            alert('Clé SSH mise à jour avec succès!');
+        } else {
+            alert('Erreur: ' + data.error);
+        }
+    } catch (error) {
+        alert('Erreur lors de la mise à jour de la clé SSH');
+    }
+}
+</script>
+{% endblock %}
+

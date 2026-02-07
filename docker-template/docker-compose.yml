@@ -12,13 +12,13 @@ services:
       MYSQL_PASSWORD: wordpress
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./mysql-config:/etc/mysql/conf.d
+      - ../../projets/{project_name}/config/mysql.cnf:/etc/mysql/conf.d/custom.cnf
     networks:
       - wordpress_network
     command: --default-authentication-plugin=mysql_native_password
     # Allocations raisonnables pour Docker
-    mem_limit: 1g
-    cpus: '2'
+    mem_limit: {mysql_memory}
+    cpus: '{mysql_cpu}'
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
       timeout: 10s
@@ -29,8 +29,8 @@ services:
   wordpress:
     depends_on:
       mysql:
-        condition: service_started
-    image: wordpress:latest
+        condition: service_healthy
+    image: wp-launcher-wordpress:latest
     container_name: PROJECT_NAME_wordpress_1
     restart: unless-stopped
     environment:
@@ -42,35 +42,43 @@ services:
       WORDPRESS_DEBUG: 1
       WORDPRESS_DEBUG_LOG: 1
       WORDPRESS_DEBUG_DISPLAY: 1
+      # Variables pour l'auto-installation
+      WP_HOME: "http://192.168.1.21:{wordpress_port}"
+      WP_TITLE: "{project_name}"
+      WP_ADMIN_USER: "adm-akdigital"
+      WP_ADMIN_PASSWORD: "admin"
+      WP_ADMIN_EMAIL: "aurelien@akdigital.fr"
+      WPLANG: "fr_FR"
+      # Variables pour les permissions partagées
+      DEV_USER_UID: "1000"
+      DEV_USER_GID: "1000"
+      WWW_DATA_UID: "33"
+      WWW_DATA_GID: "33"
+      FORCE_SHARED_PERMISSIONS: "true"
     volumes:
       - ./wordpress:/var/www/html
       - ../../projets/{project_name}/wp-content:/var/www/html/wp-content
       - ../../projets/{project_name}/wp-config.php:/var/www/html/wp-config.php
       - ../../projets/{project_name}/.htaccess:/var/www/html/.htaccess
-      - ./php-config/php.ini:/usr/local/etc/php/conf.d/custom.ini
+      - ../../projets/{project_name}/config/php.ini:/usr/local/etc/php/conf.d/custom.ini
       - ../../docker-template/init-permissions.sh:/usr/local/bin/init-permissions.sh
-    entrypoint: ["/usr/local/bin/init-permissions.sh"]
+      - ../../docker-template/wordpress/wp-content:/var/www/html/wp-content-template:ro
+      - ./apache-config/apache2-custom.conf:/etc/apache2/conf-available/wordpress-custom.conf
+      - ./apache-config/docker-entrypoint-custom.sh:/usr/local/bin/docker-entrypoint-custom.sh
+    entrypoint: ["/usr/local/bin/docker-entrypoint-custom.sh"]
     command: ["apache2-foreground"]
     networks:
       - wordpress_network
-      - traefik-network
     ports:
       - "0.0.0.0:{wordpress_port}:80"  # Port exposé sur toutes les interfaces
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.{project_name}-wordpress.rule=Host(`{project_hostname}.dev.akdigital.fr`)"
-      - "traefik.http.routers.{project_name}-wordpress.entrypoints=websecure"
-      - "traefik.http.routers.{project_name}-wordpress.tls=true"
-      - "traefik.http.services.{project_name}-wordpress.loadbalancer.server.port=80"
-      - "traefik.docker.network=traefik-network"
     # Allocations raisonnables pour Docker
-    mem_limit: 1g
-    cpus: '2'
+    mem_limit: {wordpress_memory}
+    cpus: '{wordpress_cpu}'
 
   phpmyadmin:
     depends_on:
       mysql:
-        condition: service_started
+        condition: service_healthy
     image: phpmyadmin/phpmyadmin:latest
     container_name: PROJECT_NAME_phpmyadmin_1
     restart: unless-stopped
@@ -81,15 +89,22 @@ services:
       PMA_PASSWORD: wordpress
       MYSQL_ROOT_PASSWORD: rootpassword
       PMA_ABSOLUTE_URI: http://192.168.1.21:{phpmyadmin_port}/
+      # Configuration Apache pour les limites d'en-têtes
+      APACHE_RUN_USER: www-data
+      APACHE_RUN_GROUP: www-data
     volumes:
-      - ./phpmyadmin-config/php.ini:/usr/local/etc/php/conf.d/phpmyadmin.ini
+      - ../../projets/{project_name}/config/php.ini:/usr/local/etc/php/conf.d/phpmyadmin.ini
+      - ./phpmyadmin-config/phpmyadmin-apache.conf:/etc/apache2/conf-available/phpmyadmin-custom.conf
+      - ./phpmyadmin-config/init-apache.sh:/usr/local/bin/init-apache.sh
+    entrypoint: ["/usr/local/bin/init-apache.sh"]
+    command: ["apache2-foreground"]
     networks:
       - wordpress_network
     ports:
       - "0.0.0.0:{phpmyadmin_port}:80"  # Port phpMyAdmin
     # Allocations raisonnables
-    mem_limit: 256M
-    cpus: '1'
+    mem_limit: 96m
+    cpus: '0.25'
 
   mailpit:
     image: axllent/mailpit:latest
@@ -104,33 +119,137 @@ services:
       - "0.0.0.0:{mailpit_port}:8025"  # Port interface web Mailpit
       - "0.0.0.0:{smtp_port}:1025"     # Port SMTP Mailpit
     # Allocations légères
-    mem_limit: 128M
-    cpus: '0.5'
+    mem_limit: 48m
+    cpus: '0.25'
 
   nextjs:
-    image: node:20-alpine  # Image plus légère
+    depends_on:
+      wordpress:
+        condition: service_started
+    image: node:20-alpine
     container_name: PROJECT_NAME_nextjs_1
     restart: unless-stopped
     working_dir: /app
     volumes:
-      - ../../projets/{project_name}/nextjs:/app:delegated  # Optimisation macOS/Windows
+      - ../../projets/{project_name}/client:/app:delegated
       - nextjs_node_modules:/app/node_modules
     networks:
       - wordpress_network
-      - traefik-network
     ports:
-      - "0.0.0.0:8084:3000"
+      - "0.0.0.0:{nextjs_port}:3000"
     environment:
       - NODE_ENV=development
       - NEXT_TELEMETRY_DISABLED=1
-      - APOLLO_URI=192.168.1.21:8080
-      - WATCHPACK_POLLING=true  # Pour les volumes montés
-      - CHOKIDAR_USEPOLLING=true  # Pour la surveillance des fichiers
-    command: sh -c "npm ci --prefer-offline --no-audit && npm run dev"
+      - APOLLO_URI=http://192.168.1.21:{wordpress_port}/graphql
+      - WORDPRESS_API_URL=http://wordpress/wp-json/wp/v2
+      - WORDPRESS_GRAPHQL_URL=http://wordpress/graphql
+      - WORDPRESS_EXTERNAL_URL=http://192.168.1.21:{wordpress_port}
+      - WATCHPACK_POLLING=true
+      - CHOKIDAR_USEPOLLING=true
+      - HOST=0.0.0.0
+      - PORT=3000
+    command: 
+      - sh
+      - -c
+      - |
+        echo '🚀 Démarrage Next.js pour {project_name}...'
+        
+        # Vérifier que package.json existe
+        if [ ! -f package.json ]; then
+          echo '❌ package.json non trouvé dans /app'
+          ls -la /app
+          exit 1
+        fi
+        
+        # Installation des dépendances
+        echo '📦 Installation des dépendances...'
+        npm install --prefer-offline --no-audit --silent
+        
+        # Création de la page d'accueil si manquante
+        echo '📄 Création de la page d'accueil si manquante...'
+        mkdir -p pages
+        
+        if [ ! -f pages/index.js ]; then
+          cat > pages/index.js << 'EOL'
+        import Head from 'next/head'
+
+        export default function Home() {
+          return (
+            <div style={{ padding: '2rem', textAlign: 'center', fontFamily: 'Arial, sans-serif' }}>
+              <Head>
+                <title>{project_name} - Next.js Frontend</title>
+                <meta name="description" content="Next.js frontend for {project_name}" />
+                <link rel="icon" href="/favicon.ico" />
+              </Head>
+
+              <main>
+                <h1 style={{ color: '#0070f3', marginBottom: '1rem' }}>
+                  🚀 {project_name} Next.js Frontend
+                </h1>
+                <p style={{ fontSize: '1.2rem', marginBottom: '2rem' }}>
+                  Frontend headless pour votre site WordPress
+                </p>
+                <div style={{ marginTop: '2rem' }}>
+                  <a 
+                    href="http://192.168.1.21:{wordpress_port}" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    style={{ 
+                      padding: '0.5rem 1rem', 
+                      backgroundColor: '#0070f3', 
+                      color: 'white', 
+                      textDecoration: 'none', 
+                      borderRadius: '5px' 
+                    }}
+                  >
+                    ← Accéder à WordPress
+                  </a>
+                </div>
+              </main>
+            </div>
+          )
+        }
+        EOL
+        fi
+        
+        # Créer next.config.ts avec allowedDevOrigins
+        if [ ! -f next.config.ts ]; then
+          cat > next.config.ts << 'EOL'
+        import type { NextConfig } from "next";
+
+        const nextConfig: NextConfig = {
+          images: {
+            remotePatterns: [
+              {
+                protocol: "http",
+                hostname: "192.168.1.21",
+                port: "{wordpress_port}",
+                pathname: "/wp-content/uploads/**",
+              },
+            ],
+          },
+          experimental: {
+            allowedDevOrigins: ["192.168.1.21:{nextjs_port}", "192.168.1.21"],
+          },
+        };
+
+        export default nextConfig;
+        EOL
+        fi
+        
+        # Lancement du serveur de développement
+        echo '✅ Lancement du serveur de développement...'
+        npm run dev
     # Allocations optimisées
-    mem_limit: 2g
-    cpus: '2'
+    mem_limit: 768m
+    cpus: '0.75'
     shm_size: '1g'
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000", "||", "exit", "1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
 volumes:
   mysql_data:
@@ -140,6 +259,4 @@ volumes:
 
 networks:
   wordpress_network:
-    driver: bridge
-  traefik-network:
-    external: true 
+    driver: bridge 

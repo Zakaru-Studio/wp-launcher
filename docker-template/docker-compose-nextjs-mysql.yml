@@ -12,14 +12,15 @@ services:
       MYSQL_PASSWORD: projectpassword
     volumes:
       - mysql_data:/var/lib/mysql
+      - ../../projets/{project_name}/config/mysql.cnf:/etc/mysql/conf.d/custom.cnf
     networks:
       - app_network
     ports:
-      - "0.0.0.0:8080:3306"  # Port MySQL exposé
+      - "0.0.0.0:{mysql_port}:3306"  # Port MySQL exposé
     command: --default-authentication-plugin=mysql_native_password
     # Allocations raisonnables pour MySQL
-    mem_limit: 1g
-    cpus: '2'
+    mem_limit: {mysql_memory}
+    cpus: '{mysql_cpu}'
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
       timeout: 10s
@@ -27,35 +28,34 @@ services:
       interval: 30s
       start_period: 40s
 
-  nextjs:
+  client:
     image: node:20-alpine
-    container_name: PROJECT_NAME_nextjs_1
+    container_name: PROJECT_NAME_client_1
     restart: unless-stopped
     working_dir: /app
     volumes:
-      - ../../projets/{project_name}/nextjs:/app:delegated
-      - nextjs_node_modules:/app/node_modules
+      - ../../projets/{project_name}/client:/app:delegated
+      - client_node_modules:/app/node_modules
     networks:
       - app_network
-      - traefik-network
     ports:
-      - "0.0.0.0:8081:3000"  # Port Next.js frontend
+      - "0.0.0.0:{nextjs_port}:3000"  # Port Next.js frontend
     environment:
       - NODE_ENV=development
       - NEXT_TELEMETRY_DISABLED=1
       - WATCHPACK_POLLING=true
       - CHOKIDAR_USEPOLLING=true
-      - DATABASE_URL=mysql://PROJECT_NAME:projectpassword@mysql:3306/PROJECT_NAME
-      - JWT_SECRET=your-jwt-secret-key-here
-      - NEXTAUTH_SECRET=your-nextauth-secret-here
-      - NEXTAUTH_URL=https://{project_hostname}.dev.akdigital.fr
-    command: sh -c "cd /app && npm ci --prefer-offline --no-audit && npm run dev"
+      - NEXT_PUBLIC_API_URL=http://192.168.1.21:{api_port}
+      - API_URL=http://api:3001
+      - HOST=0.0.0.0
+      - PORT=3000
+    command: sh -c "cd /app && npm install --prefer-offline --no-audit && npm run dev"
     depends_on:
-      mysql:
+      api:
         condition: service_started
     # Allocations optimisées pour Next.js
-    mem_limit: 2g
-    cpus: '2'
+    mem_limit: 768m
+    cpus: '0.75'
     shm_size: '1g'
 
   api:
@@ -64,32 +64,37 @@ services:
     restart: unless-stopped
     working_dir: /app
     volumes:
-      - ../../projets/{project_name}/nextjs/api:/app:delegated
+      - ../../projets/{project_name}/api:/app:delegated
       - api_node_modules:/app/node_modules
     networks:
       - app_network
-      - traefik-network
     ports:
-      - "0.0.0.0:8082:3001"  # Port API Express
+      - "0.0.0.0:{api_port}:3001"  # Port API Express
     environment:
       - NODE_ENV=development
       - DATABASE_URL=mysql://PROJECT_NAME:projectpassword@mysql:3306/PROJECT_NAME
-      - JWT_SECRET=your-jwt-secret-key-here
-      - CORS_ORIGIN=https://{project_hostname}.dev.akdigital.fr
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_NAME=PROJECT_NAME
+      - DB_USER=PROJECT_NAME
+      - DB_PASSWORD=projectpassword
+      - JWT_SECRET=your-jwt-secret-key-here-PROJECT_NAME
+      - CORS_ORIGIN=http://192.168.1.21:{nextjs_port}
       - API_PORT=3001
+      - CLIENT_URL=http://192.168.1.21:{nextjs_port}
       - SMTP_HOST=mailpit
       - SMTP_PORT=1025
       - SMTP_USER=noreply@PROJECT_NAME.test
       - SMTP_PASS=
-    command: sh -c "cd /app && npm ci --prefer-offline --no-audit && npm run dev"
+    command: sh -c "cd /app && npm install --prefer-offline --no-audit && npm run dev"
     depends_on:
       mysql:
         condition: service_started
       mailpit:
         condition: service_started
     # Allocations pour l'API
-    mem_limit: 1g
-    cpus: '1'
+    mem_limit: 384m
+    cpus: '0.25'
 
   mailpit:
     image: axllent/mailpit:latest
@@ -101,11 +106,11 @@ services:
     networks:
       - app_network
     ports:
-      - "0.0.0.0:8083:8025"  # Port interface web Mailpit
-      - "0.0.0.0:8084:1025"     # Port SMTP Mailpit
+      - "0.0.0.0:{mailpit_port}:8025"  # Port interface web Mailpit
+      - "0.0.0.0:{smtp_port}:1025"     # Port SMTP Mailpit
     # Allocations légères
-    mem_limit: 128M
-    cpus: '0.5'
+    mem_limit: 48m
+    cpus: '0.25'
 
   phpmyadmin:
     image: phpmyadmin/phpmyadmin:latest
@@ -117,27 +122,36 @@ services:
       PMA_USER: root
       PMA_PASSWORD: rootpassword
       MYSQL_ROOT_PASSWORD: rootpassword
+      PMA_ABSOLUTE_URI: http://192.168.1.21:{phpmyadmin_port}/
+      # Configuration Apache pour les limites d'en-têtes
+      APACHE_RUN_USER: www-data
+      APACHE_RUN_GROUP: www-data
+    volumes:
+      - ../../projets/{project_name}/config/php.ini:/usr/local/etc/php/conf.d/phpmyadmin.ini
+      - ./phpmyadmin-config/phpmyadmin-apache.conf:/etc/apache2/conf-available/phpmyadmin-custom.conf
+      - ./phpmyadmin-config/init-apache.sh:/usr/local/bin/init-apache.sh
+      - ./uploads:/tmp/uploads
+    entrypoint: ["/usr/local/bin/init-apache.sh"]
+    command: ["apache2-foreground"]
     networks:
       - app_network
     ports:
-      - "0.0.0.0:8085:80"  # Port phpMyAdmin
+      - "0.0.0.0:{phpmyadmin_port}:80"  # Port phpMyAdmin
     depends_on:
       mysql:
         condition: service_started
     # Allocations légères
-    mem_limit: 256M
-    cpus: '0.5'
+    mem_limit: 96m
+    cpus: '0.25'
 
 volumes:
   mysql_data:
     driver: local
-  nextjs_node_modules:
+  client_node_modules:
     driver: local
   api_node_modules:
     driver: local
 
 networks:
   app_network:
-    driver: bridge
-  traefik-network:
-    external: true 
+    driver: bridge 

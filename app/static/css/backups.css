@@ -1,0 +1,257 @@
+/* ========================================
+   BACKUPS - Page de gestion des sauvegardes
+   ======================================== */
+
+.backup-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.backup-header-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--border-radius);
+}
+
+.backup-title {
+    font-size: 1.5rem;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.backup-actions-group {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.backup-btn {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    color: var(--text-primary);
+    padding: 0.6rem 1.2rem;
+    border-radius: var(--border-radius-small);
+    cursor: pointer;
+    transition: var(--transition);
+    font-size: 0.9rem;
+}
+
+.backup-btn:hover {
+    background: var(--glass-bg-hover);
+    border-color: var(--glass-border-hover);
+    transform: translateY(-2px);
+}
+
+.backup-btn.primary {
+    background: var(--primary-gradient);
+    border-color: transparent;
+    color: white;
+}
+
+.backup-btn.success {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    border-color: transparent;
+    color: white;
+}
+
+.backup-btn.info {
+    background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+    border-color: transparent;
+    color: white;
+}
+
+.backup-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 2rem;
+    border-bottom: 2px solid var(--glass-border);
+    padding-bottom: 0;
+}
+
+.backup-tab {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: 1rem 1.5rem;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: var(--transition);
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+}
+
+.backup-tab:hover {
+    color: var(--text-primary);
+    background: var(--glass-bg);
+}
+
+.backup-tab.active {
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+}
+
+.backup-content-pane {
+    display: none;
+}
+
+.backup-content-pane.active {
+    display: block;
+}
+
+.backup-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.25rem;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--border-radius-small);
+    margin-bottom: 0.75rem;
+    transition: var(--transition);
+}
+
+.backup-item:hover {
+    background: var(--glass-bg-hover);
+    border-color: var(--glass-border-hover);
+    transform: translateX(5px);
+}
+
+.backup-info {
+    flex: 1;
+}
+
+.backup-project-name {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.backup-meta {
+    display: flex;
+    gap: 1.5rem;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.backup-meta i {
+    margin-right: 0.3rem;
+}
+
+.backup-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.backup-list-container {
+    max-height: calc(100vh - 400px);
+    overflow-y: auto;
+    padding-right: 0.5rem;
+}
+
+.backup-list-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.backup-list-container::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+}
+
+.backup-list-container::-webkit-scrollbar-thumb {
+    background: var(--primary-color);
+    border-radius: 4px;
+}
+
+.backup-pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--glass-border);
+}
+
+.backup-pagination button {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    color: var(--text-primary);
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.backup-pagination button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.backup-pagination button:not(:disabled):hover {
+    background: var(--glass-bg-hover);
+    border-color: var(--primary-color);
+}
+
+.backup-pagination-info {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.backup-action-btn {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    color: var(--text-primary);
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--border-radius-small);
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.backup-action-btn:hover {
+    background: var(--glass-bg-hover);
+    transform: translateY(-2px);
+}
+
+.backup-action-btn.danger {
+    color: #ff6b6b;
+    border-color: rgba(255, 107, 107, 0.3);
+}
+
+.backup-action-btn.danger:hover {
+    background: rgba(255, 107, 107, 0.1);
+}
+
+.empty-state {
+    text-align: center;
+    padding: 3rem;
+    color: var(--text-muted);
+}
+
+.empty-state i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+.empty-state h3 {
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.badge-count {
+    display: inline-block;
+    background: var(--primary-gradient);
+    color: white;
+    padding: 0.2rem 0.6rem;
+    border-radius: 12px;
+    font-size: 0.85em;
+    font-weight: 600;
+}
+
+
