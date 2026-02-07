@@ -6,25 +6,25 @@ StartLimitIntervalSec=0
 
 [Service]
 Type=simple
-User=dev-server
-Group=dev-server
-WorkingDirectory=/home/dev-server/Sites/wp-launcher
+User=__APP_USER__
+Group=__APP_USER__
+WorkingDirectory=__APP_DIR__
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/home/dev-server/Sites/wp-launcher/scripts/start.sh
+ExecStart=__APP_DIR__/scripts/start.sh
 Restart=always
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=wp-launcher
 
-# Sécurité
+# Security
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths=/home/dev-server/Sites/wp-launcher
+ReadWritePaths=__APP_DIR__
 ReadWritePaths=/tmp
 ReadWritePaths=/var/run/docker.sock
 
 [Install]
-WantedBy=multi-user.target 
+WantedBy=multi-user.target

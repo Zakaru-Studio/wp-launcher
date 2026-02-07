@@ -290,43 +290,36 @@ class PermissionService:
         try:
             print(f"🔧 [FIX_PERMISSIONS] Correction de {description}: {path}")
             
-            # Changer le propriétaire
+            # Propriétaire: current_user:www-data pour compatibilité Docker WordPress
             result = subprocess.run([
-                'sudo', 'chown', '-R', f'{current_user}:{current_user}', path
+                'sudo', 'chown', '-R', f'{current_user}:www-data', path
             ], capture_output=True, text=True, timeout=30)
-            
+
             if result.returncode == 0:
-                print(f"✅ [FIX_PERMISSIONS] Propriétaire modifié pour {description}")
+                print(f"✅ [FIX_PERMISSIONS] Propriétaire modifié pour {description} ({current_user}:www-data)")
             else:
                 print(f"⚠️ [FIX_PERMISSIONS] Erreur chown pour {description}: {result.stderr}")
                 return False
-            
-            # Permissions des dossiers (755)
+
+            # Permissions des dossiers (775 - www-data peut écrire)
             result = subprocess.run([
-                'find', path, '-type', 'd', '-exec', 'chmod', '755', '{}', '+'
+                'find', path, '-type', 'd', '-exec', 'chmod', '775', '{}', '+'
             ], capture_output=True, text=True, timeout=30)
-            
+
             if result.returncode == 0:
-                print(f"✅ [FIX_PERMISSIONS] Permissions dossiers modifiées pour {description}")
+                print(f"✅ [FIX_PERMISSIONS] Permissions dossiers 775 pour {description}")
             else:
                 print(f"⚠️ [FIX_PERMISSIONS] Erreur permissions dossiers: {result.stderr}")
-            
-            # Permissions des fichiers (644)
+
+            # Permissions des fichiers (664 - www-data peut écrire)
             result = subprocess.run([
-                'find', path, '-type', 'f', '-exec', 'chmod', '644', '{}', '+'
+                'find', path, '-type', 'f', '-exec', 'chmod', '664', '{}', '+'
             ], capture_output=True, text=True, timeout=30)
-            
+
             if result.returncode == 0:
-                print(f"✅ [FIX_PERMISSIONS] Permissions fichiers modifiées pour {description}")
+                print(f"✅ [FIX_PERMISSIONS] Permissions fichiers 664 pour {description}")
             else:
                 print(f"⚠️ [FIX_PERMISSIONS] Erreur permissions fichiers: {result.stderr}")
-            
-            # Permissions spéciales pour uploads (775)
-            uploads_path = os.path.join(path, 'wp-content', 'uploads')
-            if os.path.exists(uploads_path):
-                subprocess.run(['chmod', '-R', '775', uploads_path], 
-                             capture_output=True, text=True, timeout=10)
-                print(f"✅ [FIX_PERMISSIONS] Permissions uploads spéciales appliquées")
             
             return True
             

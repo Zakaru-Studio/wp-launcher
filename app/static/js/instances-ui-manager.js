@@ -162,7 +162,7 @@ async function createDevInstanceForSelf(projectName) {
         
         const data = await response.json();
         if (data.success) {
-            alert(`Instance créée avec succès!\nURL: http://192.168.1.21:${data.instance.port}`);
+            alert(`Instance créée avec succès!\nURL: ${getProjectUrl(data.instance.port)}`);
             // Recharger les instances
             const dropdown = document.querySelector(`.instances-dropdown[data-project="${projectName}"]`);
             if (dropdown) {
@@ -268,20 +268,19 @@ function updateProjectUI(projectName, data) {
     const projectCard = document.querySelector(`[data-project-name="${projectName}"]`);
     if (!projectCard) return;
     
-    const baseUrl = 'http://192.168.1.21';
     const isDevInstance = data.isDevInstance;
-    
+
     // 1. Mettre à jour le port affiché dans le header
     const portLink = projectCard.querySelector('.project-ip-port a');
     if (portLink) {
-        portLink.href = `${baseUrl}:${data.port}`;
-        portLink.innerHTML = `<i class="fas fa-external-link-alt me-1"></i>192.168.1.21:${data.port}`;
+        portLink.href = getProjectUrl(data.port);
+        portLink.innerHTML = `<i class="fas fa-external-link-alt me-1"></i>${window.APP_CONFIG.host}:${data.port}`;
     }
     
     // 2. Mettre à jour les liens des services
     const wpLink = projectCard.querySelector('.btn-primary[title*="WordPress"]');
     if (wpLink) {
-        wpLink.href = `${baseUrl}:${data.port}`;
+        wpLink.href = getProjectUrl(data.port);
     }
     
     // 3. phpMyAdmin et Mailpit (désactivés pour les instances dev)
@@ -292,7 +291,7 @@ function updateProjectUI(projectName, data) {
             pmaLink.style.pointerEvents = 'none';
             pmaLink.title = 'phpMyAdmin non disponible pour les instances dev';
         } else {
-            pmaLink.href = `${baseUrl}:${data.ports.phpmyadmin}`;
+            pmaLink.href = getProjectUrl(data.ports.phpmyadmin);
             pmaLink.style.opacity = '1';
             pmaLink.style.pointerEvents = 'auto';
             pmaLink.title = 'Ouvrir phpMyAdmin';
@@ -306,7 +305,7 @@ function updateProjectUI(projectName, data) {
             mailpitLink.style.pointerEvents = 'none';
             mailpitLink.title = 'Mailpit non disponible pour les instances dev';
         } else {
-            mailpitLink.href = `${baseUrl}:${data.ports.mailpit}`;
+            mailpitLink.href = getProjectUrl(data.ports.mailpit);
             mailpitLink.style.opacity = '1';
             mailpitLink.style.pointerEvents = 'auto';
             mailpitLink.title = 'Ouvrir Mailpit';
@@ -408,7 +407,7 @@ async function submitCreateInstance() {
         
         const data = await response.json();
         if (data.success) {
-            alert(`Instance créée avec succès pour ${username}!\nURL: http://192.168.1.21:${data.instance.port}`);
+            alert(`Instance créée avec succès pour ${username}!\nURL: ${getProjectUrl(data.instance.port)}`);
             bootstrap.Modal.getInstance(document.getElementById('createInstanceModal')).hide();
             // Recharger les projets
             if (typeof loadProjects === 'function') {

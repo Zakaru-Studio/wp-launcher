@@ -9,6 +9,7 @@ import secrets
 import string
 import tempfile
 from app.utils.file_utils import extract_zip
+from app.config.docker_config import DockerConfig
 
 
 def generate_wordpress_security_keys():
@@ -289,14 +290,15 @@ def update_wordpress_urls(container_path, project_name, new_url):
             print(f"⚠️ Impossible de détecter l'URL actuelle: {e}")
         
         # Ajouter les URLs communes à remplacer (accès local uniquement)
+        local_ip = DockerConfig.LOCAL_IP
         old_urls.extend([
             'http://localhost',
-            'http://192.168.1.21:8087',
-            'http://192.168.1.21:8090',
-            'http://192.168.1.21:8091',
-            'http://192.168.1.21:8081',
-            'http://192.168.1.21:8082',
-            'http://192.168.1.21:8083'
+            f'http://{local_ip}:8087',
+            f'http://{local_ip}:8090',
+            f'http://{local_ip}:8091',
+            f'http://{local_ip}:8081',
+            f'http://{local_ip}:8082',
+            f'http://{local_ip}:8083'
         ])
         
         # Nettoyer les doublons
@@ -420,43 +422,44 @@ def update_wordpress_urls_simple(container_path, project_name, new_url):
     """Version simplifiée de mise à jour des URLs WordPress (contourne intelligent_mysql_wait)"""
     try:
         print(f"🔄 Mise à jour simplifiée des URLs WordPress pour {project_name} vers {new_url}")
-        
+
         # Préparer la commande SQL complète
+        local_ip = DockerConfig.LOCAL_IP
         sql_commands = f"""
 -- Mise à jour des URLs principales
 UPDATE wp_options SET option_value = '{new_url}' WHERE option_name = 'home';
 UPDATE wp_options SET option_value = '{new_url}' WHERE option_name = 'siteurl';
 
 -- Nettoyage des options contenant les anciennes URLs
-UPDATE wp_options SET option_value = REPLACE(option_value, 'http://192.168.1.21:8087', '{new_url}') WHERE option_value LIKE '%http://192.168.1.21:8087%';
-UPDATE wp_options SET option_value = REPLACE(option_value, 'http://192.168.1.21:8090', '{new_url}') WHERE option_value LIKE '%http://192.168.1.21:8090%';
-UPDATE wp_options SET option_value = REPLACE(option_value, 'http://192.168.1.21:8091', '{new_url}') WHERE option_value LIKE '%http://192.168.1.21:8091%';
-UPDATE wp_options SET option_value = REPLACE(option_value, 'http://192.168.1.21:8081', '{new_url}') WHERE option_value LIKE '%http://192.168.1.21:8081%';
-UPDATE wp_options SET option_value = REPLACE(option_value, 'http://192.168.1.21:8082', '{new_url}') WHERE option_value LIKE '%http://192.168.1.21:8082%';
-UPDATE wp_options SET option_value = REPLACE(option_value, 'http://192.168.1.21:8083', '{new_url}') WHERE option_value LIKE '%http://192.168.1.21:8083%';
+UPDATE wp_options SET option_value = REPLACE(option_value, 'http://{local_ip}:8087', '{new_url}') WHERE option_value LIKE '%http://{local_ip}:8087%';
+UPDATE wp_options SET option_value = REPLACE(option_value, 'http://{local_ip}:8090', '{new_url}') WHERE option_value LIKE '%http://{local_ip}:8090%';
+UPDATE wp_options SET option_value = REPLACE(option_value, 'http://{local_ip}:8091', '{new_url}') WHERE option_value LIKE '%http://{local_ip}:8091%';
+UPDATE wp_options SET option_value = REPLACE(option_value, 'http://{local_ip}:8081', '{new_url}') WHERE option_value LIKE '%http://{local_ip}:8081%';
+UPDATE wp_options SET option_value = REPLACE(option_value, 'http://{local_ip}:8082', '{new_url}') WHERE option_value LIKE '%http://{local_ip}:8082%';
+UPDATE wp_options SET option_value = REPLACE(option_value, 'http://{local_ip}:8083', '{new_url}') WHERE option_value LIKE '%http://{local_ip}:8083%';
 UPDATE wp_options SET option_value = REPLACE(option_value, 'http://localhost', '{new_url}') WHERE option_value LIKE '%http://localhost%';
 
 
 -- Nettoyage du contenu des posts
-UPDATE wp_posts SET post_content = REPLACE(post_content, 'http://192.168.1.21:8087', '{new_url}');
-UPDATE wp_posts SET post_content = REPLACE(post_content, 'http://192.168.1.21:8090', '{new_url}');
-UPDATE wp_posts SET post_content = REPLACE(post_content, 'http://192.168.1.21:8091', '{new_url}');
-UPDATE wp_posts SET post_content = REPLACE(post_content, 'http://192.168.1.21:8081', '{new_url}');
-UPDATE wp_posts SET post_content = REPLACE(post_content, 'http://192.168.1.21:8082', '{new_url}');
-UPDATE wp_posts SET post_content = REPLACE(post_content, 'http://192.168.1.21:8083', '{new_url}');
+UPDATE wp_posts SET post_content = REPLACE(post_content, 'http://{local_ip}:8087', '{new_url}');
+UPDATE wp_posts SET post_content = REPLACE(post_content, 'http://{local_ip}:8090', '{new_url}');
+UPDATE wp_posts SET post_content = REPLACE(post_content, 'http://{local_ip}:8091', '{new_url}');
+UPDATE wp_posts SET post_content = REPLACE(post_content, 'http://{local_ip}:8081', '{new_url}');
+UPDATE wp_posts SET post_content = REPLACE(post_content, 'http://{local_ip}:8082', '{new_url}');
+UPDATE wp_posts SET post_content = REPLACE(post_content, 'http://{local_ip}:8083', '{new_url}');
 UPDATE wp_posts SET post_content = REPLACE(post_content, 'http://localhost', '{new_url}');
-UPDATE wp_posts SET post_excerpt = REPLACE(post_excerpt, 'http://192.168.1.21:8087', '{new_url}');
+UPDATE wp_posts SET post_excerpt = REPLACE(post_excerpt, 'http://{local_ip}:8087', '{new_url}');
 UPDATE wp_posts SET post_excerpt = REPLACE(post_excerpt, 'http://localhost', '{new_url}');
 
 -- Nettoyage des métadonnées
-UPDATE wp_postmeta SET meta_value = REPLACE(meta_value, 'http://192.168.1.21:8087', '{new_url}') WHERE meta_value LIKE '%http://192.168.1.21:8087%';
-UPDATE wp_postmeta SET meta_value = REPLACE(meta_value, 'http://192.168.1.21:8090', '{new_url}') WHERE meta_value LIKE '%http://192.168.1.21:8090%';
-UPDATE wp_postmeta SET meta_value = REPLACE(meta_value, 'http://192.168.1.21:8091', '{new_url}') WHERE meta_value LIKE '%http://192.168.1.21:8091%';
+UPDATE wp_postmeta SET meta_value = REPLACE(meta_value, 'http://{local_ip}:8087', '{new_url}') WHERE meta_value LIKE '%http://{local_ip}:8087%';
+UPDATE wp_postmeta SET meta_value = REPLACE(meta_value, 'http://{local_ip}:8090', '{new_url}') WHERE meta_value LIKE '%http://{local_ip}:8090%';
+UPDATE wp_postmeta SET meta_value = REPLACE(meta_value, 'http://{local_ip}:8091', '{new_url}') WHERE meta_value LIKE '%http://{local_ip}:8091%';
 UPDATE wp_postmeta SET meta_value = REPLACE(meta_value, 'http://localhost', '{new_url}') WHERE meta_value LIKE '%http://localhost%';
-UPDATE wp_commentmeta SET meta_value = REPLACE(meta_value, 'http://192.168.1.21:8087', '{new_url}') WHERE meta_value LIKE '%http://192.168.1.21:8087%';
+UPDATE wp_commentmeta SET meta_value = REPLACE(meta_value, 'http://{local_ip}:8087', '{new_url}') WHERE meta_value LIKE '%http://{local_ip}:8087%';
 UPDATE wp_commentmeta SET meta_value = REPLACE(meta_value, 'http://localhost', '{new_url}') WHERE meta_value LIKE '%http://localhost%';
 
-UPDATE wp_usermeta SET meta_value = REPLACE(meta_value, 'http://192.168.1.21:8087', '{new_url}') WHERE meta_value LIKE '%http://192.168.1.21:8087%';
+UPDATE wp_usermeta SET meta_value = REPLACE(meta_value, 'http://{local_ip}:8087', '{new_url}') WHERE meta_value LIKE '%http://{local_ip}:8087%';
 UPDATE wp_usermeta SET meta_value = REPLACE(meta_value, 'http://localhost', '{new_url}') WHERE meta_value LIKE '%http://localhost%';
 
 -- Nettoyage du cache

@@ -58,7 +58,7 @@ class DevInstancesManager {
             
             const data = await response.json();
             if (data.success) {
-                alert(`Instance créée avec succès!\nURL: http://192.168.1.21:${data.instance.port}`);
+                alert(`Instance créée avec succès!\nURL: ${getProjectUrl(data.instance.port)}`);
                 this.loadUserInstances();
             } else {
                 alert(`Erreur: ${data.error}`);
@@ -88,7 +88,7 @@ class DevInstancesManager {
     }
     
     switchToInstance(instanceName, port) {
-        window.open(`http://192.168.1.21:${port}`, '_blank');
+        window.open(getProjectUrl(port), '_blank');
     }
     
     updateInstancesUI() {

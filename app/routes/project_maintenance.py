@@ -276,52 +276,41 @@ def fix_permissions(project_name):
         def fix_directory_permissions(path, description, follow_symlinks=False):
             try:
                 print(f"🔧 [FIX_PERMISSIONS] Correction de {description}: {path}")
-                
-                # Option -h pour chown : ne pas suivre les symlinks
+
+                # Propriétaire: current_user:www-data pour compatibilité Docker WordPress
                 chown_cmd = ['sudo', 'chown', '-R']
                 if not follow_symlinks:
                     chown_cmd.append('-h')
-                chown_cmd.extend([f'{current_user}:{current_user}', path])
-                
+                chown_cmd.extend([f'{current_user}:www-data', path])
+
                 result = subprocess.run(chown_cmd, capture_output=True, text=True, timeout=60)
-                
+
                 if result.returncode == 0:
-                    print(f"✅ [FIX_PERMISSIONS] Propriétaire modifié pour {description}")
+                    print(f"✅ [FIX_PERMISSIONS] Propriétaire modifié pour {description} ({current_user}:www-data)")
                 else:
                     print(f"⚠️ [FIX_PERMISSIONS] Erreur chown pour {description}: {result.stderr}")
                     return False
-                
-                # Utiliser -P pour ne pas suivre les symlinks dans find
-                # Permissions des dossiers : 755
+
+                # Permissions des dossiers : 775 (www-data peut écrire)
                 result = subprocess.run([
-                    'find', '-P', path, '-type', 'd', '-exec', 'chmod', '755', '{}', '+'
+                    'find', '-P', path, '-type', 'd', '-exec', 'chmod', '775', '{}', '+'
                 ], capture_output=True, text=True, timeout=60)
-                
+
                 if result.returncode == 0:
-                    print(f"✅ [FIX_PERMISSIONS] Permissions dossiers modifiées pour {description}")
+                    print(f"✅ [FIX_PERMISSIONS] Permissions dossiers 775 pour {description}")
                 else:
                     print(f"⚠️ [FIX_PERMISSIONS] Erreur permissions dossiers: {result.stderr}")
-                
-                # Permissions des fichiers : 644
+
+                # Permissions des fichiers : 664 (www-data peut écrire)
                 result = subprocess.run([
-                    'find', '-P', path, '-type', 'f', '-exec', 'chmod', '644', '{}', '+'
+                    'find', '-P', path, '-type', 'f', '-exec', 'chmod', '664', '{}', '+'
                 ], capture_output=True, text=True, timeout=60)
-                
+
                 if result.returncode == 0:
-                    print(f"✅ [FIX_PERMISSIONS] Permissions fichiers modifiées pour {description}")
+                    print(f"✅ [FIX_PERMISSIONS] Permissions fichiers 664 pour {description}")
                 else:
                     print(f"⚠️ [FIX_PERMISSIONS] Erreur permissions fichiers: {result.stderr}")
-                
-                # Permissions spéciales pour les dossiers d'uploads (775 pour permettre l'écriture web)
-                # Seulement si c'est un vrai dossier (pas un symlink)
-                uploads_path = os.path.join(path, 'wp-content', 'uploads')
-                if os.path.exists(uploads_path) and not os.path.islink(uploads_path):
-                    subprocess.run(['chmod', '-R', '775', uploads_path], 
-                                 capture_output=True, text=True, timeout=30)
-                    print(f"✅ [FIX_PERMISSIONS] Permissions uploads spéciales appliquées")
-                elif os.path.islink(uploads_path):
-                    print(f"ℹ️ [FIX_PERMISSIONS] uploads est un symlink, permissions gérées par le parent")
-                
+
                 return True
                 
             except subprocess.TimeoutExpired:

@@ -43,12 +43,12 @@ services:
       WORDPRESS_DEBUG_LOG: 1
       WORDPRESS_DEBUG_DISPLAY: 1
       # Variables pour l'auto-installation
-      WP_HOME: "http://192.168.1.21:{wordpress_port}"
+      WP_HOME: "http://{local_ip}:{wordpress_port}"
       WP_TITLE: "{project_name}"
-      WP_ADMIN_USER: "adm-akdigital"
-      WP_ADMIN_PASSWORD: "admin"
-      WP_ADMIN_EMAIL: "aurelien@akdigital.fr"
-      WPLANG: "fr_FR"
+      WP_ADMIN_USER: "{wp_admin_user}"
+      WP_ADMIN_PASSWORD: "{wp_admin_password}"
+      WP_ADMIN_EMAIL: "{wp_admin_email}"
+      WPLANG: "{wp_locale}"
       # Variables pour les permissions partagées
       DEV_USER_UID: "1000"
       DEV_USER_GID: "1000"
@@ -94,7 +94,7 @@ services:
       PMA_USER: wordpress
       PMA_PASSWORD: wordpress
       MYSQL_ROOT_PASSWORD: rootpassword
-      PMA_ABSOLUTE_URI: http://192.168.1.21:{phpmyadmin_port}/
+      PMA_ABSOLUTE_URI: http://{local_ip}:{phpmyadmin_port}/
       # Configuration Apache pour les limites d'en-têtes
       APACHE_RUN_USER: www-data
       APACHE_RUN_GROUP: www-data

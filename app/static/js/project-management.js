@@ -526,7 +526,7 @@ function createProjectHTML(project) {
                 services.push({
                     name: 'Client Next.js',
                     icon: 'fab fa-react',
-                    url: `http://192.168.1.21:${project.port}`,
+                    url: getProjectUrl(project.port),
                     display: `:${project.port}`,
                     isMain: true,
                     type: 'nextjs-client',
@@ -535,7 +535,7 @@ function createProjectHTML(project) {
                             text: 'Ouvrir',
                             icon: 'fas fa-external-link-alt',
                             class: 'btn-primary',
-                            action: `window.open('http://192.168.1.21:${project.port}', '_blank')`
+                            action: `window.open('${getProjectUrl(project.port)}', '_blank')`
                         }
                     ]
                 });
@@ -547,7 +547,7 @@ function createProjectHTML(project) {
                 services.push({
                     name: 'phpMyAdmin',
                     icon: 'fas fa-database',
-                    url: `http://192.168.1.21:${project.pma_port}`,
+                    url: getProjectUrl(project.pma_port),
                     display: `:${project.pma_port}`,
                     isMain: false,
                     type: 'phpmyadmin',
@@ -597,7 +597,7 @@ function createProjectHTML(project) {
                 services.push({
                     name: 'Mailpit',
                     icon: 'fas fa-envelope',
-                    url: `http://192.168.1.21:${project.mailpit_port}`,
+                    url: getProjectUrl(project.mailpit_port),
                     display: `:${project.mailpit_port}`,
                     isMain: false,
                     type: 'mailpit',
@@ -606,7 +606,7 @@ function createProjectHTML(project) {
                             text: 'Voir les e-mails',
                             icon: 'fas fa-inbox',
                             class: 'btn-secondary',
-                            action: `window.open('http://192.168.1.21:${project.mailpit_port}', '_blank')`,
+                            action: `window.open('${getProjectUrl(project.mailpit_port)}', '_blank')`,
                             title: 'Ouvrir l\'interface Mailpit'
                         }
                     ]
@@ -650,7 +650,7 @@ function createProjectHTML(project) {
             services.push({
                 name: 'WordPress',
                 icon: 'fab fa-wordpress',
-                url: `http://192.168.1.21:${project.port}`,
+                url: getProjectUrl(project.port),
                 display: `:${project.port}`,
                 isMain: true,
                 type: 'wordpress',
@@ -659,7 +659,7 @@ function createProjectHTML(project) {
                         text: isImporting ? '🔒 Site' : 'Site',
                         icon: 'fas fa-globe',
                         class: isImporting ? 'btn-secondary btn-disabled-import' : 'btn-primary',
-                        action: isImporting ? `showImportInProgressAlert()` : `window.open('http://192.168.1.21:${project.port}', '_blank')`,
+                        action: isImporting ? `showImportInProgressAlert()` : `window.open('${getProjectUrl(project.port)}', '_blank')`,
                         disabled: isImporting,
                         title: isImporting ? 'Import en cours - Accès temporairement bloqué' : ''
                     },
@@ -667,7 +667,7 @@ function createProjectHTML(project) {
                         text: isImporting ? '🔒 Admin' : 'Admin',
                         icon: 'fas fa-user-shield',
                         class: isImporting ? 'btn-secondary btn-disabled-import' : 'btn-primary',
-                        action: isImporting ? `showImportInProgressAlert()` : `window.open('http://192.168.1.21:${project.port}/wp-admin/?autologin=1&user=adm-akdigital&pass=admin', '_blank')`,
+                        action: isImporting ? `showImportInProgressAlert()` : `window.open('` + getProjectUrl(project.port, 'wp-admin/?autologin=1&user=' + window.APP_CONFIG.wp_admin_user + '&pass=' + window.APP_CONFIG.wp_admin_password) + `', '_blank')`,
                         disabled: isImporting,
                         title: isImporting ? 'Import en cours - Accès temporairement bloqué' : ''
                     }
@@ -684,7 +684,7 @@ function createProjectHTML(project) {
                 services.push({
                     name: 'phpMyAdmin',
                     icon: 'fas fa-database',
-                    url: `http://192.168.1.21:${project.pma_port}`,
+                    url: getProjectUrl(project.pma_port),
                     display: `:${project.pma_port}`,
                     isMain: false,
                     type: 'phpmyadmin',
@@ -714,7 +714,7 @@ function createProjectHTML(project) {
                 services.push({
                     name: 'Mailpit',
                     icon: 'fas fa-envelope',
-                    url: `http://192.168.1.21:${project.mailpit_port}`,
+                    url: getProjectUrl(project.mailpit_port),
                     display: `:${project.mailpit_port}`,
                     isMain: false,
                     type: 'mailpit',
@@ -723,7 +723,7 @@ function createProjectHTML(project) {
                             text: 'Voir les e-mails',
                             icon: 'fas fa-inbox',
                             class: 'btn-secondary',
-                            action: `window.open('http://192.168.1.21:${project.mailpit_port}', '_blank')`,
+                            action: `window.open('${getProjectUrl(project.mailpit_port)}', '_blank')`,
                             title: 'Ouvrir l\'interface Mailpit'
                         }
                     ]
@@ -735,7 +735,7 @@ function createProjectHTML(project) {
                 services.push({
                     name: 'Next.js',
                     icon: 'fab fa-react',
-                    url: `http://192.168.1.21:${project.nextjs_port}`,
+                    url: getProjectUrl(project.nextjs_port),
                     display: `:${project.nextjs_port}`,
                     isMain: false,
                     type: 'nextjs',
@@ -794,11 +794,11 @@ function createProjectHTML(project) {
     let projectTypeLabel = 'Projet';
 
     if (isNextjsApp) {
-        mainUrl = `http://192.168.1.21:${project.port}`;
+        mainUrl = getProjectUrl(project.port);
         mainIcon = 'fab fa-react';
         projectTypeLabel = 'App Next.js';
     } else if (isWordPress) {
-        mainUrl = `http://192.168.1.21:${project.port}`;
+        mainUrl = getProjectUrl(project.port);
         if (project.type === 'wordpress_nextjs' || project.has_nextjs || project.nextjs_enabled) {
             mainIcon = 'fab fa-wordpress';
             projectTypeLabel = 'WordPress + Next.js';
@@ -831,7 +831,7 @@ function createProjectHTML(project) {
                         <div class="project-ip-port">
                         <a href="${mainUrl}" target="_blank" class="ip-port-link" onclick="event.stopPropagation();">
                         <i class="fas fa-external-link-alt me-1"></i>
-                                192.168.1.21:${project.port}
+                                ${window.APP_CONFIG.host}:${project.port}
                             </a>
                         </div>
                     ` : ''}
@@ -839,8 +839,8 @@ function createProjectHTML(project) {
                     ${(project.nextjs_enabled || project.has_nextjs) && project.nextjs_port ? `
                         <div class="project-nextjs-ip" style="display: none;">
                             <i class="fab fa-react me-1"></i>
-                            <a href="http://192.168.1.21:${project.nextjs_port}" target="_blank" class="nextjs-ip-link" onclick="event.stopPropagation();">
-                                Next.js: 192.168.1.21:${project.nextjs_port}
+                            <a href="${getProjectUrl(project.nextjs_port)}" target="_blank" class="nextjs-ip-link" onclick="event.stopPropagation();">
+                                Next.js: ${window.APP_CONFIG.host}:${project.nextjs_port}
                             </a>
                         </div>
                     ` : ''}

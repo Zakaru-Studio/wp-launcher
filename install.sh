@@ -106,8 +106,8 @@ echo -e "${YELLOW}[6/6] Service systemd...${NC}"
 read -p "  Installer le service systemd wp-launcher ? (o/N) " -n 1 -r
 echo ""
 if [[ $REPLY =~ ^[Oo]$ ]]; then
-    # Adapter le service au chemin actuel
-    sed "s|/home/dev-server/Sites/wp-launcher|$APP_DIR|g; s|User=dev-server|User=$CURRENT_USER|g; s|Group=dev-server|Group=$CURRENT_USER|g" \
+    # Adapt service template to current install
+    sed "s|__APP_DIR__|$APP_DIR|g; s|__APP_USER__|$CURRENT_USER|g" \
         "$APP_DIR/wp-launcher.service" | sudo tee /etc/systemd/system/wp-launcher.service > /dev/null
     sudo systemctl daemon-reload
     sudo systemctl enable wp-launcher

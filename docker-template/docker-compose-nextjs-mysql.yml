@@ -45,7 +45,7 @@ services:
       - NEXT_TELEMETRY_DISABLED=1
       - WATCHPACK_POLLING=true
       - CHOKIDAR_USEPOLLING=true
-      - NEXT_PUBLIC_API_URL=http://192.168.1.21:{api_port}
+      - NEXT_PUBLIC_API_URL=http://{local_ip}:{api_port}
       - API_URL=http://api:3001
       - HOST=0.0.0.0
       - PORT=3000
@@ -79,9 +79,9 @@ services:
       - DB_USER=PROJECT_NAME
       - DB_PASSWORD=projectpassword
       - JWT_SECRET=your-jwt-secret-key-here-PROJECT_NAME
-      - CORS_ORIGIN=http://192.168.1.21:{nextjs_port}
+      - CORS_ORIGIN=http://{local_ip}:{nextjs_port}
       - API_PORT=3001
-      - CLIENT_URL=http://192.168.1.21:{nextjs_port}
+      - CLIENT_URL=http://{local_ip}:{nextjs_port}
       - SMTP_HOST=mailpit
       - SMTP_PORT=1025
       - SMTP_USER=noreply@PROJECT_NAME.test
@@ -122,7 +122,7 @@ services:
       PMA_USER: root
       PMA_PASSWORD: rootpassword
       MYSQL_ROOT_PASSWORD: rootpassword
-      PMA_ABSOLUTE_URI: http://192.168.1.21:{phpmyadmin_port}/
+      PMA_ABSOLUTE_URI: http://{local_ip}:{phpmyadmin_port}/
       # Configuration Apache pour les limites d'en-têtes
       APACHE_RUN_USER: www-data
       APACHE_RUN_GROUP: www-data

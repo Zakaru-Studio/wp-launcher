@@ -17,15 +17,13 @@ window.updateProjectCardForInstance = function(projectName, instance, status) {
     projectCard.dataset.currentInstance = instance.name;
     projectCard.dataset.isDevInstance = 'true';
     
-    const baseUrl = 'http://192.168.1.21';
-    
     // 1. Mettre à jour le port dans le header du project-item
     const projectHeader = projectCard.querySelector('.project-header');
     if (projectHeader) {
         const portLink = projectHeader.querySelector('.project-ip-port a');
         if (portLink) {
-            portLink.href = `${baseUrl}:${instance.port}`;
-            portLink.innerHTML = `<i class="fas fa-external-link-alt me-1"></i>192.168.1.21:${instance.port}`;
+            portLink.href = getProjectUrl(instance.port);
+            portLink.innerHTML = `<i class="fas fa-external-link-alt me-1"></i>${window.APP_CONFIG.host}:${instance.port}`;
             console.log(`Port mis à jour dans le header: ${instance.port}`);
         }
     }
@@ -41,7 +39,7 @@ window.updateProjectCardForInstance = function(projectName, instance, status) {
             const name = serviceName.textContent.trim();
             // UNIQUEMENT pour WordPress
             if (name === 'WordPress') {
-                serviceLink.href = `${baseUrl}:${instance.port}`;
+                serviceLink.href = getProjectUrl(instance.port);
                 servicePort.textContent = `:${instance.port}`;
                 console.log(`Port WordPress service mis à jour: ${instance.port}`);
             }
@@ -123,25 +121,23 @@ window.restoreMainInstanceCard = function(projectName) {
         mailpit: projectCard.dataset.portMailpit
     };
     
-    const baseUrl = 'http://192.168.1.21';
-    
     // Restaurer le port dans le header
     const portLink = projectCard.querySelector('.project-ip-port a');
     if (portLink) {
-        portLink.href = `${baseUrl}:${originalPorts.wordpress}`;
-        portLink.innerHTML = `<i class="fas fa-external-link-alt me-1"></i>192.168.1.21:${originalPorts.wordpress}`;
+        portLink.href = getProjectUrl(originalPorts.wordpress);
+        portLink.innerHTML = `<i class="fas fa-external-link-alt me-1"></i>${window.APP_CONFIG.host}:${originalPorts.wordpress}`;
     }
-    
+
     // Restaurer le lien WordPress
     const wpLink = projectCard.querySelector('.btn-primary[title*="WordPress"]');
     if (wpLink) {
-        wpLink.href = `${baseUrl}:${originalPorts.wordpress}`;
+        wpLink.href = getProjectUrl(originalPorts.wordpress);
     }
-    
+
     // Réactiver phpMyAdmin et Mailpit
     const pmaLink = projectCard.querySelector('.btn-info[title*="phpMyAdmin"]');
     if (pmaLink) {
-        pmaLink.href = `${baseUrl}:${originalPorts.phpmyadmin}`;
+        pmaLink.href = getProjectUrl(originalPorts.phpmyadmin);
         pmaLink.style.opacity = '1';
         pmaLink.style.pointerEvents = 'auto';
         pmaLink.title = 'Ouvrir phpMyAdmin';
@@ -149,7 +145,7 @@ window.restoreMainInstanceCard = function(projectName) {
     
     const mailpitLink = projectCard.querySelector('.btn-warning[title*="Mailpit"]');
     if (mailpitLink) {
-        mailpitLink.href = `${baseUrl}:${originalPorts.mailpit}`;
+        mailpitLink.href = getProjectUrl(originalPorts.mailpit);
         mailpitLink.style.opacity = '1';
         mailpitLink.style.pointerEvents = 'auto';
         mailpitLink.title = 'Ouvrir Mailpit';
@@ -198,11 +194,10 @@ window.restoreMainInstanceCard = function(projectName) {
         const servicePort = card.querySelector('.service-port');
         
         if (serviceLink && servicePort) {
-            const baseUrl = 'http://192.168.1.21';
             // WordPress service - restaurer le port original
             if (!serviceLink.href.includes('phpmyadmin') && !serviceLink.href.includes('mailpit')) {
                 const originalPort = originalPorts.wordpress;
-                serviceLink.href = `${baseUrl}:${originalPort}`;
+                serviceLink.href = getProjectUrl(originalPort);
                 servicePort.textContent = `:${originalPort}`;
             }
         }

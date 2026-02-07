@@ -27,24 +27,15 @@ init_app_services(app, socketio)
 register_socketio_handlers(socketio)
 
 if __name__ == '__main__':
-    print("🚀 Démarrage de WordPress Launcher (version modulaire)...")
-    print("📁 Architecture modulaire chargée:")
-    print("   • Package principal: app/")
-    print("   • Config: app/config/")
-    print("   • Routes: app/routes/")
-    print("   • Services: app/services/")
-    print("   • Models: app/models/")
-    print("   • Utils: app/utils/")
-    print("   • Static: app/static/")
-    print("   • Templates: app/templates/")
-    
-    # Démarrer l'application avec SocketIO
+    port = int(os.getenv('APP_PORT', '5000'))
+    print(f"🚀 Starting WP Launcher on port {port}...")
+
     socketio.run(
-        app, 
-        debug=False,  # Désactivé pour éviter les problèmes de socket
-        host='0.0.0.0', 
-        port=5000, 
+        app,
+        debug=False,
+        host='0.0.0.0',
+        port=port,
         allow_unsafe_werkzeug=True,
-        use_reloader=False  # Désactiver le reloader pour éviter les conflits
+        use_reloader=False
     )
 

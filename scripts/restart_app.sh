@@ -2,6 +2,9 @@
 
 echo "🔄 Redémarrage de WordPress Launcher..."
 
+# Detect local IP from APP_HOST env var or dynamically
+LOCAL_IP="${APP_HOST:-$(hostname -I | awk '{print $1}')}"
+
 # Arrêter les processus Python existants
 echo "🛑 Arrêt des processus existants..."
 pkill -f "python3.*run.py" || true
@@ -43,7 +46,7 @@ sleep 3
 # Vérifier si l'application a démarré
 if pgrep -f "python3.*run.py" >/dev/null; then
     echo "✅ Application redémarrée avec succès!"
-    echo "🌐 Accessible sur : http://192.168.1.21:5000"
+    echo "🌐 Accessible sur : http://${LOCAL_IP}:5000"
     echo "📄 Logs disponibles dans: /home/dev-server/Sites/wp-launcher/logs/app.log"
 else
     echo "❌ Erreur lors du redémarrage"

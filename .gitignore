@@ -10,7 +10,7 @@ routes/__pycache__/
 services/__pycache__/
 utils/__pycache__/
 
-# Gros dossiers de données
+# Data directories
 projets/
 uploads/
 containers/
@@ -23,19 +23,19 @@ snapshots/
 app/utils/projets
 app/utils/containers
 
-# Configuration sensible
+# Sensitive configuration
 .env
 
-# Historique et cache
+# History and cache
 .claude/
 .history/
 
-# WordPress - Template Docker
+# WordPress - Docker template
 docker-template/wordpress/wp-content/plugins/*
 docker-template/wordpress/wp-content/themes/*
 docker-template/wordpress/wp-content/upgrade/*
 docker-template/wordpress/wp-content/languages/*
 
-# Garder les dossiers vides avec un fichier .gitkeep si nécessaire
+# Keep empty directories with .gitkeep if needed
 !docker-template/wordpress/wp-content/plugins/.gitkeep
 !docker-template/wordpress/wp-content/themes/.gitkeep

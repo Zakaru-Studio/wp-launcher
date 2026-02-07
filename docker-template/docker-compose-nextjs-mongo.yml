@@ -44,7 +44,7 @@ services:
       - NEXT_TELEMETRY_DISABLED=1
       - WATCHPACK_POLLING=true
       - CHOKIDAR_USEPOLLING=true
-      - NEXT_PUBLIC_API_URL=http://192.168.1.21:{api_port}
+      - NEXT_PUBLIC_API_URL=http://{local_ip}:{api_port}
       - API_URL=http://api:3001
       - HOST=0.0.0.0
       - PORT=3000
@@ -78,9 +78,9 @@ services:
       - DB_USER=admin
       - DB_PASSWORD=adminpassword
       - JWT_SECRET=your-jwt-secret-key-here-PROJECT_NAME
-      - CORS_ORIGIN=http://192.168.1.21:{nextjs_port}
+      - CORS_ORIGIN=http://{local_ip}:{nextjs_port}
       - API_PORT=3001
-      - CLIENT_URL=http://192.168.1.21:{nextjs_port}
+      - CLIENT_URL=http://{local_ip}:{nextjs_port}
       - SMTP_HOST=mailpit
       - SMTP_PORT=1025
       - SMTP_USER=noreply@PROJECT_NAME.test

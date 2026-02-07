@@ -376,13 +376,13 @@ class CloneService:
             if len(port_mappings_80) >= 1:
                 content = re.sub(
                     rf'http://192\.168\.1\.21:{port_mappings_80[0]}',
-                    f'http://192.168.1.21:{ports["wordpress"]}',
+                    f'http://{DockerConfig.LOCAL_IP}:{ports["wordpress"]}',
                     content
                 )
             if len(port_mappings_80) >= 2:
                 content = re.sub(
                     rf'http://192\.168\.1\.21:{port_mappings_80[1]}',
-                    f'http://192.168.1.21:{ports["phpmyadmin"]}',
+                    f'http://{DockerConfig.LOCAL_IP}:{ports["phpmyadmin"]}',
                     content
                 )
             

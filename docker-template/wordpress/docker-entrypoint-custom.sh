@@ -324,40 +324,23 @@ if ! wp core is-installed --allow-root 2>/dev/null; then
         
         # Activer le thème du template s'il existe
         echo "🎨 Activation du thème du template..."
-        
-        # Essayer d'activer le thème akdigital en priorité
-        if [ -d "/var/www/html/wp-content/themes/akdigital" ]; then
-            echo "🎨 Activation du thème akdigital..."
-            wp theme activate akdigital --allow-root 2>/dev/null && echo "✅ Thème akdigital activé" || echo "⚠️ Impossible d'activer le thème akdigital"
-        else
-            # Sinon, trouver le premier thème disponible
-            echo "🎨 Thème akdigital non trouvé, recherche d'un autre thème..."
-            if [ -d "/var/www/html/wp-content/themes" ]; then
-                for theme_dir in /var/www/html/wp-content/themes/*/; do
-                    if [ -d "$theme_dir" ]; then
-                        theme_name=$(basename "$theme_dir")
-                        echo "🎨 Tentative d'activation du thème: $theme_name"
-                        wp theme activate "$theme_name" --allow-root 2>/dev/null && echo "✅ Thème $theme_name activé" || echo "⚠️ Impossible d'activer le thème $theme_name"
-                        break
-                    fi
-                done
-            fi
+
+        # Trouver et activer le premier thème disponible dans le template
+        if [ -d "/var/www/html/wp-content/themes" ]; then
+            for theme_dir in /var/www/html/wp-content/themes/*/; do
+                if [ -d "$theme_dir" ]; then
+                    theme_name=$(basename "$theme_dir")
+                    echo "🎨 Tentative d'activation du thème: $theme_name"
+                    wp theme activate "$theme_name" --allow-root 2>/dev/null && echo "✅ Thème $theme_name activé" || echo "⚠️ Impossible d'activer le thème $theme_name"
+                    break
+                fi
+            done
         fi
-        
+
         # Vérifier quel thème est actuellement actif
         echo "🔍 Vérification du thème actif..."
         ACTIVE_THEME=$(wp theme get --allow-root --field=name 2>/dev/null || echo "Erreur")
         echo "📄 Thème actuellement actif: $ACTIVE_THEME"
-        
-        # Forcer l'activation du thème akdigital si il n'est pas actif
-        if [ "$ACTIVE_THEME" != "AK Digital" ] && [ -d "/var/www/html/wp-content/themes/akdigital" ]; then
-            echo "🔄 Forcer l'activation du thème akdigital..."
-            wp theme activate akdigital --allow-root --force 2>/dev/null && echo "✅ Thème akdigital forcé" || echo "⚠️ Impossible de forcer le thème akdigital"
-            
-            # Vérifier à nouveau
-            ACTIVE_THEME=$(wp theme get --allow-root --field=name 2>/dev/null || echo "Erreur")
-            echo "📄 Thème après forçage: $ACTIVE_THEME"
-        fi
         
         # Activer tous les plugins du template
         echo "🔌 Activation des plugins du template..."
@@ -407,7 +390,16 @@ else
     TEMPLATE_WP_CONTENT="/var/www/html/wp-content-template"
     if [ -d "$TEMPLATE_WP_CONTENT" ]; then
         # Vérifier si les plugins du template sont présents
-        if [ ! -d "/var/www/html/wp-content/plugins/advanced-custom-fields-pro" ] || [ ! -d "/var/www/html/wp-content/themes/akdigital" ]; then
+        TEMPLATE_THEME_MISSING=true
+        if [ -d "/var/www/html/wp-content/themes" ]; then
+            for td in /var/www/html/wp-content/themes/*/; do
+                if [ -d "$td" ]; then
+                    TEMPLATE_THEME_MISSING=false
+                    break
+                fi
+            done
+        fi
+        if [ ! -d "/var/www/html/wp-content/plugins/advanced-custom-fields-pro" ] || [ "$TEMPLATE_THEME_MISSING" = true ]; then
             echo "🔄 Les plugins/thèmes du template sont manquants, application du template..."
             
             # Sauvegarder le dossier uploads s'il existe
