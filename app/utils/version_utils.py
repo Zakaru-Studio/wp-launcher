@@ -16,16 +16,18 @@ def get_git_version() -> str:
     """
     try:
         # Vérifier si on est dans un dépôt Git
-        git_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.git')
+        # app/utils/ -> app/ -> racine du projet
+        root_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        git_dir = os.path.join(root_dir, '.git')
         if not os.path.exists(git_dir):
             return 'v0.0.0-dev'
-        
+
         # Récupérer le dernier tag
         result = subprocess.run(
             ['git', 'describe', '--tags', '--always', '--dirty'],
             capture_output=True,
             text=True,
-            cwd=os.path.dirname(os.path.dirname(__file__)),
+            cwd=root_dir,
             timeout=5
         )
         
@@ -44,10 +46,10 @@ def get_git_version() -> str:
                 ['git', 'rev-parse', '--short', 'HEAD'],
                 capture_output=True,
                 text=True,
-                cwd=os.path.dirname(os.path.dirname(__file__)),
+                cwd=root_dir,
                 timeout=5
             )
-            
+
             if hash_result.returncode == 0 and hash_result.stdout.strip():
                 return f'v0.0.0-dev-{hash_result.stdout.strip()}'
             
@@ -78,11 +80,12 @@ def get_version_info() -> dict:
     }
     
     try:
-        git_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.git')
+        root_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        git_dir = os.path.join(root_dir, '.git')
         if not os.path.exists(git_dir):
             return info
-        
-        cwd = os.path.dirname(os.path.dirname(__file__))
+
+        cwd = root_dir
         
         # Hash du commit
         hash_result = subprocess.run(
