@@ -272,21 +272,53 @@ def fix_permissions(project_name):
                 time.sleep(2)
                 print(f"⏳ [FIX_PERMISSIONS] Attente de libération des fichiers...")
         
+        # Fonction pour nettoyer les ACL Samba qui bloquent les écritures
+        def clean_acls(path, description):
+            try:
+                result = subprocess.run(
+                    ['setfacl', '-Rb', path],
+                    capture_output=True, text=True, timeout=30
+                )
+                if result.returncode == 0:
+                    print(f"🧹 [FIX_PERMISSIONS] ACL nettoyées pour {description}")
+                else:
+                    print(f"⚠️ [FIX_PERMISSIONS] Erreur nettoyage ACL pour {description}: {result.stderr}")
+            except Exception as e:
+                print(f"⚠️ [FIX_PERMISSIONS] setfacl non disponible ou erreur: {e}")
+
+        # Fonction pour réappliquer des ACL permissives
+        def apply_permissive_acls(path, description):
+            try:
+                for cmd in [
+                    ['setfacl', '-R', '-m', f'u:{current_user}:rwx', path],
+                    ['setfacl', '-R', '-m', 'u:www-data:rwx', path],
+                    ['setfacl', '-R', '-d', '-m', f'u:{current_user}:rwx', path],
+                    ['setfacl', '-R', '-d', '-m', 'u:www-data:rwx', path],
+                ]:
+                    subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                print(f"🔒 [FIX_PERMISSIONS] ACL permissives appliquées pour {description}")
+            except Exception as e:
+                print(f"⚠️ [FIX_PERMISSIONS] Erreur ACL pour {description}: {e}")
+
         # Fonction pour corriger les permissions d'un dossier (sans suivre les symlinks)
-        def fix_directory_permissions(path, description, follow_symlinks=False):
+        def fix_directory_permissions(path, description, owner=None, follow_symlinks=False):
             try:
                 print(f"🔧 [FIX_PERMISSIONS] Correction de {description}: {path}")
 
-                # Propriétaire: current_user:www-data pour compatibilité Docker WordPress
+                # Nettoyer les ACL Samba restrictives avant de modifier les permissions
+                clean_acls(path, description)
+
+                # Propriétaire configurable (par défaut current_user:www-data)
+                ownership = owner or f'{current_user}:www-data'
                 chown_cmd = ['sudo', 'chown', '-R']
                 if not follow_symlinks:
                     chown_cmd.append('-h')
-                chown_cmd.extend([f'{current_user}:www-data', path])
+                chown_cmd.extend([ownership, path])
 
                 result = subprocess.run(chown_cmd, capture_output=True, text=True, timeout=60)
 
                 if result.returncode == 0:
-                    print(f"✅ [FIX_PERMISSIONS] Propriétaire modifié pour {description} ({current_user}:www-data)")
+                    print(f"✅ [FIX_PERMISSIONS] Propriétaire modifié pour {description} ({ownership})")
                 else:
                     print(f"⚠️ [FIX_PERMISSIONS] Erreur chown pour {description}: {result.stderr}")
                     return False
@@ -311,17 +343,34 @@ def fix_permissions(project_name):
                 else:
                     print(f"⚠️ [FIX_PERMISSIONS] Erreur permissions fichiers: {result.stderr}")
 
+                # Réappliquer des ACL permissives pour dev-server et www-data
+                apply_permissive_acls(path, description)
+
                 return True
-                
+
             except subprocess.TimeoutExpired:
                 print(f"❌ [FIX_PERMISSIONS] Timeout lors de la correction de {description}")
                 return False
             except Exception as e:
                 print(f"❌ [FIX_PERMISSIONS] Erreur lors de la correction de {description}: {e}")
                 return False
-        
-        # Corriger les permissions du projet parent
+
+        # Corriger les permissions du projet parent (projets/{project})
         success = fix_directory_permissions(project_path, f"projet {target_project}")
+
+        # Corriger les permissions du dossier WordPress dans containers/
+        container_wp_path = os.path.join(project.container_path, 'wordpress')
+        if os.path.exists(container_wp_path):
+            print(f"🔧 [FIX_PERMISSIONS] Correction du dossier containers WordPress: {container_wp_path}")
+            wp_success = fix_directory_permissions(
+                container_wp_path,
+                f"containers wordpress {target_project}",
+                owner='www-data:www-data'
+            )
+            if not wp_success:
+                print(f"⚠️ [FIX_PERMISSIONS] Erreur partielle sur le dossier containers WordPress")
+        else:
+            print(f"ℹ️ [FIX_PERMISSIONS] Pas de dossier containers WordPress: {container_wp_path}")
         
         # Si c'est une instance dev, corriger aussi les permissions de l'instance elle-même
         instances_fixed = []
@@ -718,6 +767,32 @@ def fix_wordpress_permissions(project_name):
         import pwd
         current_user = pwd.getpwuid(os.getuid()).pw_name
         
+        # Fonction helper pour nettoyer les ACL Samba et réappliquer des ACL permissives
+        def clean_and_reapply_acls(path, label, commands_executed, errors):
+            """Nettoie les ACL Samba restrictives et réapplique des ACL permissives"""
+            try:
+                # Nettoyer les ACL héritées (Samba)
+                result = subprocess.run(
+                    ['setfacl', '-Rb', path],
+                    capture_output=True, text=True, timeout=30
+                )
+                if result.returncode == 0:
+                    commands_executed.append(f'{label}: setfacl -Rb (nettoyage ACL)')
+                    print(f"🧹 [{label}] ACL nettoyées pour {path}")
+
+                # Réappliquer des ACL permissives
+                for acl_cmd in [
+                    ['setfacl', '-R', '-m', f'u:{current_user}:rwx', path],
+                    ['setfacl', '-R', '-m', 'u:www-data:rwx', path],
+                    ['setfacl', '-R', '-d', '-m', f'u:{current_user}:rwx', path],
+                    ['setfacl', '-R', '-d', '-m', 'u:www-data:rwx', path],
+                ]:
+                    subprocess.run(acl_cmd, capture_output=True, text=True, timeout=30)
+                commands_executed.append(f'{label}: ACL permissives réappliquées')
+                print(f"🔒 [{label}] ACL permissives appliquées")
+            except Exception as e:
+                print(f"⚠️ [{label}] setfacl non disponible ou erreur: {e}")
+
         # Fonction helper pour corriger les permissions d'un wp-content
         def fix_wp_content_permissions(wp_content_path, label, commands_executed, errors):
             """Corrige les permissions d'un dossier wp-content sans suivre les symlinks
@@ -725,12 +800,15 @@ def fix_wordpress_permissions(project_name):
             if not os.path.exists(wp_content_path):
                 print(f"⚠️ [{label}] wp-content non trouvé: {wp_content_path}")
                 return
-            
+
             print(f"🔧 [{label}] Correction: {wp_content_path}")
-            
+
+            # 0. Nettoyer les ACL Samba restrictives
+            clean_and_reapply_acls(wp_content_path, label, commands_executed, errors)
+
             # Propriétaire: current_user:www-data (dev-server peut éditer, www-data peut lire/écrire via groupe)
             ownership = f'{current_user}:www-data'
-            
+
             # 1. Corriger le propriétaire de wp-content (sans suivre symlinks)
             result = subprocess.run(
                 ['sudo', 'chown', '-h', ownership, wp_content_path],
@@ -741,7 +819,7 @@ def fix_wordpress_permissions(project_name):
                 print(f"✅ [{label}] Propriétaire wp-content changé → {ownership}")
             else:
                 errors.append(f'{label} chown wp-content: {result.stderr}')
-            
+
             # 2. Chmod wp-content
             result = subprocess.run(
                 ['sudo', 'chmod', '775', wp_content_path],
@@ -751,16 +829,16 @@ def fix_wordpress_permissions(project_name):
                 commands_executed.append(f'{label}: chmod 775 wp-content')
             else:
                 errors.append(f'{label} chmod wp-content: {result.stderr}')
-            
+
             # Corriger les sous-dossiers (seulement si ce ne sont pas des symlinks)
-            for subdir in ['uploads', 'plugins', 'themes']:
+            for subdir in ['uploads', 'plugins', 'themes', 'upgrade', 'upgrade-temp-backup']:
                 subdir_path = os.path.join(wp_content_path, subdir)
                 if os.path.exists(subdir_path):
                     # Vérifier si c'est un symlink
                     if os.path.islink(subdir_path):
                         print(f"ℹ️ [{label}] {subdir} est un symlink, ignoré")
                         continue
-                    
+
                     # chown récursif sans suivre les symlinks
                     result = subprocess.run(
                         ['sudo', 'chown', '-R', '-h', ownership, subdir_path],
@@ -771,7 +849,7 @@ def fix_wordpress_permissions(project_name):
                         print(f"✅ [{label}] Propriétaire {subdir} changé → {ownership}")
                     else:
                         errors.append(f'{label} chown {subdir}: {result.stderr}')
-                    
+
                     # chmod récursif
                     result = subprocess.run(
                         ['sudo', 'chmod', '-R', '775', subdir_path],
@@ -781,17 +859,63 @@ def fix_wordpress_permissions(project_name):
                         commands_executed.append(f'{label}: chmod -R 775 {subdir}')
                     else:
                         errors.append(f'{label} chmod {subdir}: {result.stderr}')
+
+        # Fonction helper pour corriger le dossier WordPress dans containers/
+        def fix_container_wordpress_permissions(container_wp_path, label, commands_executed, errors):
+            """Corrige les permissions du dossier WordPress core (containers/{project}/wordpress/)"""
+            if not os.path.exists(container_wp_path):
+                print(f"ℹ️ [{label}] Dossier containers WordPress non trouvé: {container_wp_path}")
+                return
+
+            print(f"🔧 [{label}] Correction containers WordPress: {container_wp_path}")
+
+            # Nettoyer les ACL Samba
+            clean_and_reapply_acls(container_wp_path, label, commands_executed, errors)
+
+            # Propriétaire www-data:www-data (Apache doit pouvoir écrire pour les mises à jour)
+            result = subprocess.run(
+                ['sudo', 'chown', '-R', 'www-data:www-data', container_wp_path],
+                capture_output=True, text=True, timeout=120
+            )
+            if result.returncode == 0:
+                commands_executed.append(f'{label}: chown -R www-data:www-data wordpress/')
+                print(f"✅ [{label}] Propriétaire WordPress core changé → www-data:www-data")
+            else:
+                errors.append(f'{label} chown wordpress/: {result.stderr}')
+
+            # Permissions: 755 dirs, 644 files (standard WordPress)
+            result = subprocess.run(
+                ['find', '-P', container_wp_path, '-type', 'd', '-exec', 'chmod', '755', '{}', '+'],
+                capture_output=True, text=True, timeout=60
+            )
+            if result.returncode == 0:
+                commands_executed.append(f'{label}: chmod 755 wordpress/ dirs')
+            else:
+                errors.append(f'{label} chmod dirs: {result.stderr}')
+
+            result = subprocess.run(
+                ['find', '-P', container_wp_path, '-type', 'f', '-exec', 'chmod', '644', '{}', '+'],
+                capture_output=True, text=True, timeout=60
+            )
+            if result.returncode == 0:
+                commands_executed.append(f'{label}: chmod 644 wordpress/ files')
+            else:
+                errors.append(f'{label} chmod files: {result.stderr}')
         
         # Exécuter les commandes de correction de permissions
         commands_executed = []
         errors = []
         
         try:
-            # 1. Corriger le projet parent
+            # 1. Corriger le projet parent (wp-content)
             parent_wp_content = os.path.join(parent_path, 'wp-content')
             fix_wp_content_permissions(parent_wp_content, 'PARENT', commands_executed, errors)
-            
-            # 2. Corriger les instances dev
+
+            # 2. Corriger le dossier WordPress core dans containers/
+            container_wp_path = os.path.join(root_dir, CONTAINERS_FOLDER, parent_project, 'wordpress')
+            fix_container_wordpress_permissions(container_wp_path, 'CONTAINERS', commands_executed, errors)
+
+            # 3. Corriger les instances dev
             instances_fixed = []
             dev_instances_path = os.path.join(parent_path, '.dev-instances')
             

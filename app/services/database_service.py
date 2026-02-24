@@ -494,37 +494,61 @@ class DatabaseService:
     def export_database(self, project_name, export_path):
         """Exporte la base de données d'un projet"""
         try:
+            import tempfile
             print(f"📤 Export de la base de données pour {project_name}")
-            
+
             # Vérifier que MySQL est prêt
             if not self.docker_service.check_mysql_ready(project_name):
                 return False, "MySQL n'est pas accessible"
-            
-            # Effectuer l'export
-            success, stdout, stderr = self.docker_service.execute_command_in_container(
-                project_name, 'mysql',
-                [
-                    'mysqldump', 
-                    '-u', 'wordpress', 
-                    '-pwordpress',
-                    '--single-transaction',
-                    '--routines',
-                    '--triggers',
-                    'wordpress'
-                ],
-                timeout=300
-            )
-            
-            if success:
-                # Sauvegarder le dump
-                with open(export_path, 'w') as f:
-                    f.write(stdout)
-                print(f"✅ Base de données exportée vers {export_path}")
-                return True, None
-            else:
-                print(f"❌ Erreur export: {stderr}")
-                return False, stderr
-                
+
+            # Créer un fichier de configuration MySQL temporaire
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.cnf', delete=False) as config_file:
+                config_file.write("[mysqldump]\n")
+                config_file.write("user=wordpress\n")
+                config_file.write("password=wordpress\n")
+                config_path = config_file.name
+
+            try:
+                mysql_container = f"{project_name}_mysql_1"
+
+                # Copier le fichier de config dans le conteneur
+                subprocess.run(
+                    ['docker', 'cp', config_path, f"{mysql_container}:/tmp/.mysqldump.cnf"],
+                    check=True,
+                    capture_output=True
+                )
+
+                # Effectuer l'export avec le fichier de config
+                success, stdout, stderr = self.docker_service.execute_command_in_container(
+                    project_name, 'mysql',
+                    [
+                        'mysqldump',
+                        '--defaults-file=/tmp/.mysqldump.cnf',
+                        '--single-transaction',
+                        '--routines',
+                        '--triggers',
+                        '--no-tablespaces',
+                        'wordpress'
+                    ],
+                    timeout=300
+                )
+
+                if success:
+                    # Sauvegarder le dump
+                    with open(export_path, 'w') as f:
+                        f.write(stdout)
+                    print(f"✅ Base de données exportée vers {export_path}")
+                    return True, None
+                else:
+                    print(f"❌ Erreur export: {stderr}")
+                    return False, stderr
+
+            finally:
+                # Nettoyer le fichier temporaire
+                subprocess.run(['docker', 'exec', mysql_container, 'rm', '-f', '/tmp/.mysqldump.cnf'],
+                              capture_output=True)
+                os.unlink(config_path)
+
         except Exception as e:
             print(f"❌ Erreur lors de l'export: {e}")
             return False, str(e)
@@ -880,17 +904,38 @@ class DatabaseService:
                 else:
                     raise Exception(f"Conteneur MySQL introuvable pour le projet {source_project}. Vérifiez que le projet est démarré.")
             
-            # Export avec redirection correcte
-            export_cmd = ['docker', 'exec', mysql_container, 'mysqldump', '-u', 'root', '-prootpassword', source_db_name]
-            with open(export_file, 'w') as f:
-                result = subprocess.run(export_cmd, stdout=f, stderr=subprocess.PIPE, text=True)
-                if result.returncode != 0:
-                    # Vérifier si le conteneur existe
-                    check_container = subprocess.run(['docker', 'ps', '-a', '--filter', f'name={mysql_container}', '--format', '{{.Names}}'], 
-                                                    capture_output=True, text=True)
-                    if mysql_container not in check_container.stdout:
-                        raise Exception(f"Conteneur MySQL introuvable: {mysql_container}. Conteneurs disponibles: {check_container.stdout.strip()}")
-                    raise Exception(f"Erreur mysqldump: {result.stderr}")
+            # Export avec fichier de config pour éviter les avertissements
+            import tempfile
+
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.cnf', delete=False) as config_file:
+                config_file.write("[mysqldump]\n")
+                config_file.write("user=root\n")
+                config_file.write("password=rootpassword\n")
+                config_path = config_file.name
+
+            try:
+                # Copier le fichier de config dans le conteneur
+                subprocess.run(
+                    ['docker', 'cp', config_path, f"{mysql_container}:/tmp/.mysqldump_clone.cnf"],
+                    check=True,
+                    capture_output=True
+                )
+
+                export_cmd = ['docker', 'exec', mysql_container, 'mysqldump', '--defaults-file=/tmp/.mysqldump_clone.cnf', '--no-tablespaces', source_db_name]
+                with open(export_file, 'w') as f:
+                    result = subprocess.run(export_cmd, stdout=f, stderr=subprocess.PIPE, text=True)
+                    if result.returncode != 0:
+                        # Vérifier si le conteneur existe
+                        check_container = subprocess.run(['docker', 'ps', '-a', '--filter', f'name={mysql_container}', '--format', '{{.Names}}'],
+                                                        capture_output=True, text=True)
+                        if mysql_container not in check_container.stdout:
+                            raise Exception(f"Conteneur MySQL introuvable: {mysql_container}. Conteneurs disponibles: {check_container.stdout.strip()}")
+                        raise Exception(f"Erreur mysqldump: {result.stderr}")
+            finally:
+                # Nettoyer le fichier temporaire
+                subprocess.run(['docker', 'exec', mysql_container, 'rm', '-f', '/tmp/.mysqldump_clone.cnf'],
+                              capture_output=True)
+                os.unlink(config_path)
             
             if socketio:
                 socketio.emit('db_clone_progress', {
@@ -966,7 +1011,7 @@ class DatabaseService:
         
         if output_file is None:
             output_file = f'backups/{db_name}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.sql'
-        
+
         # Utiliser le conteneur MySQL du projet parent
         # Si c'est une instance dev, extraire le projet parent du nom
         if '-dev-' in project_name:
@@ -974,10 +1019,32 @@ class DatabaseService:
             mysql_container = f"{parent_project}_mysql"
         else:
             mysql_container = f"{project_name}_mysql"
-        
-        cmd = f"docker exec {mysql_container} mysqldump -u root -proot_password {db_name} > {output_file}"
-        subprocess.run(cmd, shell=True, check=True)
-        
+
+        # Utiliser un fichier de config MySQL pour éviter les avertissements
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.cnf', delete=False) as config_file:
+            config_file.write("[mysqldump]\n")
+            config_file.write("user=root\n")
+            config_file.write("password=root_password\n")
+            config_path = config_file.name
+
+        try:
+            # Copier le fichier de config dans le conteneur
+            subprocess.run(
+                ['docker', 'cp', config_path, f"{mysql_container}:/tmp/.mysqldump_dev.cnf"],
+                check=True,
+                capture_output=True
+            )
+
+            cmd = f"docker exec {mysql_container} mysqldump --defaults-file=/tmp/.mysqldump_dev.cnf --no-tablespaces {db_name} > {output_file}"
+            subprocess.run(cmd, shell=True, check=True)
+
+        finally:
+            # Nettoyer le fichier temporaire
+            subprocess.run(['docker', 'exec', mysql_container, 'rm', '-f', '/tmp/.mysqldump_dev.cnf'],
+                          capture_output=True)
+            os.unlink(config_path)
+
         return output_file
     
     def import_database_with_db_name(self, project_name, db_name=None, import_file=None):
