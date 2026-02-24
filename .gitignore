@@ -31,11 +31,4 @@ app/utils/containers
 .history/
 
 # WordPress - Docker template
-docker-template/wordpress/wp-content/plugins/*
-docker-template/wordpress/wp-content/themes/*
-docker-template/wordpress/wp-content/upgrade/*
-docker-template/wordpress/wp-content/languages/*
-
-# Keep empty directories with .gitkeep if needed
-!docker-template/wordpress/wp-content/plugins/.gitkeep
-!docker-template/wordpress/wp-content/themes/.gitkeep
+docker-template/wordpress/

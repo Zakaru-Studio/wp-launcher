@@ -368,57 +368,79 @@ class MySQLManager:
     
     def export_database(self, project_name, export_path, progress_callback=None):
         """Exporte la base de données vers un fichier SQL optimisé pour les gros volumes"""
+        import tempfile
         container_name = f"{project_name}_mysql_1"
-        
+
         try:
             if progress_callback:
                 progress_callback("Démarrage export optimisé...", 10)
-            
-            # Commande mysqldump optimisée pour les gros volumes
-            export_cmd = [
-                'docker', 'exec', container_name,
-                'mysqldump',
-                '--quick',  # Récupérer les lignes une par une
-                '--lock-tables=false',  # Éviter le verrouillage
-                '--single-transaction',  # Export transactionnel
-                '--routines',  # Exporter les procédures stockées
-                '--triggers',  # Exporter les triggers
-                '--complete-insert',  # Insérer avec noms de colonnes
-                '--extended-insert',  # Grouper les INSERT
-                '--hex-blob',  # Encoder les BLOB en hexadécimal
-                f'-u{self.config.DEFAULT_USER}',
-                f'-p{self.config.DEFAULT_PASSWORD}',
-                self.config.DEFAULT_DB
-            ]
-            
-            if progress_callback:
-                progress_callback("Export de la base de données...", 30)
-            
-            # Exécuter l'export avec timeout étendu
-            result = subprocess.run(
-                export_cmd,
-                stdout=open(export_path, 'w', encoding='utf-8'),
-                stderr=subprocess.PIPE,
-                text=True,
-                timeout=1800  # 30 minutes max
-            )
-            
-            if result.returncode == 0:
-                # Vérifier la taille du fichier exporté
-                export_size = os.path.getsize(export_path)
-                export_size_mb = export_size / (1024 * 1024)
-                
+
+            # Créer un fichier de configuration MySQL temporaire
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.cnf', delete=False) as config_file:
+                config_file.write("[mysqldump]\n")
+                config_file.write(f"user={self.config.DEFAULT_USER}\n")
+                config_file.write(f"password={self.config.DEFAULT_PASSWORD}\n")
+                config_path = config_file.name
+
+            try:
+                # Copier le fichier de config dans le conteneur
+                subprocess.run(
+                    ['docker', 'cp', config_path, f"{container_name}:/tmp/.mysqldump.cnf"],
+                    check=True,
+                    capture_output=True
+                )
+
+                # Commande mysqldump optimisée pour les gros volumes
+                export_cmd = [
+                    'docker', 'exec', container_name,
+                    'mysqldump',
+                    '--defaults-file=/tmp/.mysqldump.cnf',
+                    '--quick',  # Récupérer les lignes une par une
+                    '--lock-tables=false',  # Éviter le verrouillage
+                    '--single-transaction',  # Export transactionnel
+                    '--routines',  # Exporter les procédures stockées
+                    '--triggers',  # Exporter les triggers
+                    '--complete-insert',  # Insérer avec noms de colonnes
+                    '--extended-insert',  # Grouper les INSERT
+                    '--hex-blob',  # Encoder les BLOB en hexadécimal
+                    '--no-tablespaces',  # Éviter PROCESS privilege requirement
+                    self.config.DEFAULT_DB
+                ]
+
                 if progress_callback:
-                    progress_callback(f"Export terminé ({export_size_mb:.1f}MB)", 100)
-                
-                print(f"✅ Export réussi: {export_path} ({export_size_mb:.2f}MB)")
-                return True
-            else:
-                print(f"❌ Erreur lors de l'export: {result.stderr}")
-                if os.path.exists(export_path):
-                    os.remove(export_path)  # Supprimer le fichier incomplet
-                return False
-                
+                    progress_callback("Export de la base de données...", 30)
+
+                # Exécuter l'export avec timeout étendu
+                result = subprocess.run(
+                    export_cmd,
+                    stdout=open(export_path, 'w', encoding='utf-8'),
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=1800  # 30 minutes max
+                )
+
+                if result.returncode == 0:
+                    # Vérifier la taille du fichier exporté
+                    export_size = os.path.getsize(export_path)
+                    export_size_mb = export_size / (1024 * 1024)
+
+                    if progress_callback:
+                        progress_callback(f"Export terminé ({export_size_mb:.1f}MB)", 100)
+
+                    print(f"✅ Export réussi: {export_path} ({export_size_mb:.2f}MB)")
+                    return True
+                else:
+                    print(f"❌ Erreur lors de l'export: {result.stderr}")
+                    if os.path.exists(export_path):
+                        os.remove(export_path)  # Supprimer le fichier incomplet
+                    return False
+
+            finally:
+                # Nettoyer le fichier temporaire
+                subprocess.run(['docker', 'exec', container_name, 'rm', '-f', '/tmp/.mysqldump.cnf'],
+                              capture_output=True)
+                os.unlink(config_path)
+
         except subprocess.TimeoutExpired:
             print("❌ Timeout lors de l'export")
             if os.path.exists(export_path):

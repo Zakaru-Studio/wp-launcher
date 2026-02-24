@@ -270,10 +270,35 @@ def export_database(project_name):
         print(f"🔍 [EXPORT_DB] Utilisateur: {db_user}")
         
         try:
+            # Créer et exécuter la commande mysqldump avec un wrapper pour gérer le password de manière sécurisée
+
+            # Créer le fichier config directement dans le conteneur
+            config_cmd = f"""echo "[mysqldump]
+user={db_user}
+password={db_password}" > /tmp/.mysqldump.cnf && chmod 600 /tmp/.mysqldump.cnf"""
+
+            print(f"🔍 [EXPORT_DB] Création du fichier config dans le conteneur...")
+            config_result = subprocess.run(
+                ['docker', 'exec', mysql_container, 'bash', '-c', config_cmd],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+
+            if config_result.returncode != 0:
+                print(f"❌ [EXPORT_DB] Erreur création config: {config_result.stderr}")
+                return jsonify({
+                    'success': False,
+                    'message': f'Erreur création config: {config_result.stderr}'
+                })
+
+            print(f"✅ [EXPORT_DB] Config créée avec succès")
+
             # Commande mysqldump optimisée
             export_cmd = [
                 'docker', 'exec', mysql_container,
                 'mysqldump',
+                '--defaults-file=/tmp/.mysqldump.cnf',
                 '--quick',  # Récupérer les lignes une par une
                 '--lock-tables=false',  # Éviter le verrouillage
                 '--single-transaction',  # Export transactionnel
@@ -282,14 +307,13 @@ def export_database(project_name):
                 '--complete-insert',  # Insérer avec noms de colonnes
                 '--extended-insert',  # Grouper les INSERT
                 '--hex-blob',  # Encoder les BLOB en hexadécimal
+                '--no-tablespaces',  # Éviter PROCESS privilege requirement
                 '--default-character-set=utf8mb4',
-                f'-u{db_user}',
-                f'-p{db_password}',
                 db_name
             ]
-            
+
             print(f"🚀 [EXPORT_DB] Exécution de mysqldump...")
-            
+
             # Exécuter l'export avec timeout étendu
             with open(export_path, 'w', encoding='utf-8') as export_file:
                 result = subprocess.run(
@@ -299,15 +323,15 @@ def export_database(project_name):
                     text=True,
                     timeout=1800  # 30 minutes max
                 )
-            
+
             if result.returncode == 0:
                 # Vérifier la taille du fichier exporté
                 if os.path.exists(export_path):
                     export_size = os.path.getsize(export_path)
                     export_size_mb = export_size / (1024 * 1024)
-                    
+
                     print(f"✅ [EXPORT_DB] Export réussi: {export_path} ({export_size_mb:.2f}MB)")
-                    
+
                     return jsonify({
                         'success': True,
                         'message': f'Export terminé avec succès ({export_size_mb:.1f}MB)',
@@ -320,14 +344,17 @@ def export_database(project_name):
                         'message': 'Fichier d\'export non créé'
                     })
             else:
-                print(f"❌ [EXPORT_DB] Erreur lors de l'export: {result.stderr}")
+                print(f"❌ [EXPORT_DB] Erreur mysqldump (code: {result.returncode})")
+                print(f"   stderr: {result.stderr if result.stderr else '(empty)'}")
                 if os.path.exists(export_path):
+                    file_size = os.path.getsize(export_path)
+                    print(f"   fichier créé: {file_size} bytes")
                     os.remove(export_path)  # Supprimer le fichier incomplet
                 return jsonify({
                     'success': False,
-                    'message': f'Erreur lors de l\'export: {result.stderr}'
+                    'message': f'Erreur mysqldump (code {result.returncode}): {result.stderr if result.stderr else "Pas de message d\'erreur"}'
                 })
-                
+
         except subprocess.TimeoutExpired:
             print("❌ [EXPORT_DB] Timeout lors de l'export")
             if os.path.exists(export_path):
@@ -338,12 +365,25 @@ def export_database(project_name):
             })
         except Exception as e:
             print(f"❌ [EXPORT_DB] Erreur lors de l'export: {e}")
+            import traceback
+            traceback.print_exc()
             if os.path.exists(export_path):
                 os.remove(export_path)
             return jsonify({
                 'success': False,
                 'message': f'Erreur lors de l\'export: {str(e)}'
             })
+        finally:
+            # Nettoyer le fichier config dans le conteneur
+            print(f"🧹 [EXPORT_DB] Nettoyage...")
+            try:
+                cleanup_result = subprocess.run(['docker', 'exec', mysql_container, 'rm', '-f', '/tmp/.mysqldump.cnf'],
+                              capture_output=True,
+                              timeout=10)
+                if cleanup_result.returncode != 0:
+                    print(f"⚠️ [EXPORT_DB] Erreur nettoyage conteneur: {cleanup_result.stderr}")
+            except Exception as e:
+                print(f"⚠️ [EXPORT_DB] Exception nettoyage: {e}")
             
     except Exception as e:
         print(f"❌ [EXPORT_DB] Exception: {e}")
