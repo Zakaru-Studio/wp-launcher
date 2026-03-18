@@ -5,6 +5,7 @@ Service de gestion des configurations PHP et MySQL par projet
 
 import os
 import shutil
+import subprocess
 import configparser
 from typing import Dict, Any, Optional
 from app.config.docker_config import DockerConfig
@@ -32,10 +33,10 @@ class ConfigService:
             php_config_file = os.path.join(config_path, 'php.ini')
             mysql_config_file = os.path.join(config_path, 'mysql.cnf')
             
-            if not os.path.exists(php_config_file):
+            if not os.path.isfile(php_config_file):
                 self._create_default_php_config(php_config_file)
-            
-            if not os.path.exists(mysql_config_file):
+
+            if not os.path.isfile(mysql_config_file):
                 self._create_default_mysql_config(mysql_config_file)
             
             wp_logger.log_system_info(f"Dossier config créé/vérifié pour {project_name}", 
@@ -49,10 +50,13 @@ class ConfigService:
     
     def _create_default_php_config(self, php_config_file: str) -> None:
         """Crée un fichier php.ini par défaut"""
-        # Si c'est un dossier, le supprimer (correction d'erreur)
+        # Si c'est un dossier, le supprimer (correction d'erreur Docker)
         if os.path.exists(php_config_file) and os.path.isdir(php_config_file):
             wp_logger.log_system_info(f"Suppression du dossier incorrect: {php_config_file}")
-            shutil.rmtree(php_config_file)
+            try:
+                shutil.rmtree(php_config_file)
+            except PermissionError:
+                subprocess.run(['sudo', 'rm', '-rf', php_config_file], check=True)
         
         template_php = os.path.join(self.template_path, 'php-config', 'php.ini')
         if os.path.exists(template_php):
@@ -91,10 +95,13 @@ session.cookie_lifetime = 7200
     
     def _create_default_mysql_config(self, mysql_config_file: str) -> None:
         """Crée un fichier mysql.cnf par défaut"""
-        # Si c'est un dossier, le supprimer (correction d'erreur)
+        # Si c'est un dossier, le supprimer (correction d'erreur Docker)
         if os.path.exists(mysql_config_file) and os.path.isdir(mysql_config_file):
             wp_logger.log_system_info(f"Suppression du dossier incorrect: {mysql_config_file}")
-            shutil.rmtree(mysql_config_file)
+            try:
+                shutil.rmtree(mysql_config_file)
+            except PermissionError:
+                subprocess.run(['sudo', 'rm', '-rf', mysql_config_file], check=True)
         
         template_mysql = os.path.join(self.template_path, 'mysql-config', 'mysql.cnf')
         if os.path.exists(template_mysql):
