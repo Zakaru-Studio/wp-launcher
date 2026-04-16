@@ -8,6 +8,25 @@
     <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='images/favicon.ico') }}">
     
+    <!-- Theme detection (must run before render to prevent FOUC) -->
+    <script>
+        (function() {
+            try {
+                var saved = localStorage.getItem('wp-launcher-theme');
+                var systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                var theme = saved || (systemDark ? 'dark' : 'light');
+                document.documentElement.dataset.theme = theme;
+            } catch (e) {
+                document.documentElement.dataset.theme = 'dark';
+            }
+        })();
+    </script>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
     <!-- CSS optimisé -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -91,6 +110,77 @@
     {% block scripts %}{% endblock %}
 
     <script>
+        // ── Theme toggle with View Transition API circle reveal ──
+        function toggleTheme(event) {
+            const root = document.documentElement;
+            const current = root.dataset.theme || 'dark';
+            const newTheme = current === 'dark' ? 'light' : 'dark';
+
+            try { localStorage.setItem('wp-launcher-theme', newTheme); } catch (e) {}
+
+            const applyTheme = () => { root.dataset.theme = newTheme; };
+
+            const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+            // Fallback: no animation support or user prefers reduced motion
+            if (!document.startViewTransition || reducedMotion) {
+                applyTheme();
+                return;
+            }
+
+            // Compute click origin (button center)
+            let x = window.innerWidth - 80;
+            let y = 48;
+            const target = event && (event.currentTarget || event.target);
+            if (target && target.getBoundingClientRect) {
+                const btn = target.closest('#theme-toggle') || target;
+                if (btn && btn.getBoundingClientRect) {
+                    const rect = btn.getBoundingClientRect();
+                    x = rect.left + rect.width / 2;
+                    y = rect.top + rect.height / 2;
+                }
+            }
+
+            // Radius to cover viewport from origin
+            const endRadius = Math.hypot(
+                Math.max(x, window.innerWidth - x),
+                Math.max(y, window.innerHeight - y)
+            );
+
+            const transition = document.startViewTransition(applyTheme);
+
+            transition.ready.then(() => {
+                document.documentElement.animate(
+                    {
+                        clipPath: [
+                            `circle(0px at ${x}px ${y}px)`,
+                            `circle(${endRadius}px at ${x}px ${y}px)`
+                        ]
+                    },
+                    {
+                        duration: 520,
+                        easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+                        pseudoElement: '::view-transition-new(root)'
+                    }
+                );
+            });
+        }
+
+        // Sync theme across tabs + respond to system preference when no explicit choice
+        (function() {
+            window.addEventListener('storage', function(e) {
+                if (e.key === 'wp-launcher-theme' && e.newValue) {
+                    document.documentElement.dataset.theme = e.newValue;
+                }
+            });
+            const mql = window.matchMedia('(prefers-color-scheme: dark)');
+            mql.addEventListener && mql.addEventListener('change', function(e) {
+                if (!localStorage.getItem('wp-launcher-theme')) {
+                    document.documentElement.dataset.theme = e.matches ? 'dark' : 'light';
+                }
+            });
+        })();
+
         // Initialisation optimisée
         document.addEventListener('DOMContentLoaded', function() {
             // Auto-dismiss des alertes après 5 secondes
