@@ -34,6 +34,13 @@
             </nav>
             {% endif %}
             
+            <div class="header-actions d-flex align-items-center gap-2">
+            <!-- Theme toggle -->
+            <button id="theme-toggle" class="theme-toggle" onclick="toggleTheme(event)" title="Changer de thème" aria-label="Basculer entre thème clair et sombre">
+                <i class="fas fa-sun" aria-hidden="true"></i>
+                <i class="fas fa-moon" aria-hidden="true"></i>
+            </button>
+
             <!-- User dropdown -->
             <div class="user-dropdown">
                 <button class="user-dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
@@ -62,6 +69,7 @@
                     <li><hr class="dropdown-divider"></li>
                     <li><a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}"><i class="fas fa-sign-out-alt me-2"></i>Déconnexion</a></li>
                 </ul>
+            </div>
             </div>
         </div>
     </div>
