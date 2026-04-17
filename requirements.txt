@@ -9,7 +9,7 @@ Flask-WTF==1.2.2
 # WebSocket / real-time
 Flask-SocketIO==5.4.0
 python-socketio==5.11.0
-eventlet==0.33.3
+eventlet==0.41.0
 
 # Utilities
 chardet==5.2.0
