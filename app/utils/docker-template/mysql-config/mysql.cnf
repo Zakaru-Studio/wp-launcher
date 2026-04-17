@@ -19,6 +19,16 @@ innodb_flush_method = O_DIRECT
 innodb_checksum_algorithm = crc32
 
 # ============================================
+# WARM-UP — démarrage MySQL rapide après stop/start
+# ============================================
+# Sauvegarde le contenu du buffer pool au shutdown pour le recharger au boot.
+# Évite le cold cache qui ralentit les premières requêtes WP après un démarrage.
+innodb_buffer_pool_dump_at_shutdown = ON
+innodb_buffer_pool_load_at_startup = ON
+# 25% du buffer pool est dumpé : compromis taille fichier / efficacité du warm-up
+innodb_buffer_pool_dump_pct = 25
+
+# ============================================
 # Performance — équilibré pour Docker 2-4GB
 # ============================================
 max_allowed_packet = 1G

@@ -102,10 +102,75 @@ class DockerService:
         with open(wp_config_dest, 'w') as f:
             f.write(content)
     
+    def _list_existing_containers(self, project_name):
+        """Return the list of docker container names belonging to this project,
+        regardless of running state. Used to decide between a warm restart
+        (`docker-compose start`) and a full `up -d`."""
+        try:
+            result = subprocess.run(
+                ['docker', 'ps', '-a', '--filter', f'label=com.docker.compose.project={project_name}',
+                 '--format', '{{.Names}}'],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0:
+                return [n for n in result.stdout.splitlines() if n.strip()]
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+        # Fallback: filter by name prefix (older docker-compose v1 may not set the label)
+        try:
+            result = subprocess.run(
+                ['docker', 'ps', '-a', '--filter', f'name={project_name}_',
+                 '--format', '{{.Names}}'],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0:
+                return [n for n in result.stdout.splitlines() if n.strip()]
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+        return []
+
+    def _can_warm_restart(self, container_path):
+        """A warm restart (no recreate) is possible when every service in the
+        compose file already has a corresponding container on the host.
+        We don't try to reconcile config drift here — we just check existence.
+        If config genuinely changed, the warm path will fail and we fall back."""
+        project_name = os.path.basename(container_path)
+        existing = self._list_existing_containers(project_name)
+        if not existing:
+            return False
+        # Read service names from compose
+        compose_path = os.path.join(container_path, 'docker-compose.yml')
+        if not os.path.isfile(compose_path):
+            return False
+        try:
+            with open(compose_path, 'r') as fh:
+                compose_text = fh.read()
+        except OSError:
+            return False
+        # Service name extraction: only inside the `services:` section, stopping
+        # at the next top-level key (volumes:, networks:, configs:, secrets:).
+        import re as _re
+        services_block = _re.search(
+            r'^services:\s*\n((?:[ \t].*\n|\s*\n)+?)(?=^[a-zA-Z]|\Z)',
+            compose_text, _re.MULTILINE,
+        )
+        if not services_block:
+            return False
+        services = _re.findall(
+            r'^  ([a-zA-Z0-9_-]+):\s*$', services_block.group(1), _re.MULTILINE,
+        )
+        if not services:
+            return False
+        # Match each service name as a substring of any container name
+        for svc in services:
+            if not any(svc in name for name in existing):
+                return False
+        return True
+
     def start_containers(self, container_path, timeout=120):
         """Démarre les conteneurs d'un projet depuis containers/"""
         project_name = os.path.basename(container_path)
-        wp_logger.log_system_info(f"Démarrage conteneurs pour {project_name}", 
+        wp_logger.log_system_info(f"Démarrage conteneurs pour {project_name}",
                                  container_path=container_path,
                                  operation="docker_start")
         
@@ -151,14 +216,32 @@ class DockerService:
             # signalera le conflit à l'ancienne si besoin.
             print(f"⚠️ [PORT_PREFLIGHT] Vérification préalable échouée : {e}")
 
+        # Fast path: si tous les containers existent déjà, tenter `start` (sans recréation)
+        # qui évite ~5-15s de pull/extract/network teardown. On retombe sur `up -d`
+        # automatiquement si la config a drifté.
+        warm_restart = self._can_warm_restart(container_path)
+
         original_cwd = os.getcwd()
         try:
             os.chdir(container_path)
-            result = subprocess.run([
-                'docker-compose', 'up', '-d'
-            ], capture_output=True, text=True, timeout=timeout)
-
-            success = result.returncode == 0
+            if warm_restart:
+                print(f"⚡ [DOCKER_SERVICE] Warm restart pour {project_name} (containers existants)")
+                result = subprocess.run([
+                    'docker-compose', 'start'
+                ], capture_output=True, text=True, timeout=timeout)
+                success = result.returncode == 0
+                if not success:
+                    print(f"⚠️ [DOCKER_SERVICE] Warm restart échoué, fallback sur up -d")
+                    warm_restart = False  # fallback path will not skip perms
+                    result = subprocess.run([
+                        'docker-compose', 'up', '-d'
+                    ], capture_output=True, text=True, timeout=timeout)
+                    success = result.returncode == 0
+            else:
+                result = subprocess.run([
+                    'docker-compose', 'up', '-d'
+                ], capture_output=True, text=True, timeout=timeout)
+                success = result.returncode == 0
 
             # Second tour si docker-compose signale "port is already allocated"
             # ou "Bind for X.X.X.X:PORT failed" : on relance le preflight + retry.
@@ -228,17 +311,40 @@ class DockerService:
             if success:
                 # Extraire le nom du projet depuis le chemin
                 project_name = os.path.basename(container_path)
-                print(f"🔧 [DOCKER_SERVICE] Correction automatique des permissions après démarrage pour {project_name}")
 
-                # Attendre 3 secondes que les conteneurs se stabilisent
-                import time
-                time.sleep(3)
-
-                # Corriger les permissions pour dev-server
-                if self.fix_dev_permissions(project_name):
-                    print(f"✅ [DOCKER_SERVICE] Permissions automatiquement corrigées pour {project_name}")
+                # Sur warm restart : pas besoin de chown/chmod (les fichiers n'ont pas
+                # bougé sur disque, les permissions sont identiques au stop précédent).
+                # Sur cold start (recréation) : on fixe les permissions car les bind
+                # mounts peuvent avoir été remontés et le UID/GID doit matcher.
+                if warm_restart:
+                    print(f"⚡ [DOCKER_SERVICE] Warm restart : skip permission fix pour {project_name}")
                 else:
-                    print(f"⚠️ [DOCKER_SERVICE] Impossible de corriger automatiquement les permissions pour {project_name}")
+                    print(f"🔧 [DOCKER_SERVICE] Correction automatique des permissions après démarrage pour {project_name}")
+
+                    import time
+                    # Attendre brièvement que les containers soient bien up. On poll au
+                    # lieu d'un sleep fixe : on sort dès que tous sont running ou après 5s.
+                    deadline = time.time() + 5
+                    expected = self._list_existing_containers(project_name)
+                    while time.time() < deadline:
+                        all_running = True
+                        for name in expected:
+                            probe = subprocess.run(
+                                ['docker', 'inspect', '--format={{.State.Running}}', name],
+                                capture_output=True, text=True, timeout=3,
+                            )
+                            if probe.returncode != 0 or probe.stdout.strip() != 'true':
+                                all_running = False
+                                break
+                        if all_running:
+                            break
+                        time.sleep(0.3)
+
+                    # Corriger les permissions pour dev-server
+                    if self.fix_dev_permissions(project_name):
+                        print(f"✅ [DOCKER_SERVICE] Permissions automatiquement corrigées pour {project_name}")
+                    else:
+                        print(f"⚠️ [DOCKER_SERVICE] Impossible de corriger automatiquement les permissions pour {project_name}")
 
                 # Post-start DB sync: si le port WordPress a été remappé par le preflight,
                 # mettre à jour wp_options.siteurl/home maintenant que MySQL est démarré.
