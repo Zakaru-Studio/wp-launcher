@@ -5866,3 +5866,63 @@ body.sidebar-open .task-popover[hidden] { display: flex !important; }
     }
     .users-table-footer { flex-direction: column; gap: 10px; align-items: flex-start; }
 }
+
+/* ============================================
+   SITES PAGE — search row + sort toggle
+   ============================================ */
+.sites-search-row {
+    display: flex;
+    align-items: stretch;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.sites-search-row .sites-search {
+    flex: 1;
+    margin-bottom: 0;
+}
+
+/* Sort toggle button — sits to the right of the search bar on the same line */
+.sort-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 16px;
+    background: var(--al-surface-container);
+    color: var(--al-on-surface-variant);
+    border: none;
+    border-radius: 10px;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.18s ease, color 0.18s ease;
+    height: auto;
+    min-height: 42px;
+}
+.sort-toggle-btn:hover {
+    background: var(--al-surface-container-high);
+    color: var(--al-on-surface);
+}
+
+.sort-toggle-btn .sort-icon {
+    font-size: 1.1rem;
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    transform-origin: center;
+}
+
+/* When direction is descending (Z → A), flip the icon vertically */
+.sort-toggle-btn[data-dir="desc"] .sort-icon {
+    transform: rotate(180deg);
+}
+
+.sort-toggle-btn[data-dir="desc"] {
+    background: var(--al-surface-container-high);
+    color: var(--al-on-surface);
+}
+
+/* Hide the "Sort" label on small screens, keep the icon */
+@media (max-width: 540px) {
+    .sort-toggle-btn .sort-label { display: none; }
+    .sort-toggle-btn { padding: 0 12px; min-height: 42px; }
+}

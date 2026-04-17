@@ -12,16 +12,6 @@
         <h1 class="page-title">{{ _('Managed Sites') }}</h1>
         <p class="page-subtitle">{{ _('Overview and status of all active WordPress environments.') }}</p>
     </div>
-    <div class="page-header-actions">
-        <button class="ghost-btn" id="filter-toggle" onclick="toggleFilterMenu()">
-            <span class="material-symbols-outlined">filter_list</span>
-            <span>{{ _('Filter') }}</span>
-        </button>
-        <button class="ghost-btn" id="sort-toggle" onclick="toggleSortMenu()">
-            <span class="material-symbols-outlined">sort</span>
-            <span>{{ _('Sort') }}</span>
-        </button>
-    </div>
 </header>
 
 <!-- Dashboard Metrics (Stitch layout) -->
@@ -53,12 +43,20 @@
     </article>
 </section>
 
-<!-- Search bar above the sites table -->
-<div class="sites-search">
-    <span class="material-symbols-outlined search-icon">search</span>
-    <input type="text" id="search-input" placeholder="{{ _('Search a site...') }}" autocomplete="off">
-    <button class="clear-search" id="clear-search" style="display: none;" onclick="clearSearch()" aria-label="{{ _('Clear search') }}">
-        <span class="material-symbols-outlined">close</span>
+<!-- Search bar + Sort toggle, on the same line, above the sites table -->
+<div class="sites-search-row">
+    <div class="sites-search">
+        <span class="material-symbols-outlined search-icon">search</span>
+        <input type="text" id="search-input" placeholder="{{ _('Search a site...') }}" autocomplete="off">
+        <button class="clear-search" id="clear-search" style="display: none;" onclick="clearSearch()" aria-label="{{ _('Clear search') }}">
+            <span class="material-symbols-outlined">close</span>
+        </button>
+    </div>
+    <button class="sort-toggle-btn" id="sort-toggle" data-dir="asc"
+            onclick="toggleSortDirection(this)"
+            title="{{ _('Sort by name') }}" aria-label="{{ _('Sort by name') }}">
+        <span class="material-symbols-outlined sort-icon">sort</span>
+        <span class="sort-label">{{ _('Sort') }}</span>
     </button>
 </div>
 

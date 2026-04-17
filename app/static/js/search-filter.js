@@ -9,6 +9,41 @@ if (typeof currentFilter === 'undefined') {
 if (typeof currentSearchTerm === 'undefined') {
     var currentSearchTerm = localStorage.getItem('wp-launcher-search') || '';
 }
+if (typeof currentSortDir === 'undefined') {
+    // 'asc' = A → Z, 'desc' = Z → A. Persisted across reloads.
+    var currentSortDir = localStorage.getItem('wp-launcher-sort-dir') || 'asc';
+}
+
+/**
+ * Toggle the sort direction (A→Z ↔ Z→A), update the button visual state
+ * (data-dir + icon rotation handled by CSS), and re-render the list.
+ */
+function toggleSortDirection(btn) {
+    currentSortDir = currentSortDir === 'asc' ? 'desc' : 'asc';
+    localStorage.setItem('wp-launcher-sort-dir', currentSortDir);
+
+    const target = btn || document.getElementById('sort-toggle');
+    if (target) {
+        target.setAttribute('data-dir', currentSortDir);
+        target.setAttribute(
+            'aria-label',
+            currentSortDir === 'asc' ? 'Sort A to Z' : 'Sort Z to A'
+        );
+    }
+
+    if (typeof filterAndRenderProjects === 'function') {
+        filterAndRenderProjects();
+    }
+}
+
+/**
+ * Restore the sort button visual state on load (data-dir attribute drives
+ * the CSS rotation). Called from restoreFilterState below.
+ */
+function _restoreSortButton() {
+    const btn = document.getElementById('sort-toggle');
+    if (btn) btn.setAttribute('data-dir', currentSortDir);
+}
 
 // Fonction pour initialiser la recherche en temps réel
 function initSearchFunctionality() {
@@ -159,7 +194,13 @@ function filterAndRenderProjects() {
                    (project.hostname && project.hostname.toLowerCase().includes(currentSearchTerm));
         });
     }
-    
+
+    // Tri par nom (asc / desc) — toujours appliqué pour matcher l'état UI
+    filteredProjects = filteredProjects.slice().sort((a, b) => {
+        const cmp = (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' });
+        return currentSortDir === 'desc' ? -cmp : cmp;
+    });
+
     // Afficher les projets filtrés
     renderFilteredProjects(filteredProjects);
 }
@@ -256,6 +297,9 @@ function restoreFilterState() {
     if (currentFilter !== 'all') {
         updateActiveStatCard(currentFilter);
     }
+
+    // Restaurer la direction de tri (data-dir → CSS rotation)
+    _restoreSortButton();
 }
 
 // Initialiser les fonctionnalités au chargement de la page
