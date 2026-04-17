@@ -267,6 +267,63 @@ def api_set_project_git(project_name: str):
     return jsonify(project_name=project_name, **cfg)
 
 
+# ─── per (project × server) deploy path ────────────────────────────
+
+
+@deployments_bp.route("/api/projects/<project_name>/deploy-paths", methods=["GET"])
+@login_required
+def api_list_deploy_paths(project_name: str):
+    svc, err = _require("deployment_service")
+    if err:
+        return err
+    paths = svc.list_deploy_paths_for_project(project_name)
+    return jsonify(project_name=project_name, paths=paths)
+
+
+@deployments_bp.route(
+    "/api/projects/<project_name>/deploy-paths/<int:server_id>", methods=["GET"]
+)
+@login_required
+def api_get_deploy_path(project_name: str, server_id: int):
+    svc, err = _require("deployment_service")
+    if err:
+        return err
+    server_svc, _ = _require("server_service")
+    default = ""
+    if server_svc:
+        server = server_svc.get_by_id(server_id)
+        if server:
+            default = os.path.join(server.deploy_base_path, project_name)
+    return jsonify(
+        project_name=project_name,
+        server_id=server_id,
+        deploy_path=svc.get_deploy_path(project_name, server_id),
+        default_deploy_path=default,
+    )
+
+
+@deployments_bp.route(
+    "/api/projects/<project_name>/deploy-paths/<int:server_id>", methods=["PUT"]
+)
+@login_required
+def api_set_deploy_path(project_name: str, server_id: int):
+    if not _user_can_deploy(project_name):
+        return jsonify(error="You don't have permission to configure this project."), 403
+    svc, err = _require("deployment_service")
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+    deploy_path = (data.get("deploy_path") or "").strip() or None
+    if deploy_path and ".." in deploy_path:
+        return jsonify(error="Deploy path must not contain '..'"), 400
+    saved = svc.set_deploy_path(project_name, server_id, deploy_path)
+    return jsonify(
+        project_name=project_name,
+        server_id=server_id,
+        deploy_path=saved,
+    )
+
+
 # ─── deployments ────────────────────────────────────────────────────
 
 

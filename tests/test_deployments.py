@@ -150,6 +150,33 @@ def tmp_deployment_service(tmp_path: Path, tmp_server_service) -> DeploymentServ
     )
 
 
+def test_deploy_path_override_roundtrip(tmp_deployment_service, tmp_server_service):
+    s = tmp_server_service.create(
+        label="box", env="staging", hostname="h", ssh_user="u",
+        ssh_private_key_enc=b"x", deploy_base_path="/var/www",
+    )
+    # No override yet → resolve_deploy_path falls back to base/project.
+    assert tmp_deployment_service.get_deploy_path("acme", s.id) is None
+    assert tmp_deployment_service.resolve_deploy_path("acme", s) == "/var/www/acme"
+
+    # Store a custom path
+    tmp_deployment_service.set_deploy_path("acme", s.id, "/srv/apps/acme-prod")
+    assert tmp_deployment_service.get_deploy_path("acme", s.id) == "/srv/apps/acme-prod"
+    assert tmp_deployment_service.resolve_deploy_path("acme", s) == "/srv/apps/acme-prod"
+
+    # Other projects on the same server stay on the default
+    assert tmp_deployment_service.resolve_deploy_path("other", s) == "/var/www/other"
+
+    # Listing returns the overrides
+    paths = tmp_deployment_service.list_deploy_paths_for_project("acme")
+    assert len(paths) == 1 and paths[0]["server_id"] == s.id
+
+    # Clearing the override removes the row
+    tmp_deployment_service.set_deploy_path("acme", s.id, None)
+    assert tmp_deployment_service.get_deploy_path("acme", s.id) is None
+    assert tmp_deployment_service.list_deploy_paths_for_project("acme") == []
+
+
 def test_deployment_service_project_git_config(tmp_deployment_service):
     cfg = tmp_deployment_service.get_project_git_config("myproj")
     assert cfg["git_remote_url"] is None

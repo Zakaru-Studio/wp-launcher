@@ -113,6 +113,20 @@ class DeploymentService:
                 )
                 """
             )
+            # Per (project × server) deploy path override. When a row
+            # exists for (project, server), the deployer uses that path
+            # instead of `<server.deploy_base_path>/<project_name>`.
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS project_server_deploy_paths (
+                    project_name   TEXT NOT NULL,
+                    server_id      INTEGER NOT NULL,
+                    deploy_path    TEXT NOT NULL,
+                    updated_at     TEXT NOT NULL,
+                    PRIMARY KEY (project_name, server_id)
+                )
+                """
+            )
             conn.commit()
         finally:
             conn.close()
@@ -163,6 +177,64 @@ class DeploymentService:
             )
             conn.commit()
         return self.get_project_git_config(project_name)
+
+    # ─── per-(project, server) deploy path overrides ────────────────
+
+    def get_deploy_path(self, project_name: str, server_id: int) -> Optional[str]:
+        """Return the user-defined deploy path for (project, server), or None."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT deploy_path FROM project_server_deploy_paths "
+                "WHERE project_name = ? AND server_id = ?",
+                (project_name, int(server_id)),
+            ).fetchone()
+        return row["deploy_path"] if row else None
+
+    def set_deploy_path(
+        self, project_name: str, server_id: int, deploy_path: Optional[str]
+    ) -> Optional[str]:
+        """Upsert a custom deploy path. Passing None/'' clears the override."""
+        with self._connect() as conn:
+            if not deploy_path:
+                conn.execute(
+                    "DELETE FROM project_server_deploy_paths "
+                    "WHERE project_name = ? AND server_id = ?",
+                    (project_name, int(server_id)),
+                )
+                conn.commit()
+                return None
+            conn.execute(
+                """
+                INSERT INTO project_server_deploy_paths
+                    (project_name, server_id, deploy_path, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(project_name, server_id) DO UPDATE SET
+                    deploy_path = excluded.deploy_path,
+                    updated_at  = excluded.updated_at
+                """,
+                (project_name, int(server_id), deploy_path, self._now()),
+            )
+            conn.commit()
+        return deploy_path
+
+    def list_deploy_paths_for_project(self, project_name: str) -> List[dict]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT server_id, deploy_path, updated_at "
+                "FROM project_server_deploy_paths WHERE project_name = ?",
+                (project_name,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def resolve_deploy_path(self, project_name: str, server) -> str:
+        """Effective deploy path for this (project, server) couple.
+        Custom override wins; otherwise falls back to
+        ``<server.deploy_base_path>/<project_name>``.
+        """
+        custom = self.get_deploy_path(project_name, server.id)
+        if custom:
+            return custom
+        return os.path.join(server.deploy_base_path, project_name)
 
     # ─── permissions ─────────────────────────────────────────────────
 
@@ -345,7 +417,8 @@ class DeploymentService:
             self._finalize(deployment_id, status="failed", commit_sha=None)
             return
 
-        deploy_path = os.path.join(server.deploy_base_path, project_name)
+        # Custom (project, server) path wins over <base_path>/<project_name>.
+        deploy_path = self.resolve_deploy_path(project_name, server)
         # Safe: branch was validated by regex; deploy_path is server-controlled, project_name is a slug.
         script = (
             "set -e\n"

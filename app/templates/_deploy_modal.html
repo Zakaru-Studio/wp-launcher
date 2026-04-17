@@ -32,6 +32,22 @@
             <small class="profile-field-hint">{{ _("Remote will run: git fetch && git reset --hard origin/<branch>") }}</small>
           </div>
 
+          <div class="profile-field" id="deploy-path-field">
+            <label for="deploy-path">
+              {{ _('Deploy path on this server') }}
+              <small class="profile-field-hint">({{ _('optional; defaults to server base path / project name') }})</small>
+            </label>
+            <input type="text" class="form-control" id="deploy-path"
+                   placeholder="/var/www/my-site">
+            <small class="profile-field-hint" id="deploy-path-default-hint"></small>
+            <div class="deploy-git-row">
+              <button type="button" class="ghost-btn" onclick="saveDeployPath()">
+                <span class="material-symbols-outlined">save</span>
+                <span>{{ _('Save path') }}</span>
+              </button>
+            </div>
+          </div>
+
           <div class="profile-field deploy-git-config">
             <label>{{ _('Git remote URL') }} <small class="profile-field-hint">({{ _('optional, stored per project') }})</small></label>
             <input type="text" class="form-control" id="deploy-git-remote" placeholder="git@github.com:org/repo.git">

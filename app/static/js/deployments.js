@@ -319,6 +319,8 @@ async function onDeployProjectChange() {
     if (!project) {
         document.getElementById('deploy-branch').value = '';
         document.getElementById('deploy-git-remote').value = '';
+        document.getElementById('deploy-path').value = '';
+        document.getElementById('deploy-path-default-hint').textContent = '';
         return;
     }
     try {
@@ -328,6 +330,64 @@ async function onDeployProjectChange() {
         document.getElementById('deploy-git-remote').value = data.git_remote_url || '';
     } catch (e) {
         document.getElementById('deploy-branch').value = 'main';
+    }
+    refreshDeployPathField();
+}
+
+/** Load the (project × server) deploy path override and the default
+ *  that would be used if no override is set. Called on project or
+ *  server selection change. */
+async function refreshDeployPathField() {
+    const project = document.getElementById('deploy-project').value;
+    const serverId = document.getElementById('deploy-server').value;
+    const input = document.getElementById('deploy-path');
+    const hint = document.getElementById('deploy-path-default-hint');
+    if (!project || !serverId) {
+        input.value = '';
+        hint.textContent = '';
+        return;
+    }
+    try {
+        const res = await fetch(
+            `/api/projects/${encodeURIComponent(project)}/deploy-paths/${serverId}`
+        );
+        const data = await res.json();
+        input.value = data.deploy_path || '';
+        hint.textContent = data.default_deploy_path
+            ? `Default: ${data.default_deploy_path}`
+            : '';
+    } catch (e) {
+        input.value = '';
+        hint.textContent = '';
+    }
+}
+
+async function saveDeployPath() {
+    const project = document.getElementById('deploy-project').value;
+    const serverId = document.getElementById('deploy-server').value;
+    if (!project || !serverId) {
+        deployToast('error', 'Pick a project and a server first.');
+        return;
+    }
+    const body = { deploy_path: document.getElementById('deploy-path').value.trim() };
+    try {
+        const res = await fetch(
+            `/api/projects/${encodeURIComponent(project)}/deploy-paths/${serverId}`,
+            { method: 'PUT', headers: headerJson(), body: JSON.stringify(body) }
+        );
+        const data = await res.json();
+        if (!res.ok) {
+            deployToast('error', data.error || 'Failed to save deploy path');
+            return;
+        }
+        deployToast(
+            'success',
+            data.deploy_path
+                ? 'Custom deploy path saved'
+                : 'Override cleared — will use server default'
+        );
+    } catch (e) {
+        deployToast('error', e.message);
     }
 }
 
@@ -466,6 +526,8 @@ function bindDeployModalLifecycle() {
     });
     const projectSel = document.getElementById('deploy-project');
     if (projectSel) projectSel.addEventListener('change', onDeployProjectChange);
+    const serverSel = document.getElementById('deploy-server');
+    if (serverSel) serverSel.addEventListener('change', refreshDeployPathField);
 }
 
 /* ───── boot ───── */
@@ -485,4 +547,5 @@ window.testServerById = testServerById;
 window.testServerConnection = testServerConnection;
 window.runDeployment = runDeployment;
 window.saveProjectGitConfig = saveProjectGitConfig;
+window.saveDeployPath = saveDeployPath;
 window.replayDeployment = replayDeployment;
