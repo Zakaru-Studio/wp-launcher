@@ -39,7 +39,7 @@ Accessible through a real-time web interface on port 5000 with WebSocket support
 ## Quick Install
 
 ```bash
-git clone https://github.com/AK-Digital-Ltd/wp-launcher.git
+git clone https://github.com/Zakaru-Studio/wp-launcher.git
 cd wp-launcher
 chmod +x install.sh
 ./install.sh
@@ -51,7 +51,7 @@ The install script handles everything: prerequisites check, Python virtualenv, d
 
 ```bash
 # 1. Clone
-git clone https://github.com/AK-Digital-Ltd/wp-launcher.git
+git clone https://github.com/Zakaru-Studio/wp-launcher.git
 cd wp-launcher
 
 # 2. Python environment

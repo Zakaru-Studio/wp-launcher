@@ -33,8 +33,8 @@ Only the `main` branch receives security updates. There is no LTS branch.
 Please report privately via one of:
 
 1. GitHub's private vulnerability reporting:
-   <https://github.com/AK-Digital-Ltd/wp-launcher/security/advisories/new>
-2. Email: **security@akdigital.fr**
+   <https://github.com/Zakaru-Studio/wp-launcher/security/advisories/new>
+2. Email: **security@zakaru.studio**
 
 Include:
 
