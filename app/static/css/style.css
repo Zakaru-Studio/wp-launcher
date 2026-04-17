@@ -137,12 +137,24 @@ body.sidebar-open .container-fluid {
     width: calc(100% - 470px);
 }
 
+/* Header : garder les actions de droite (theme toggle, user dropdown)
+   ancrées à droite du viewport même quand la sidebar tasks est ouverte.
+   Le header passe au-dessus de la sidebar via z-index: 1100 > 1050. */
+body.sidebar-open .app-header-unified .container-fluid {
+    width: auto;
+    max-width: calc(100% - 60px);
+    margin-inline: 30px;
+}
+
 @media (max-width: 1200px) {
     .container-fluid {
         margin-right: 50px;
     }
     body.sidebar-open .container-fluid {
         margin-right: 320px;
+    }
+    body.sidebar-open .app-header-unified .container-fluid {
+        margin-right: 30px;
     }
 }
 
@@ -153,6 +165,9 @@ body.sidebar-open .container-fluid {
     }
     body.sidebar-open .container-fluid {
         margin-right: 280px;
+    }
+    body.sidebar-open .app-header-unified .container-fluid {
+        margin-right: 30px;
     }
 }
 

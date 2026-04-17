@@ -1,9 +1,12 @@
 # WP Launcher
 
+[![Open Source](https://img.shields.io/badge/Open%20Source-%E2%9D%A4-ff69b4.svg)](https://github.com/Zakaru-Studio/wp-launcher)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Platform: Linux](https://img.shields.io/badge/platform-Linux-lightgrey.svg)]()
 [![Status: Dev tool](https://img.shields.io/badge/status-dev--tool-orange.svg)]()
+
+**An open source project by [Zakaru Studio](https://github.com/Zakaru-Studio).**
 
 ![WP Launcher](docs/wp-launcher.png)
 

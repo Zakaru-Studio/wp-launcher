@@ -9,6 +9,7 @@ import subprocess
 import time
 from app.config.docker_config import DockerConfig
 from app.utils.logger import wp_logger
+from app.utils.port_preflight import resolve_port_conflicts
 from app.services.config_service import ConfigService
 
 class DockerService:
@@ -131,15 +132,66 @@ class DockerService:
                 wp_logger.log_system_info(f"ERREUR: {error_msg}")
                 return False, error_msg
         
+        # Preflight: résoudre automatiquement les conflits de port avant
+        # de laisser docker-compose échouer avec "port is already allocated".
+        preflight_by_kind = {}
+        try:
+            changed, remap, notes, preflight_by_kind = resolve_port_conflicts(
+                container_path, projects_folder=self.projects_folder
+            )
+            for note in notes:
+                print(f"[PORT_PREFLIGHT] {note}")
+            if changed:
+                wp_logger.log_system_info(
+                    f"Port preflight a remappé des ports pour {project_name}",
+                    remap=remap,
+                )
+        except Exception as e:
+            # Ne bloque pas le démarrage : on log et on continue, docker-compose
+            # signalera le conflit à l'ancienne si besoin.
+            print(f"⚠️ [PORT_PREFLIGHT] Vérification préalable échouée : {e}")
+
         original_cwd = os.getcwd()
         try:
             os.chdir(container_path)
             result = subprocess.run([
                 'docker-compose', 'up', '-d'
             ], capture_output=True, text=True, timeout=timeout)
-            
+
             success = result.returncode == 0
-            
+
+            # Second tour si docker-compose signale "port is already allocated"
+            # ou "Bind for X.X.X.X:PORT failed" : on relance le preflight + retry.
+            if not success and result.stderr and (
+                'port is already allocated' in result.stderr
+                or 'Bind for' in result.stderr
+            ):
+                print(f"⚠️ [DOCKER_SERVICE] Conflit de port détecté pour {project_name}, retry avec preflight...")
+                os.chdir(original_cwd)
+                try:
+                    changed, remap, notes, retry_by_kind = resolve_port_conflicts(
+                        container_path, projects_folder=self.projects_folder
+                    )
+                    for note in notes:
+                        print(f"[PORT_PREFLIGHT] {note}")
+                    # Merge any new remaps discovered on retry
+                    preflight_by_kind.update(retry_by_kind)
+                    if changed:
+                        # Nettoyer les conteneurs partiellement créés avant retry
+                        subprocess.run(['docker-compose', '-f',
+                                        os.path.join(container_path, 'docker-compose.yml'),
+                                        'down'],
+                                       capture_output=True, text=True, timeout=60)
+                        os.chdir(container_path)
+                        result = subprocess.run([
+                            'docker-compose', 'up', '-d'
+                        ], capture_output=True, text=True, timeout=timeout)
+                        success = result.returncode == 0
+                        if success:
+                            print(f"✅ [DOCKER_SERVICE] Retry réussi après remap des ports")
+                except Exception as retry_err:
+                    print(f"❌ [DOCKER_SERVICE] Retry preflight échoué: {retry_err}")
+
             # Gestion automatique de l'erreur ContainerConfig
             if not success and result.stderr and 'ContainerConfig' in result.stderr:
                 print(f"⚠️ [DOCKER_SERVICE] Erreur ContainerConfig détectée pour {project_name}")
@@ -177,16 +229,52 @@ class DockerService:
                 # Extraire le nom du projet depuis le chemin
                 project_name = os.path.basename(container_path)
                 print(f"🔧 [DOCKER_SERVICE] Correction automatique des permissions après démarrage pour {project_name}")
-                
+
                 # Attendre 3 secondes que les conteneurs se stabilisent
                 import time
                 time.sleep(3)
-                
+
                 # Corriger les permissions pour dev-server
                 if self.fix_dev_permissions(project_name):
                     print(f"✅ [DOCKER_SERVICE] Permissions automatiquement corrigées pour {project_name}")
                 else:
                     print(f"⚠️ [DOCKER_SERVICE] Impossible de corriger automatiquement les permissions pour {project_name}")
+
+                # Post-start DB sync: si le port WordPress a été remappé par le preflight,
+                # mettre à jour wp_options.siteurl/home maintenant que MySQL est démarré.
+                if 'wordpress' in preflight_by_kind:
+                    old_wp_port, new_wp_port = preflight_by_kind['wordpress']
+                    mysql_container = f"{project_name}_mysql_1"
+                    # Attendre que MySQL soit healthy (jusqu'à 60s)
+                    healthy = False
+                    for _ in range(30):
+                        probe = subprocess.run(
+                            ['docker', 'inspect', '--format={{.State.Health.Status}}', mysql_container],
+                            capture_output=True, text=True, timeout=5,
+                        )
+                        if probe.returncode == 0 and probe.stdout.strip() == 'healthy':
+                            healthy = True
+                            break
+                        time.sleep(2)
+                    if healthy:
+                        host_ip = os.environ.get('APP_HOST', DockerConfig.LOCAL_IP)
+                        new_url = f"http://{host_ip}:{new_wp_port}"
+                        sql = (
+                            "UPDATE wp_options "
+                            f"SET option_value = '{new_url}' "
+                            "WHERE option_name IN ('siteurl','home');"
+                        )
+                        db_sync = subprocess.run(
+                            ['docker', 'exec', mysql_container, 'mysql',
+                             '-uroot', '-prootpassword', 'wordpress', '--execute', sql],
+                            capture_output=True, text=True, timeout=30,
+                        )
+                        if db_sync.returncode == 0:
+                            print(f"🗃️ [DOCKER_SERVICE] wp_options URLs mises à jour ({old_wp_port} → {new_wp_port})")
+                        else:
+                            print(f"⚠️ [DOCKER_SERVICE] Échec sync DB URLs: {db_sync.stderr}")
+                    else:
+                        print(f"⚠️ [DOCKER_SERVICE] MySQL pas healthy, sync DB URLs sautée")
             
             # Log du résultat
             if success:
