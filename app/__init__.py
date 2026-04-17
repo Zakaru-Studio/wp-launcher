@@ -11,17 +11,37 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from flask import Flask, g, session
 from flask_socketio import SocketIO, join_room, leave_room, emit
+from flask_wtf.csrf import CSRFProtect, CSRFError
+
+# Instance CSRF globale — exposée pour permettre `@csrf.exempt` sur des routes précises
+csrf = CSRFProtect()
 
 def create_app():
     """Factory pour créer et configurer l'application Flask"""
     from dotenv import load_dotenv
     load_dotenv()
-    
+
     from app.config.app_config import create_app as _create_app, init_services
     from app.config.app_config import APP_VERSION
-    
+
     # Créer l'application Flask
     app = _create_app()
+
+    # ==================== CSRF PROTECTION ====================
+    # Les tokens durent la session entière (évite de casser les opérations longues)
+    app.config['WTF_CSRF_TIME_LIMIT'] = None
+    csrf.init_app(app)
+    # Exposer l'instance csrf via les extensions Flask pour usage dans les blueprints
+    app.extensions['csrf'] = csrf
+
+    @app.errorhandler(CSRFError)
+    def handle_csrf_error(e):
+        from flask import jsonify, request
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or \
+           request.headers.get('Accept', '').startswith('application/json') or \
+           request.path.startswith('/api/'):
+            return jsonify(error='CSRF token missing or invalid', reason=str(e.description)), 400
+        return 'CSRF error: ' + str(e.description), 400
     
     # Before request handler global pour charger l'utilisateur sur toutes les routes
     @app.before_request
@@ -156,21 +176,27 @@ def init_app_services(app, socketio):
         app.register_blueprint(dev_instances_bp)
         app.register_blueprint(admin_bp)
         
-        # Config session
+        # Config session — durcie
         app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-me')
         app.config['SESSION_COOKIE_NAME'] = 'wp_launcher_session'
         app.config['SESSION_COOKIE_HTTPONLY'] = True
-        app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+        # 'Strict' bloque les requêtes cross-site y compris celles initiées par navigation
+        app.config['SESSION_COOKIE_SAMESITE'] = 'Strict'
+        # Secure en HTTPS uniquement — en dev HTTP on désactive via env
+        app.config['SESSION_COOKIE_SECURE'] = os.environ.get('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
         app.config['PERMANENT_SESSION_LIFETIME'] = 2592000  # 30 jours
         
         print("✅ Système multi-dev activé")
         
     except ImportError as e:
-        print(f"⚠️  Système multi-dev non disponible: {e}")
-        print("⚠️  Mode compatibilité activé (branche main)")
+        app.logger.error(f"Système multi-dev non disponible: {e}")
+        raise RuntimeError(
+            f"Auth system missing (ImportError: {e}). "
+            "Refusing to start without authentication — fix imports or disable auth explicitly."
+        )
     except Exception as e:
-        print(f"⚠️  Erreur lors de l'initialisation multi-dev: {e}")
-        print("⚠️  L'application continue sans authentification")
+        app.logger.error(f"Erreur initialisation multi-dev: {e}")
+        raise
 
 def register_socketio_handlers(socketio):
     """Enregistrer les handlers SocketIO"""

@@ -55,28 +55,24 @@ class TaskManager {
      * Initialiser Socket.IO pour la synchronisation en temps réel
      */
     initSocket() {
-        if (typeof io === 'undefined') {
-            //console.warn('Socket.IO non disponible pour la synchronisation des tâches');
-            return;
-        }
-
-        // Éviter les multiples connexions
+        // Éviter les multiples connexions — on partage l'instance globale
         if (this.socket && this.socket.connected) {
             //console.log('🔌 Socket déjà connecté, réutilisation');
             return;
         }
 
+        if (typeof window.getSocketIO !== 'function') {
+            //console.warn('getSocketIO non disponible');
+            return;
+        }
+
+        this.socket = window.getSocketIO();
+        if (!this.socket) {
+            //console.warn('Socket.IO non disponible pour la synchronisation des tâches');
+            return;
+        }
+
         try {
-            this.socket = io({
-                transports: ['websocket', 'polling'],
-                upgrade: true,
-                rememberUpgrade: true,
-                timeout: 5000,
-                reconnection: true,
-                reconnectionDelay: 1000,
-                reconnectionAttempts: 3,
-                maxReconnectionAttempts: 3
-            });
 
             // Événements de synchronisation des tâches
             this.socket.on('task_created', (data) => {

@@ -4,6 +4,7 @@ Service de gestion des bases de données
 """
 
 import os
+import re
 import tempfile
 import threading
 import time
@@ -12,6 +13,19 @@ from app.utils.database_utils import detect_file_encoding
 from app.services.docker_service import DockerService
 from app.utils.logger import wp_logger
 from app.config.docker_config import DockerConfig
+
+
+_SAFE_IDENT = re.compile(r'^[a-zA-Z0-9_-]+$')
+
+
+def _safe_ident(name):
+    """Valide un identifiant (nom de DB, de conteneur, etc.) avant interpolation.
+
+    Empêche l'injection SQL / shell en n'autorisant que [a-zA-Z0-9_-].
+    """
+    if not name or not _SAFE_IDENT.match(str(name)):
+        raise ValueError(f"Invalid identifier: {name!r}")
+    return name
 
 class DatabaseService:
     """Service pour la gestion des bases de données MySQL"""
@@ -877,7 +891,12 @@ class DatabaseService:
             socketio: Pour envoyer des logs en temps réel
         """
         import subprocess
-        
+
+        # Validation stricte des identifiants utilisés dans les commandes docker/SQL
+        _safe_ident(source_project)
+        _safe_ident(source_db_name)
+        _safe_ident(target_db_name)
+
         try:
             if socketio:
                 socketio.emit('db_clone_progress', {
@@ -885,7 +904,7 @@ class DatabaseService:
                     'total': 5,
                     'message': f'Export de {source_db_name}...'
                 })
-            
+
             # 1. Export DB source
             export_file = f'/tmp/clone_{target_db_name}_{int(time.time())}.sql'
             mysql_container = f"{source_project}_mysql_1"
@@ -944,9 +963,17 @@ class DatabaseService:
                     'message': f'Création de la DB {target_db_name}...'
                 })
             
-            # 2. Créer nouvelle DB
-            create_db_cmd = f"docker exec {mysql_container} mysql -u root -prootpassword -e 'CREATE DATABASE IF NOT EXISTS {target_db_name} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;'"
-            subprocess.run(create_db_cmd, shell=True, check=True)
+            # 2. Créer nouvelle DB (pas de shell=True, SQL via --execute)
+            subprocess.run(
+                [
+                    'docker', 'exec', mysql_container,
+                    'mysql', '-u', 'root', '-prootpassword',
+                    '--execute',
+                    f'CREATE DATABASE IF NOT EXISTS `{target_db_name}` '
+                    f'CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;'
+                ],
+                check=True, capture_output=True, timeout=60
+            )
             
             if socketio:
                 socketio.emit('db_clone_progress', {
@@ -958,7 +985,7 @@ class DatabaseService:
             # 3. Import dans nouvelle DB
             import_cmd = ['docker', 'exec', '-i', mysql_container, 'mysql', '-u', 'root', '-prootpassword', target_db_name]
             with open(export_file, 'r') as f:
-                result = subprocess.run(import_cmd, stdin=f, stderr=subprocess.PIPE, text=True)
+                result = subprocess.run(import_cmd, stdin=f, stderr=subprocess.PIPE, text=True, timeout=1800)
                 if result.returncode != 0:
                     raise Exception(f"Erreur mysql import: {result.stderr}")
             
@@ -969,9 +996,27 @@ class DatabaseService:
                     'message': 'Mise à jour des URLs WordPress...'
                 })
             
-            # 4. Mettre à jour les URLs WordPress
-            update_url_cmd = f"""docker exec {mysql_container} mysql -u root -prootpassword {target_db_name} -e "UPDATE wp_options SET option_value = 'http://{DockerConfig.LOCAL_IP}:{target_port}' WHERE option_name IN ('siteurl', 'home');" """
-            subprocess.run(update_url_cmd, shell=True, check=True)
+            # 4. Mettre à jour les URLs WordPress (pas de shell=True)
+            # target_port est validé en int pour éviter l'injection SQL via une valeur non numérique
+            try:
+                safe_port = int(target_port)
+            except (TypeError, ValueError):
+                raise ValueError(f"target_port invalide: {target_port!r}")
+            new_url = f"http://{DockerConfig.LOCAL_IP}:{safe_port}"
+            # Échapper les apostrophes dans l'URL (ceinture et bretelles, new_url est déjà contrôlé)
+            escaped_url = new_url.replace("'", "''")
+            update_sql = (
+                f"UPDATE wp_options SET option_value = '{escaped_url}' "
+                f"WHERE option_name IN ('siteurl', 'home');"
+            )
+            subprocess.run(
+                [
+                    'docker', 'exec', mysql_container,
+                    'mysql', '-u', 'root', '-prootpassword', target_db_name,
+                    '--execute', update_sql
+                ],
+                check=True, capture_output=True, timeout=60
+            )
             
             if socketio:
                 socketio.emit('db_clone_progress', {
@@ -1020,6 +1065,10 @@ class DatabaseService:
         else:
             mysql_container = f"{project_name}_mysql"
 
+        # Validation stricte des identifiants injectés dans les commandes
+        _safe_ident(mysql_container)
+        _safe_ident(db_name)
+
         # Utiliser un fichier de config MySQL pour éviter les avertissements
         import tempfile
         with tempfile.NamedTemporaryFile(mode='w', suffix='.cnf', delete=False) as config_file:
@@ -1033,11 +1082,27 @@ class DatabaseService:
             subprocess.run(
                 ['docker', 'cp', config_path, f"{mysql_container}:/tmp/.mysqldump_dev.cnf"],
                 check=True,
-                capture_output=True
+                capture_output=True,
+                timeout=60
             )
 
-            cmd = f"docker exec {mysql_container} mysqldump --defaults-file=/tmp/.mysqldump_dev.cnf --no-tablespaces {db_name} > {output_file}"
-            subprocess.run(cmd, shell=True, check=True)
+            # mysqldump via args en liste + redirection de stdout vers un fichier (pas de shell=True)
+            dump_cmd = [
+                'docker', 'exec', mysql_container, 'mysqldump',
+                '--defaults-file=/tmp/.mysqldump_dev.cnf',
+                '--no-tablespaces', db_name
+            ]
+            with open(output_file, 'wb') as out_f:
+                result = subprocess.run(
+                    dump_cmd,
+                    stdout=out_f,
+                    stderr=subprocess.PIPE,
+                    timeout=1800
+                )
+                if result.returncode != 0:
+                    raise Exception(
+                        f"Erreur mysqldump: {result.stderr.decode('utf-8', errors='replace')}"
+                    )
 
         finally:
             # Nettoyer le fichier temporaire
@@ -1062,6 +1127,24 @@ class DatabaseService:
             mysql_container = f"{parent_project}_mysql"
         else:
             mysql_container = f"{project_name}_mysql"
-        
-        cmd = f"docker exec -i {mysql_container} mysql -u root -proot_password {db_name} < {import_file}"
-        subprocess.run(cmd, shell=True, check=True) 
+
+        # Validation stricte des identifiants avant interpolation
+        _safe_ident(mysql_container)
+        _safe_ident(db_name)
+
+        # Import via args en liste + stdin redirigé depuis le fichier (pas de shell=True)
+        import_cmd = [
+            'docker', 'exec', '-i', mysql_container,
+            'mysql', '-u', 'root', '-proot_password', db_name
+        ]
+        with open(import_file, 'rb') as in_f:
+            result = subprocess.run(
+                import_cmd,
+                stdin=in_f,
+                stderr=subprocess.PIPE,
+                timeout=1800
+            )
+            if result.returncode != 0:
+                raise Exception(
+                    f"Erreur mysql import: {result.stderr.decode('utf-8', errors='replace')}"
+                ) 

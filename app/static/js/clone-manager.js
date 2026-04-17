@@ -60,12 +60,23 @@ function openCloneModal(projectName) {
     }
     
     if (showDevWarning) {
-        warningDiv.innerHTML = `
-            <i class="fas fa-info-circle me-2"></i>
-            <strong>Instance de développement détectée</strong><br>
-            Le clonage se fera depuis l'instance principale <strong>${sourceProjectName}</strong>, 
-            pas depuis l'instance dev <strong>${currentInstance}</strong>.
-        `;
+        warningDiv.replaceChildren();
+        const icon = document.createElement('i');
+        icon.className = 'fas fa-info-circle me-2';
+        warningDiv.appendChild(icon);
+        const strongTitle = document.createElement('strong');
+        strongTitle.textContent = 'Instance de développement détectée';
+        warningDiv.appendChild(strongTitle);
+        warningDiv.appendChild(document.createElement('br'));
+        warningDiv.appendChild(document.createTextNode("Le clonage se fera depuis l'instance principale "));
+        const strongSource = document.createElement('strong');
+        strongSource.textContent = sourceProjectName;
+        warningDiv.appendChild(strongSource);
+        warningDiv.appendChild(document.createTextNode(", pas depuis l'instance dev "));
+        const strongInstance = document.createElement('strong');
+        strongInstance.textContent = currentInstance;
+        warningDiv.appendChild(strongInstance);
+        warningDiv.appendChild(document.createTextNode('.'));
         warningDiv.style.display = 'block';
     } else {
         warningDiv.style.display = 'none';
@@ -89,25 +100,45 @@ function openCloneModal(projectName) {
  */
 async function validateCloneName(name) {
     const validationDiv = document.getElementById('clone-name-validation');
-    
+
+    // Helper: build <span class="..."><i class="icon"></i> <text> <strong>?</strong></span>
+    function buildMessage(spanClass, iconClass, text, strongText) {
+        const span = document.createElement('span');
+        span.className = spanClass;
+        if (iconClass) {
+            const i = document.createElement('i');
+            i.className = iconClass;
+            span.appendChild(i);
+            span.appendChild(document.createTextNode(' '));
+        }
+        span.appendChild(document.createTextNode(text));
+        if (strongText) {
+            span.appendChild(document.createTextNode(' '));
+            const strong = document.createElement('strong');
+            strong.textContent = strongText;
+            span.appendChild(strong);
+        }
+        validationDiv.replaceChildren(span);
+    }
+
     if (!name || name.length < 2) {
-        validationDiv.innerHTML = '<span class="text-muted">Entrez un nom (min. 2 caractères)</span>';
+        buildMessage('text-muted', null, 'Entrez un nom (min. 2 caractères)');
         return false;
     }
-    
+
     try {
         const response = await fetch(`/validate-name/${encodeURIComponent(name)}`);
         const result = await response.json();
-        
+
         if (result.valid) {
-            validationDiv.innerHTML = `<span class="text-success"><i class="fas fa-check-circle"></i> Nom disponible: <strong>${result.safe_name}</strong></span>`;
+            buildMessage('text-success', 'fas fa-check-circle', 'Nom disponible:', result.safe_name);
             return true;
         } else {
-            validationDiv.innerHTML = `<span class="text-danger"><i class="fas fa-times-circle"></i> ${result.message}</span>`;
+            buildMessage('text-danger', 'fas fa-times-circle', result.message || '');
             return false;
         }
     } catch (error) {
-        validationDiv.innerHTML = `<span class="text-danger">Erreur de validation</span>`;
+        buildMessage('text-danger', null, 'Erreur de validation');
         return false;
     }
 }

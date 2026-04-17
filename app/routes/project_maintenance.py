@@ -12,6 +12,7 @@ from app.utils.project_utils import secure_project_name
 from app.models.project import Project
 from app.utils.port_conflict_resolver import PortConflictResolver
 from app.config.docker_config import DockerConfig
+from app.middleware.auth_middleware import login_required, admin_required
 
 project_maintenance_bp = Blueprint('project_maintenance', __name__)
 
@@ -20,6 +21,7 @@ PROJECTS_FOLDER = 'projets'
 CONTAINERS_FOLDER = 'containers'
 
 @project_maintenance_bp.route('/fix_permissions_old/<project_name>', methods=['POST'])
+@admin_required
 def fix_project_permissions(project_name):
     """Applique les permissions correctes à un projet existant (ancienne version)"""
     try:
@@ -61,6 +63,7 @@ def fix_project_permissions(project_name):
         return jsonify({'success': False, 'message': f'Erreur: {str(e)}'})
 
 @project_maintenance_bp.route('/cleanup_containers', methods=['POST'])
+@admin_required
 def cleanup_containers():
     """Nettoie les conteneurs orphelins"""
     try:
@@ -78,6 +81,7 @@ def cleanup_containers():
         }) 
 
 @project_maintenance_bp.route('/resolve_port_conflicts', methods=['POST'])
+@admin_required
 def resolve_port_conflicts():
     """Résout automatiquement les conflits de ports"""
     try:
@@ -105,6 +109,7 @@ def resolve_port_conflicts():
         }), 500
 
 @project_maintenance_bp.route('/port_diagnostic', methods=['GET'])
+@login_required
 def port_diagnostic():
     """Obtient un diagnostic complet des ports"""
     try:
@@ -123,6 +128,7 @@ def port_diagnostic():
         }), 500 
 
 @project_maintenance_bp.route('/fix_docker_compose_ports/<project_name>', methods=['POST'])
+@admin_required
 def fix_docker_compose_ports(project_name):
     """Corrige les ports dans docker-compose.yml pour utiliser les valeurs des fichiers de ports"""
     try:
@@ -217,6 +223,7 @@ def fix_docker_compose_ports(project_name):
 
 
 @project_maintenance_bp.route('/fix_permissions/<project_name>', methods=['POST'])
+@admin_required
 def fix_permissions(project_name):
     """Corrige les permissions d'un projet pour permettre l'édition libre des fichiers"""
     try:
@@ -426,6 +433,7 @@ def fix_permissions(project_name):
 
 
 @project_maintenance_bp.route('/fix_permissions_simple/<project_name>', methods=['POST'])
+@admin_required
 def fix_permissions_simple(project_name):
     """Corrige simplement les permissions d'un projet sans vérifications Docker"""
     try:
@@ -474,6 +482,7 @@ def fix_permissions_simple(project_name):
 
  
 @project_maintenance_bp.route('/add_nextjs/<project_name>', methods=['POST'])
+@admin_required
 def add_nextjs(project_name):
     """Ajoute Next.js à un projet WordPress existant"""
     try:
@@ -638,6 +647,7 @@ export default function Home() {
 
 
 @project_maintenance_bp.route('/remove_nextjs/<project_name>', methods=['POST'])
+@admin_required
 def remove_nextjs(project_name):
     """Supprime Next.js d'un projet WordPress"""
     try:
@@ -726,6 +736,7 @@ def remove_nextjs(project_name):
 
 
 @project_maintenance_bp.route('/fix_wordpress_permissions/<project_name>', methods=['POST'])
+@admin_required
 def fix_wordpress_permissions(project_name):
     """Corrige les permissions WordPress pour www-data (wp-content, uploads, plugins, themes)"""
     try:
@@ -884,8 +895,9 @@ def fix_wordpress_permissions(project_name):
                 errors.append(f'{label} chown wordpress/: {result.stderr}')
 
             # Permissions: 755 dirs, 644 files (standard WordPress)
+            # sudo nécessaire car les fichiers viennent d'être chown → www-data
             result = subprocess.run(
-                ['find', '-P', container_wp_path, '-type', 'd', '-exec', 'chmod', '755', '{}', '+'],
+                ['sudo', 'find', '-P', container_wp_path, '-type', 'd', '-exec', 'chmod', '755', '{}', '+'],
                 capture_output=True, text=True, timeout=60
             )
             if result.returncode == 0:
@@ -894,7 +906,7 @@ def fix_wordpress_permissions(project_name):
                 errors.append(f'{label} chmod dirs: {result.stderr}')
 
             result = subprocess.run(
-                ['find', '-P', container_wp_path, '-type', 'f', '-exec', 'chmod', '644', '{}', '+'],
+                ['sudo', 'find', '-P', container_wp_path, '-type', 'f', '-exec', 'chmod', '644', '{}', '+'],
                 capture_output=True, text=True, timeout=60
             )
             if result.returncode == 0:

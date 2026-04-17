@@ -251,4 +251,128 @@ class WPLauncherLogger:
 
 
 # Instance globale du logger
-wp_logger = WPLauncherLogger() 
+wp_logger = WPLauncherLogger()
+
+
+class OperationLogger:
+    """
+    Logger léger orienté "opération/projet" qui délègue vers ``WPLauncherLogger``
+    pour la sortie centralisée (``logs/wp_launcher.log`` + fichier par opération),
+    tout en conservant un fichier dédié par projet et par timestamp
+    (ex: ``logs/create/<project>_<YYYYmmdd_HHMMSS>.log``) pour préserver la
+    compatibilité avec les appels historiques de ``SimpleDebugLogger``.
+
+    API publique attendue par les callers existants :
+        - step(name, details="")
+        - success(name, details="")
+        - error(name, error, exception=None)
+        - warning(name, warning)
+        - info(msg)
+        - debug(name, debug_info)
+        - log_file_operation(operation, file_path, success, details="")
+        - close()
+    """
+
+    def __init__(self, operation_name, project_name=None, wp_logger_instance=None):
+        # operation_name = 'create', 'delete', 'start', etc. (utilisé comme
+        # dossier + préfixe de log). Si inconnu, on retombe sur 'general'.
+        self.operation_name = operation_name or 'general'
+        self.project_name = project_name or 'unknown'
+        self._wp = wp_logger_instance if wp_logger_instance is not None else wp_logger
+
+        # Déterminer le dossier de log pour cette opération (fallback: general)
+        op_dir = self._wp.operation_dirs.get(
+            self.operation_name, self._wp.operation_dirs['general']
+        )
+        op_dir.mkdir(parents=True, exist_ok=True)
+
+        # Fichier dédié : <op_dir>/<project>_<timestamp>.log
+        # (identique au schéma historique de SimpleDebugLogger pour l'op 'create')
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.log_file = op_dir / f"{self.project_name}_{timestamp}.log"
+
+    # --- helpers internes -----------------------------------------------------
+
+    def _write(self, level, step_name, details=""):
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        message = f"[{ts}] [{level}] {step_name}"
+        if details:
+            message += f": {details}"
+        try:
+            with open(self.log_file, 'a', encoding='utf-8') as f:
+                f.write(message + "\n")
+        except Exception as e:
+            # On évite de planter si le disque est plein / permissions KO ;
+            # on laisse quand même la trace via WPLauncherLogger ci-dessous.
+            try:
+                self._wp.logger.warning(
+                    f"OperationLogger write failed ({self.log_file}): {e}"
+                )
+            except Exception:
+                pass
+
+    # --- API publique ---------------------------------------------------------
+
+    def step(self, step_name, details=""):
+        self._write("INFO", step_name, details)
+
+    def success(self, step_name, details=""):
+        self._write("SUCCESS", step_name, details)
+
+    def error(self, step_name, error=None, exception=None):
+        # Accepte: error("STEP", "msg", exc)  (signature legacy SimpleDebugLogger)
+        #         error("STEP", "msg")         (sans exception)
+        #         error("msg")                 (appel simplifié — "msg" est alors le détail)
+        if error is None:
+            error_detail = step_name
+            step_label = "ERROR"
+        else:
+            error_detail = str(error)
+            step_label = step_name
+
+        details = error_detail
+        if exception is not None:
+            details += f" | Exception: {exception}"
+        self._write("ERROR", step_label, details)
+
+        # Propager aussi vers le logger global
+        # (fichier wp_launcher.log + errors_YYYY-MM-DD.log)
+        try:
+            err_obj = exception if exception is not None else (
+                error if isinstance(error, BaseException) else Exception(error_detail)
+            )
+            self._wp.log_operation_error(
+                self.operation_name, self.project_name, err_obj, context=step_label
+            )
+        except Exception:
+            pass
+
+    def warning(self, step_name, warning):
+        self._write("WARNING", step_name, warning)
+
+    def info(self, msg):
+        self._write("INFO", "INFO", msg)
+
+    def debug(self, step_name, debug_info):
+        self._write("DEBUG", step_name, debug_info)
+
+    def log_file_operation(self, operation, file_path, success, details=""):
+        status = "SUCCESS" if success else "ERROR"
+        message = f"{operation}: {file_path}"
+        if details:
+            message += f" | {details}"
+        self._write(status, "FILE_OP", message)
+
+    def close(self):
+        self._write("INFO", "LOGGER_CLOSED", "Fin du logging")
+
+
+def get_operation_logger(operation_name, project_name=None):
+    """
+    Factory recommandée pour obtenir un logger orienté opération/projet.
+
+    Remplace l'ancienne ``debug_logger.create_debug_logger(project_name)``
+    tout en permettant de cibler un dossier d'opération (``create``, ``delete``,
+    ``start``...). Par défaut, l'opération est ``create`` (comportement legacy).
+    """
+    return OperationLogger(operation_name=operation_name, project_name=project_name)

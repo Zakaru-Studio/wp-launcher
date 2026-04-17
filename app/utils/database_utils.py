@@ -3,6 +3,7 @@
 Utilitaires pour la gestion des bases de données
 """
 import os
+import re
 import subprocess
 import time
 import secrets
@@ -10,6 +11,27 @@ import string
 import tempfile
 from app.utils.file_utils import extract_zip
 from app.config.docker_config import DockerConfig
+
+
+# Regex stricte pour valider les identifiants (nom de DB, de conteneur, etc.)
+_SAFE_IDENT = re.compile(r'^[a-zA-Z0-9_-]+$')
+
+
+def _safe_ident(name):
+    """Valide un identifiant avant de l'interpoler dans une commande docker/SQL.
+
+    N'autorise que [a-zA-Z0-9_-]. Lève ValueError si invalide.
+    """
+    if not name or not _SAFE_IDENT.match(str(name)):
+        raise ValueError(f"Invalid identifier: {name!r}")
+    return name
+
+
+def _escape_sql_string(value):
+    """Échappe une valeur destinée à être interpolée entre quotes simples en SQL."""
+    if value is None:
+        return ''
+    return str(value).replace("\\", "\\\\").replace("'", "''")
 
 
 def generate_wordpress_security_keys():
@@ -202,11 +224,15 @@ def execute_mysql_command(container_name, command, timeout=30):
 
 def check_database_exists(container_name, database_name):
     """Vérifie si une base de données existe"""
+    # Valider les identifiants avant interpolation dans la requête SQL
+    _safe_ident(container_name)
+    _safe_ident(database_name)
+    escaped_db = _escape_sql_string(database_name)
     success, stdout, stderr = execute_mysql_command(
-        container_name, 
-        f"SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '{database_name}'"
+        container_name,
+        f"SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '{escaped_db}'"
     )
-    
+
     if success:
         return database_name in stdout
     else:
@@ -216,9 +242,13 @@ def check_database_exists(container_name, database_name):
 
 def get_database_size(container_name, database_name):
     """Récupère la taille d'une base de données"""
+    # Valider les identifiants avant interpolation dans la requête SQL
+    _safe_ident(container_name)
+    _safe_ident(database_name)
+    escaped_db = _escape_sql_string(database_name)
     success, stdout, stderr = execute_mysql_command(
         container_name,
-        f"SELECT ROUND(SUM(data_length + index_length) / 1024 / 1024, 1) AS 'DB Size in MB' FROM information_schema.tables WHERE table_schema='{database_name}'"
+        f"SELECT ROUND(SUM(data_length + index_length) / 1024 / 1024, 1) AS 'DB Size in MB' FROM information_schema.tables WHERE table_schema='{escaped_db}'"
     )
     
     if success and stdout.strip():
@@ -262,13 +292,18 @@ def backup_database(container_name, database_name, backup_path):
 def update_wordpress_urls(container_path, project_name, new_url):
     """Met à jour les URLs WordPress dans la base de données lors de l'exposition"""
     try:
+        # Valider le nom de projet (utilisé dans les noms de conteneurs docker)
+        _safe_ident(project_name)
+        # new_url est interpolé dans du SQL : on échappe les quotes et les antislashs
+        safe_new_url = _escape_sql_string(new_url)
+
         print(f"🔄 Mise à jour complète des URLs WordPress pour {project_name} vers {new_url}")
-        
+
         # Attendre que MySQL soit prêt
         if not intelligent_mysql_wait(container_path, project_name):
             print("❌ MySQL n'est pas prêt pour la mise à jour des URLs")
             return False
-        
+
         # Détecter l'ancienne URL en lisant la base de données
         old_urls = []
         
@@ -307,11 +342,12 @@ def update_wordpress_urls(container_path, project_name, new_url):
         print(f"🎯 URLs à remplacer: {old_urls}")
         
         # Commandes SQL pour mettre à jour les URLs principales
+        # safe_new_url est déjà échappé (quotes + antislashs)
         base_commands = [
-            f"UPDATE wp_options SET option_value = '{new_url}' WHERE option_name = 'home';",
-            f"UPDATE wp_options SET option_value = '{new_url}' WHERE option_name = 'siteurl';"
+            f"UPDATE wp_options SET option_value = '{safe_new_url}' WHERE option_name = 'home';",
+            f"UPDATE wp_options SET option_value = '{safe_new_url}' WHERE option_name = 'siteurl';"
         ]
-        
+
         # Commandes pour chaque ancienne URL détectée
         update_commands = []
         for old_url in old_urls:
@@ -319,33 +355,38 @@ def update_wordpress_urls(container_path, project_name, new_url):
                 # Mise à jour complète avec et sans slash final
                 old_url_slash = old_url.rstrip('/') + '/'
                 old_url_no_slash = old_url.rstrip('/')
-                
+
+                # Échapper chaque ancienne URL avant interpolation
+                safe_old_url = _escape_sql_string(old_url)
+                safe_old_slash = _escape_sql_string(old_url_slash)
+                safe_old_no_slash = _escape_sql_string(old_url_no_slash)
+
                 update_commands.extend([
                     # Options WordPress (plugins, thèmes, widgets)
-                    f"UPDATE wp_options SET option_value = REPLACE(option_value, '{old_url_slash}', '{new_url}/') WHERE option_value LIKE '%{old_url}%';",
-                    f"UPDATE wp_options SET option_value = REPLACE(option_value, '{old_url_no_slash}', '{new_url}') WHERE option_value LIKE '%{old_url}%';",
-                    
+                    f"UPDATE wp_options SET option_value = REPLACE(option_value, '{safe_old_slash}', '{safe_new_url}/') WHERE option_value LIKE '%{safe_old_url}%';",
+                    f"UPDATE wp_options SET option_value = REPLACE(option_value, '{safe_old_no_slash}', '{safe_new_url}') WHERE option_value LIKE '%{safe_old_url}%';",
+
                     # Contenu des posts
-                    f"UPDATE wp_posts SET post_content = REPLACE(post_content, '{old_url_slash}', '{new_url}/');",
-                    f"UPDATE wp_posts SET post_content = REPLACE(post_content, '{old_url_no_slash}', '{new_url}');",
-                    f"UPDATE wp_posts SET post_excerpt = REPLACE(post_excerpt, '{old_url_slash}', '{new_url}/');",
-                    f"UPDATE wp_posts SET post_excerpt = REPLACE(post_excerpt, '{old_url_no_slash}', '{new_url}');",
-                    
+                    f"UPDATE wp_posts SET post_content = REPLACE(post_content, '{safe_old_slash}', '{safe_new_url}/');",
+                    f"UPDATE wp_posts SET post_content = REPLACE(post_content, '{safe_old_no_slash}', '{safe_new_url}');",
+                    f"UPDATE wp_posts SET post_excerpt = REPLACE(post_excerpt, '{safe_old_slash}', '{safe_new_url}/');",
+                    f"UPDATE wp_posts SET post_excerpt = REPLACE(post_excerpt, '{safe_old_no_slash}', '{safe_new_url}');",
+
                     # Commentaires
-                    f"UPDATE wp_comments SET comment_content = REPLACE(comment_content, '{old_url_slash}', '{new_url}/');",
-                    f"UPDATE wp_comments SET comment_content = REPLACE(comment_content, '{old_url_no_slash}', '{new_url}');",
-                    
+                    f"UPDATE wp_comments SET comment_content = REPLACE(comment_content, '{safe_old_slash}', '{safe_new_url}/');",
+                    f"UPDATE wp_comments SET comment_content = REPLACE(comment_content, '{safe_old_no_slash}', '{safe_new_url}');",
+
                     # Métadonnées des posts
-                    f"UPDATE wp_postmeta SET meta_value = REPLACE(meta_value, '{old_url_slash}', '{new_url}/') WHERE meta_value LIKE '%{old_url}%';",
-                    f"UPDATE wp_postmeta SET meta_value = REPLACE(meta_value, '{old_url_no_slash}', '{new_url}') WHERE meta_value LIKE '%{old_url}%';",
-                    
+                    f"UPDATE wp_postmeta SET meta_value = REPLACE(meta_value, '{safe_old_slash}', '{safe_new_url}/') WHERE meta_value LIKE '%{safe_old_url}%';",
+                    f"UPDATE wp_postmeta SET meta_value = REPLACE(meta_value, '{safe_old_no_slash}', '{safe_new_url}') WHERE meta_value LIKE '%{safe_old_url}%';",
+
                     # Métadonnées des commentaires
-                    f"UPDATE wp_commentmeta SET meta_value = REPLACE(meta_value, '{old_url_slash}', '{new_url}/') WHERE meta_value LIKE '%{old_url}%';",
-                    f"UPDATE wp_commentmeta SET meta_value = REPLACE(meta_value, '{old_url_no_slash}', '{new_url}') WHERE meta_value LIKE '%{old_url}%';",
-                    
+                    f"UPDATE wp_commentmeta SET meta_value = REPLACE(meta_value, '{safe_old_slash}', '{safe_new_url}/') WHERE meta_value LIKE '%{safe_old_url}%';",
+                    f"UPDATE wp_commentmeta SET meta_value = REPLACE(meta_value, '{safe_old_no_slash}', '{safe_new_url}') WHERE meta_value LIKE '%{safe_old_url}%';",
+
                     # Métadonnées des utilisateurs
-                    f"UPDATE wp_usermeta SET meta_value = REPLACE(meta_value, '{old_url_slash}', '{new_url}/') WHERE meta_value LIKE '%{old_url}%';",
-                    f"UPDATE wp_usermeta SET meta_value = REPLACE(meta_value, '{old_url_no_slash}', '{new_url}') WHERE meta_value LIKE '%{old_url}%';"
+                    f"UPDATE wp_usermeta SET meta_value = REPLACE(meta_value, '{safe_old_slash}', '{safe_new_url}/') WHERE meta_value LIKE '%{safe_old_url}%';",
+                    f"UPDATE wp_usermeta SET meta_value = REPLACE(meta_value, '{safe_old_no_slash}', '{safe_new_url}') WHERE meta_value LIKE '%{safe_old_url}%';"
                 ])
         
         # Combiner toutes les commandes
@@ -421,6 +462,12 @@ def update_wordpress_urls(container_path, project_name, new_url):
 def update_wordpress_urls_simple(container_path, project_name, new_url):
     """Version simplifiée de mise à jour des URLs WordPress (contourne intelligent_mysql_wait)"""
     try:
+        # Valider le nom de projet (utilisé dans le nom du conteneur docker)
+        _safe_ident(project_name)
+        # Échapper l'URL avant interpolation dans le SQL
+        safe_new_url = _escape_sql_string(new_url)
+        new_url = safe_new_url  # Le reste du SQL plus bas utilise {new_url}
+
         print(f"🔄 Mise à jour simplifiée des URLs WordPress pour {project_name} vers {new_url}")
 
         # Préparer la commande SQL complète

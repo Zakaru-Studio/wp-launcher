@@ -47,23 +47,34 @@ function hideLoader() {
 
 /**
  * Requête HTTP standardisée avec gestion d'erreurs
+ * Ajoute automatiquement X-CSRFToken pour les méthodes mutantes et
+ * X-Requested-With pour que le back renvoie bien du JSON en cas d'erreur CSRF.
  */
 async function makeRequest(url, options = {}) {
-    const defaultOptions = {
-        method: 'GET',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        ...options
+    const method = (options.method || 'GET').toUpperCase();
+    const headers = {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+        ...(options.headers || {})
     };
-    
+
+    if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+        headers['X-CSRFToken'] = window.CSRF_TOKEN || '';
+    }
+
+    const defaultOptions = {
+        ...options,
+        method,
+        headers
+    };
+
     try {
         const response = await fetch(url, defaultOptions);
-        
+
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-        
+
         const contentType = response.headers.get('content-type');
         if (contentType && contentType.includes('application/json')) {
             return await response.json();
@@ -73,6 +84,21 @@ async function makeRequest(url, options = {}) {
     } catch (error) {
         throw error;
     }
+}
+
+/**
+ * Helper global : retourne les headers CSRF + XHR à fusionner dans un fetch() direct.
+ * Usage : fetch(url, { method: 'POST', headers: { ...csrfHeaders(), 'Content-Type': 'application/json' }, body: ... })
+ */
+function csrfHeaders() {
+    return {
+        'X-CSRFToken': window.CSRF_TOKEN || '',
+        'X-Requested-With': 'XMLHttpRequest'
+    };
+}
+// Exposer globalement pour les scripts non-module
+if (typeof window !== 'undefined') {
+    window.csrfHeaders = csrfHeaders;
 }
 
 /**
@@ -133,12 +159,11 @@ function validateProjectName(name) {
  * Utilitaires DOM
  */
 function escapeHtml(unsafe) {
-    return unsafe
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+    // Version basée sur le DOM: plus robuste (utilise le parsing du navigateur)
+    // et tolère null/undefined. Préférer textContent directement quand possible.
+    const div = document.createElement('div');
+    div.textContent = String(unsafe ?? '');
+    return div.innerHTML;
 }
 
 function debounce(func, wait) {
@@ -203,25 +228,17 @@ function setupGlobalEvents() {
  * Configuration SocketIO standardisée
  */
 function setupSocketIO() {
+    // Utiliser le singleton global pour partager une seule connexion.
+    if (typeof window.getSocketIO === 'function') {
+        return window.getSocketIO();
+    }
     if (typeof io === 'undefined') {
         return null;
     }
-    
-    const socket = io();
-    
-    socket.on('connect', function() {
-        // WebSocket connecté
-    });
-    
-    socket.on('disconnect', function() {
-        // WebSocket déconnecté
-    });
-    
-    socket.on('error', function(error) {
-        // Erreur WebSocket
-    });
-    
-    return socket;
+    if (!window._socket) {
+        window._socket = io();
+    }
+    return window._socket;
 }
 
 /**

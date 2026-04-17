@@ -7,6 +7,7 @@ import os
 from flask import Blueprint, jsonify, current_app
 from app.models.project import Project
 from app.config.docker_config import DockerConfig
+from app.middleware.auth_middleware import login_required, admin_required
 
 projects_bp = Blueprint('projects', __name__)
 
@@ -16,6 +17,7 @@ CONTAINERS_FOLDER = 'containers'
 
 
 @projects_bp.route('/projects')
+@login_required
 def list_projects():
     """Liste tous les projets disponibles"""
     project_service = current_app.extensions.get('project_service')
@@ -47,6 +49,7 @@ def list_projects():
 
 
 @projects_bp.route('/projects_with_status')
+@login_required
 def list_projects_with_status():
     """Liste les projets avec leurs informations complètes"""
     projects = []
@@ -132,6 +135,7 @@ def list_projects_with_status():
 
 
 @projects_bp.route('/project_status/<project_name>')
+@login_required
 def check_project_status(project_name):
     """Vérifie le statut d'un projet"""
     project_service = current_app.extensions.get('project_service')

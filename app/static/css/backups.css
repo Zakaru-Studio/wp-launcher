@@ -247,3 +247,110 @@
     font-weight: 600;
     font-family: 'JetBrains Mono', monospace;
 }
+
+/* ============================================
+   LIGHT THEME OVERRIDES
+   ============================================ */
+[data-theme="light"] .backup-header-actions {
+    background: #ffffff;
+    border-color: rgba(15, 23, 42, 0.08);
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+[data-theme="light"] .backup-tabs {
+    border-bottom-color: rgba(15, 23, 42, 0.1);
+}
+
+[data-theme="light"] .backup-tab {
+    color: var(--text-muted);
+}
+
+[data-theme="light"] .backup-tab:hover {
+    color: var(--text-primary);
+    background: rgba(6, 182, 212, 0.05);
+}
+
+[data-theme="light"] .backup-tab.active {
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+}
+
+[data-theme="light"] .backup-btn {
+    background: #ffffff;
+    border-color: rgba(15, 23, 42, 0.1);
+    color: var(--text-primary);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+[data-theme="light"] .backup-btn:hover {
+    background: rgba(6, 182, 212, 0.04);
+    border-color: rgba(6, 182, 212, 0.3);
+}
+
+[data-theme="light"] .backup-btn.success {
+    background: linear-gradient(135deg, #059669 0%, #06b6d4 100%);
+    color: #ffffff;
+}
+
+[data-theme="light"] .backup-btn.info {
+    background: linear-gradient(135deg, #06b6d4 0%, #2563eb 100%);
+    color: #ffffff;
+}
+
+[data-theme="light"] .backup-btn.primary {
+    background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+    color: #ffffff;
+}
+
+[data-theme="light"] .backup-item {
+    background: #ffffff;
+    border-color: rgba(15, 23, 42, 0.08);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+[data-theme="light"] .backup-item:hover {
+    background: #f8fafc;
+    border-color: rgba(6, 182, 212, 0.2);
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+}
+
+[data-theme="light"] .backup-list-container::-webkit-scrollbar-thumb {
+    background: rgba(15, 23, 42, 0.14);
+}
+
+[data-theme="light"] .backup-pagination {
+    border-top-color: rgba(15, 23, 42, 0.08);
+}
+
+[data-theme="light"] .backup-pagination button {
+    background: #ffffff;
+    border-color: rgba(15, 23, 42, 0.1);
+    color: var(--text-primary);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+[data-theme="light"] .backup-pagination button:not(:disabled):hover {
+    background: rgba(6, 182, 212, 0.06);
+    border-color: rgba(6, 182, 212, 0.3);
+}
+
+[data-theme="light"] .backup-action-btn {
+    background: #ffffff;
+    border-color: rgba(15, 23, 42, 0.1);
+    color: var(--text-primary);
+}
+
+[data-theme="light"] .backup-action-btn:hover {
+    background: rgba(6, 182, 212, 0.04);
+}
+
+[data-theme="light"] .backup-action-btn.danger {
+    color: #dc2626;
+    border-color: rgba(220, 38, 38, 0.2);
+    background: rgba(220, 38, 38, 0.05);
+}
+
+[data-theme="light"] .backup-action-btn.danger:hover {
+    background: rgba(220, 38, 38, 0.1);
+    border-color: rgba(220, 38, 38, 0.35);
+}

@@ -6,6 +6,7 @@ import json
 from datetime import datetime
 from flask import Blueprint, render_template, jsonify, request
 from werkzeug.utils import secure_filename
+from app.middleware.auth_middleware import login_required, admin_required
 
 logs_bp = Blueprint('logs', __name__)
 
@@ -74,6 +75,7 @@ def format_file_size(size_bytes):
     return f"{size_bytes:.1f} {size_names[i]}"
 
 @logs_bp.route('/logs')
+@login_required
 def logs_page():
     """Page principale des logs"""
     log_structure = get_log_files()
@@ -86,18 +88,29 @@ def logs_page():
     return render_template('logs.html', log_structure=log_structure)
 
 @logs_bp.route('/api/logs/content')
+@login_required
 def get_log_content():
     """Récupère le contenu d'un fichier de log"""
     file_path = request.args.get('file')
     lines = int(request.args.get('lines', 100))
-    
-    if not file_path or not os.path.exists(file_path):
+
+    if not file_path:
         return jsonify({'error': 'Fichier non trouvé'}), 404
-    
-    # Vérifier que le fichier est dans le dossier logs (sécurité)
-    if not file_path.startswith(LOGS_DIR):
-        return jsonify({'error': 'Accès non autorisé'}), 403
-    
+
+    # Vérifier que le chemin résolu reste dans LOGS_DIR (protection path traversal)
+    abs_file = os.path.abspath(file_path)
+    abs_logs = os.path.abspath(LOGS_DIR)
+    try:
+        if os.path.commonpath([abs_file, abs_logs]) != abs_logs:
+            return jsonify({'error': 'Invalid path'}), 403
+    except ValueError:
+        return jsonify({'error': 'Invalid path'}), 403
+
+    if not os.path.exists(abs_file):
+        return jsonify({'error': 'Fichier non trouvé'}), 404
+
+    file_path = abs_file
+
     try:
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             all_lines = f.readlines()
@@ -115,18 +128,29 @@ def get_log_content():
         return jsonify({'error': f'Erreur lors de la lecture: {str(e)}'}), 500
 
 @logs_bp.route('/api/logs/delete', methods=['POST'])
+@admin_required
 def delete_log_file():
     """Supprime un fichier de log spécifique"""
     data = request.get_json()
     file_path = data.get('file')
-    
-    if not file_path or not os.path.exists(file_path):
+
+    if not file_path:
         return jsonify({'error': 'Fichier non trouvé'}), 404
-    
-    # Vérifier que le fichier est dans le dossier logs (sécurité)
-    if not file_path.startswith(LOGS_DIR):
-        return jsonify({'error': 'Accès non autorisé'}), 403
-    
+
+    # Vérifier que le chemin résolu reste dans LOGS_DIR (protection path traversal)
+    abs_file = os.path.abspath(file_path)
+    abs_logs = os.path.abspath(LOGS_DIR)
+    try:
+        if os.path.commonpath([abs_file, abs_logs]) != abs_logs:
+            return jsonify({'error': 'Invalid path'}), 403
+    except ValueError:
+        return jsonify({'error': 'Invalid path'}), 403
+
+    if not os.path.exists(abs_file):
+        return jsonify({'error': 'Fichier non trouvé'}), 404
+
+    file_path = abs_file
+
     try:
         os.remove(file_path)
         return jsonify({'success': True, 'message': 'Fichier supprimé avec succès'})
@@ -135,6 +159,7 @@ def delete_log_file():
         return jsonify({'error': f'Erreur lors de la suppression: {str(e)}'}), 500
 
 @logs_bp.route('/api/logs/delete-all', methods=['POST'])
+@admin_required
 def delete_all_logs():
     """Supprime tous les fichiers de logs"""
     deleted_count = 0
@@ -180,6 +205,7 @@ def delete_all_logs():
         return jsonify({'error': f'Erreur générale: {str(e)}'}), 500
 
 @logs_bp.route('/api/logs/refresh')
+@login_required
 def refresh_logs():
     """Rafraîchit la liste des logs"""
     log_structure = get_log_files()

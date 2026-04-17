@@ -17,7 +17,8 @@ services:
       - app_network
     ports:
       - "0.0.0.0:{mysql_port}:3306"  # Port MySQL exposé
-    command: --default-authentication-plugin=mysql_native_password
+    command: --default-authentication-plugin=mysql_native_password --innodb-fast-shutdown=1
+    stop_grace_period: 60s
     # Allocations raisonnables pour MySQL
     mem_limit: {mysql_memory}
     cpus: '{mysql_cpu}'

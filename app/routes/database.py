@@ -11,11 +11,13 @@ import subprocess
 from app.config.app_config import PROJECTS_FOLDER, CONTAINERS_FOLDER
 from app.utils.file_utils import allowed_file, get_file_size
 from app.utils.database_utils import prepare_sql_file, backup_database
+from app.middleware.auth_middleware import login_required, admin_required
 
 database_bp = Blueprint('database', __name__)
 
 
 @database_bp.route('/test_upload', methods=['POST'])
+@admin_required
 def test_upload():
     """Endpoint de test pour débugger l'upload de fichiers"""
     try:
@@ -56,6 +58,7 @@ def test_upload():
 
 
 @database_bp.route('/fast_import_database/<project_name>', methods=['POST'])
+@admin_required
 def fast_import_database(project_name):
     """Import ultra-rapide de base de données avec FastImportService (asynchrone)"""
     try:
@@ -145,6 +148,7 @@ def fast_import_database(project_name):
 
 
 @database_bp.route('/update_database/<project_name>', methods=['POST'])
+@admin_required
 def update_database(project_name):
     """Met à jour la base de données d'un projet existant (asynchrone)"""
     try:
@@ -232,6 +236,7 @@ def update_database(project_name):
 
 
 @database_bp.route('/export_database/<project_name>', methods=['POST'])
+@admin_required
 def export_database(project_name):
     """Exporte la base de données d'un projet avec mysqldump direct"""
     try:
@@ -393,6 +398,7 @@ password={db_password}" > /tmp/.mysqldump.cnf && chmod 600 /tmp/.mysqldump.cnf""
 
 
 @database_bp.route('/api/database/stop-import/<project_name>', methods=['POST'])
+@admin_required
 def stop_import(project_name):
     """Arrête un import de base de données en cours"""
     try:
@@ -445,6 +451,7 @@ def stop_import(project_name):
 
 
 @database_bp.route('/download_export/<filename>')
+@admin_required
 def download_export(filename):
     """Télécharge un fichier d'export de base de données"""
     try:

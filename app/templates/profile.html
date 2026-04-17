@@ -30,8 +30,9 @@
                              class="rounded-circle" style="width: 150px; height: 150px; object-fit: cover; border: 3px solid #667eea;">
                     </div>
                     <form method="POST" action="{{ url_for('auth.upload_avatar') }}" enctype="multipart/form-data">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="mb-3">
-                            <input type="file" class="form-control bg-secondary text-light border-secondary" 
+                            <input type="file" class="form-control bg-secondary text-light border-secondary"
                                    name="avatar" accept="image/*" required>
                         </div>
                         <button type="submit" class="btn btn-primary">
@@ -51,6 +52,7 @@
                 <div class="card-body">
                     <h5 class="card-title"><i class="fas fa-info-circle me-2"></i>Informations personnelles</h5>
                     <form method="POST" action="{{ url_for('auth.update_profile') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label for="first_name" class="form-label">Prénom</label>
