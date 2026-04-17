@@ -1,91 +1,149 @@
 {% extends "base.html" %}
 
-{% block title %}Gestion des Sauvegardes - WordPress Launcher{% endblock %}
+{% block title %}{{ _('Backups management') }} - {{ _('WordPress Launcher') }}{% endblock %}
 
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/backups.css') }}">
 {% endblock %}
 
 {% block content %}
-<div class="backup-container">
-    <!-- En-tête des actions -->
-    <div class="backup-header-actions">
-        <h2 class="backup-title">
-            <i class="fas fa-database me-2"></i>
-            Gestion des Sauvegardes
-        </h2>
-        <div class="backup-actions-group">
-            <button class="backup-btn success" onclick="runBackup('all')">
-                <i class="fas fa-play me-1"></i> Backup Complet
-            </button>
-            <button class="backup-btn info" onclick="runBackup('mysql')">
-                <i class="fas fa-database me-1"></i> MySQL
-            </button>
-            <button class="backup-btn info" onclick="runBackup('mongodb')">
-                <i class="fas fa-leaf me-1"></i> MongoDB
-            </button>
-            <button class="backup-btn primary" onclick="refreshBackupList()">
-                <i class="fas fa-sync-alt me-1"></i> Actualiser
-            </button>
-        </div>
+<header class="page-header">
+    <div class="page-header-text">
+        <h1 class="page-title">{{ _('Backups') }}</h1>
+        <p class="page-subtitle">{{ _('Manage and restore point-in-time snapshots of your infrastructure.') }}</p>
     </div>
-
-    <!-- Onglets MySQL / MongoDB -->
-    <div class="backup-tabs">
-        <button class="backup-tab active" onclick="switchBackupTab('mysql')">
-            <i class="fas fa-database me-2"></i>
-            MySQL
-            <span class="badge-count" id="mysql-count">0</span>
-        </button>
-        <button class="backup-tab" onclick="switchBackupTab('mongodb')">
-            <i class="fas fa-leaf me-2"></i>
-            MongoDB
-            <span class="badge-count" id="mongodb-count">0</span>
+    <div class="page-header-actions backup-actions-group">
+        <button class="backup-primary-btn" onclick="runBackup('all')" title="{{ _('Run full backup') }}">
+            <i class="fas fa-cloud-upload-alt"></i>
+            <span>{{ _('Backup Now') }}</span>
         </button>
     </div>
+</header>
 
-    <!-- Contenu MySQL -->
-    <div id="backup-mysql" class="backup-content-pane active">
-        <div class="backup-list-container" id="mysql-backup-list">
-            <div class="empty-state">
-                <i class="fas fa-database"></i>
-                <h3>Chargement des backups MySQL...</h3>
-                <p>Cliquez sur "Actualiser" pour charger la liste</p>
+<div class="page-content">
+    <div class="backups-layout">
+        <!-- Main column: table + tabs -->
+        <div class="backups-main">
+            <div class="backup-tabs">
+                <button class="backup-tab active" onclick="switchBackupTab('mysql')">
+                    <i class="fas fa-database me-2"></i>
+                    {{ _('MySQL') }}
+                    <span class="badge-count" id="mysql-count">0</span>
+                </button>
+                <button class="backup-tab" onclick="switchBackupTab('mongodb')">
+                    <i class="fas fa-leaf me-2"></i>
+                    {{ _('MongoDB') }}
+                    <span class="badge-count" id="mongodb-count">0</span>
+                </button>
+                <button class="backup-tab-spacer" aria-hidden="true"></button>
+                <button class="backup-btn" onclick="runBackup('mysql')" title="{{ _('MySQL backup') }}">
+                    <i class="fas fa-database me-1"></i> {{ _('MySQL') }}
+                </button>
+                <button class="backup-btn" onclick="runBackup('mongodb')" title="{{ _('MongoDB backup') }}">
+                    <i class="fas fa-leaf me-1"></i> {{ _('MongoDB') }}
+                </button>
+                <button class="backup-btn" onclick="refreshBackupList()" title="{{ _('Refresh') }}">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+
+            <!-- Table header (desktop) -->
+            <div class="backups-table-header">
+                <div class="col-name">{{ _('Name & Destination') }}</div>
+                <div class="col-type">{{ _('Type') }}</div>
+                <div class="col-size">{{ _('Size & Time') }}</div>
+                <div class="col-status">{{ _('Status') }}</div>
+            </div>
+
+            <!-- MySQL panel -->
+            <div id="backup-mysql" class="backup-content-pane active">
+                <div class="backup-list-container" id="mysql-backup-list">
+                    <div class="empty-state">
+                        <i class="fas fa-database"></i>
+                        <h3>{{ _('Loading MySQL backups...') }}</h3>
+                        <p>{{ _('Click "Refresh" to load the list') }}</p>
+                    </div>
+                </div>
+                <div class="backup-pagination" id="mysql-pagination" style="display: none;">
+                    <button onclick="previousMysqlPage()" id="btn-mysql-prev">
+                        <i class="fas fa-chevron-left"></i> {{ _('Previous') }}
+                    </button>
+                    <span class="backup-pagination-info">
+                        {{ _('Page') }} <span id="mysql-current-page">1</span> / <span id="mysql-total-pages">1</span>
+                    </span>
+                    <button onclick="nextMysqlPage()" id="btn-mysql-next">
+                        {{ _('Next') }} <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- MongoDB panel -->
+            <div id="backup-mongodb" class="backup-content-pane">
+                <div class="backup-list-container" id="mongodb-backup-list">
+                    <div class="empty-state">
+                        <i class="fas fa-leaf"></i>
+                        <h3>{{ _('Loading MongoDB backups...') }}</h3>
+                        <p>{{ _('Click "Refresh" to load the list') }}</p>
+                    </div>
+                </div>
+                <div class="backup-pagination" id="mongodb-pagination" style="display: none;">
+                    <button onclick="previousMongodbPage()" id="btn-mongodb-prev">
+                        <i class="fas fa-chevron-left"></i> {{ _('Previous') }}
+                    </button>
+                    <span class="backup-pagination-info">
+                        {{ _('Page') }} <span id="mongodb-current-page">1</span> / <span id="mongodb-total-pages">1</span>
+                    </span>
+                    <button onclick="nextMongodbPage()" id="btn-mongodb-next">
+                        {{ _('Next') }} <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
             </div>
         </div>
-        <div class="backup-pagination" id="mysql-pagination" style="display: none;">
-            <button onclick="previousMysqlPage()" id="btn-mysql-prev">
-                <i class="fas fa-chevron-left"></i> Précédent
-            </button>
-            <span class="backup-pagination-info">
-                Page <span id="mysql-current-page">1</span> / <span id="mysql-total-pages">1</span>
-            </span>
-            <button onclick="nextMysqlPage()" id="btn-mysql-next">
-                Suivant <i class="fas fa-chevron-right"></i>
-            </button>
-        </div>
-    </div>
 
-    <!-- Contenu MongoDB -->
-    <div id="backup-mongodb" class="backup-content-pane">
-        <div class="backup-list-container" id="mongodb-backup-list">
-            <div class="empty-state">
-                <i class="fas fa-leaf"></i>
-                <h3>Chargement des backups MongoDB...</h3>
-                <p>Cliquez sur "Actualiser" pour charger la liste</p>
-            </div>
-        </div>
-        <div class="backup-pagination" id="mongodb-pagination" style="display: none;">
-            <button onclick="previousMongodbPage()" id="btn-mongodb-prev">
-                <i class="fas fa-chevron-left"></i> Précédent
-            </button>
-            <span class="backup-pagination-info">
-                Page <span id="mongodb-current-page">1</span> / <span id="mongodb-total-pages">1</span>
-            </span>
-            <button onclick="nextMongodbPage()" id="btn-mongodb-next">
-                Suivant <i class="fas fa-chevron-right"></i>
-            </button>
-        </div>
+        <!-- Side column: storage + retention -->
+        <aside class="backups-side">
+            <section class="storage-panel" id="storage-panel">
+                <div class="storage-panel-content">
+                    <h3 class="storage-panel-title">{{ _('Storage Utilization') }}</h3>
+                    <div class="storage-value">
+                        <span class="storage-value-number" id="storage-used-value">—</span>
+                        <span class="storage-value-unit" id="storage-used-unit">{{ _('GB Used') }}</span>
+                    </div>
+                    <div class="storage-bar">
+                        <div class="storage-bar-fill" id="storage-bar-fill" style="width: 0%;"></div>
+                    </div>
+                    <div class="storage-breakdown">
+                        <div class="storage-breakdown-row">
+                            <span class="storage-breakdown-label">
+                                <span class="storage-breakdown-dot storage-breakdown-dot-db"></span>
+                                {{ _('Database') }}
+                            </span>
+                            <span class="storage-breakdown-value" id="storage-db-value">—</span>
+                        </div>
+                        <div class="storage-breakdown-row">
+                            <span class="storage-breakdown-label">
+                                <span class="storage-breakdown-dot storage-breakdown-dot-files"></span>
+                                {{ _('Files') }}
+                            </span>
+                            <span class="storage-breakdown-value" id="storage-files-value">—</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="retention-panel">
+                <div class="retention-panel-head">
+                    <i class="fas fa-shield-alt"></i>
+                    <h3 class="retention-panel-title">{{ _('Retention Policy') }}</h3>
+                </div>
+                <p class="retention-panel-text">
+                    {{ _('Daily backups are retained for 30 days. Weekly snapshots are kept for 12 months in cold storage.') }}
+                </p>
+                <a class="retention-panel-link" href="#" onclick="return false;">
+                    {{ _('Configure Policies') }} <i class="fas fa-arrow-right"></i>
+                </a>
+            </section>
+        </aside>
     </div>
 </div>
 {% endblock %}
@@ -93,4 +151,3 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/backups.js') }}"></script>
 {% endblock %}
-

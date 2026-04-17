@@ -1,7 +1,7 @@
 """
 Main routes with optional authentication support
 """
-from flask import Blueprint, render_template, session, redirect, url_for, g, current_app
+from flask import Blueprint, render_template, session, redirect, url_for, g, current_app, request
 
 main_bp = Blueprint('main', __name__)
 
@@ -25,5 +25,18 @@ def index():
     if hasattr(current_app, 'extensions') and 'user_service' in current_app.extensions:
         if not g.current_user:
             return redirect(url_for('auth.login'))
-    
+
     return render_template('index.html')
+
+
+@main_bp.route('/set-locale', methods=['POST'])
+def set_locale():
+    """Persist user's preferred locale in the session.
+
+    CSRF is enforced globally via Flask-WTF. Only whitelisted locales are stored.
+    """
+    locale = request.form.get('locale', 'en')
+    supported = current_app.config.get('BABEL_SUPPORTED_LOCALES', ['en', 'fr'])
+    if locale in supported:
+        session['locale'] = locale
+    return redirect(request.referrer or url_for('main.index'))

@@ -1,81 +1,130 @@
 {% extends "base.html" %}
-{% block title %}Gestion utilisateurs - Admin{% endblock %}
+{% block title %}{{ _('User Directory') }} - WP Launcher{% endblock %}
+
 {% block content %}
-<div class="container mt-5">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="text-light mb-0"><i class="fas fa-users-cog me-2"></i>Gestion des utilisateurs</h2>
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createUserModal">
-            <i class="fas fa-plus me-2"></i>Ajouter un utilisateur
+<header class="page-header">
+    <div class="page-header-text">
+        <h1 class="page-title">{{ _('User Directory') }}</h1>
+        <p class="page-subtitle">{{ _('Manage platform access, roles and integrated development profiles for WP Launcher architects.') }}</p>
+    </div>
+    <div class="page-header-actions">
+        <button class="btn-primary-dark" data-bs-toggle="modal" data-bs-target="#createUserModal">
+            <span class="material-symbols-outlined">person_add</span>
+            <span>{{ _('Invite User') }}</span>
         </button>
     </div>
-    <div class="card bg-dark text-light">
-        <div class="card-body">
-            <table class="table table-dark">
-                <thead>
-                    <tr>
-                        <th>Avatar</th>
-                        <th>Nom d'utilisateur</th>
-                        <th>Email</th>
-                        <th>Rôle</th>
-                        <th>GitHub</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for user in users %}
-                    <tr>
-                        <td><img src="{{ user.get_avatar_url() }}" class="rounded-circle" width="32" height="32"></td>
-                        <td>{{ user.username }}</td>
-                        <td>{{ user.email }}</td>
-                        <td><span class="badge bg-{{ 'danger' if user.role == 'admin' else 'primary' }}">{{ user.role }}</span></td>
-                        <td>{% if user.github_username %}<i class="fab fa-github me-1"></i>{{ user.github_username }}{% endif %}</td>
-                        <td>
-                            {% if user.username != g.current_user.username %}
-                            <button class="btn btn-sm btn-danger" onclick="deleteUser('{{ user.username }}')">Supprimer</button>
+</header>
+
+<section class="users-card">
+    <div class="users-table-wrap">
+        <table class="users-table">
+            <thead>
+                <tr>
+                    <th>{{ _('Profile') }}</th>
+                    <th>{{ _('User Details') }}</th>
+                    <th>{{ _('Email Contact') }}</th>
+                    <th>{{ _('Access Role') }}</th>
+                    <th>{{ _('GitHub Sync') }}</th>
+                    <th class="text-end">{{ _('Actions') }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr>
+                    <td>
+                        <img src="{{ user.get_avatar_url() }}" alt="{{ user.username }}" class="users-avatar">
+                    </td>
+                    <td>
+                        <div class="users-name">{{ user.get_display_name() if user.get_display_name() else user.username }}</div>
+                        <div class="users-meta">
+                            {% if user.created_at %}
+                                {{ _('Joined') }} {{ user.created_at.strftime('%b %Y') if user.created_at.strftime else user.created_at }}
+                            {% else %}
+                                @{{ user.username }}
                             {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                        </div>
+                    </td>
+                    <td class="users-email">{{ user.email }}</td>
+                    <td>
+                        <span class="role-pill role-{{ user.role }}">
+                            <span class="role-dot"></span>
+                            {% if user.role == 'admin' %}{{ _('Admin') }}{% else %}{{ _('Developer') }}{% endif %}
+                        </span>
+                    </td>
+                    <td class="users-github">
+                        {% if user.github_username %}
+                            <span class="github-tag">
+                                <span class="material-symbols-outlined">code</span>
+                                @{{ user.github_username }}
+                            </span>
+                        {% else %}
+                            <span class="github-empty">{{ _('Not linked') }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        {% if user.username != g.current_user.username %}
+                        <button class="users-action-btn users-action-danger"
+                                onclick="deleteUser('{{ user.username }}')"
+                                title="{{ _('Delete user') }}" aria-label="{{ _('Delete user') }}">
+                            <span class="material-symbols-outlined">delete</span>
+                        </button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="users-table-footer">
+        <span class="users-count">{{ _('Showing') }} {{ users|length }} {{ _('user(s)') }}</span>
+        <div class="users-pagination">
+            <button class="ghost-btn" disabled>{{ _('Previous') }}</button>
+            <button class="ghost-btn" disabled>{{ _('Next') }}</button>
         </div>
     </div>
-</div>
+</section>
 
-<!-- Modal Créer Utilisateur -->
+<!-- Modal Create User -->
 <div class="modal fade" id="createUserModal" tabindex="-1">
     <div class="modal-dialog">
-        <div class="modal-content bg-dark text-light">
+        <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="fas fa-user-plus me-2"></i>Ajouter un utilisateur</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <h5 class="modal-title">
+                    <span class="material-symbols-outlined">person_add</span>
+                    {{ _('Invite a new user') }}
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form id="createUserForm" onsubmit="createUser(event)">
                 <div class="modal-body">
-                    <div class="mb-3">
-                        <label for="username" class="form-label">Nom d'utilisateur *</label>
-                        <input type="text" class="form-control bg-secondary text-light border-secondary" id="username" name="username" required>
+                    <div class="profile-field">
+                        <label for="new-username">{{ _('Username') }} *</label>
+                        <input type="text" class="form-control" id="new-username" name="username" required>
                     </div>
-                    <div class="mb-3">
-                        <label for="email" class="form-label">Email *</label>
-                        <input type="email" class="form-control bg-secondary text-light border-secondary" id="email" name="email" required>
+                    <div class="profile-field">
+                        <label for="new-email">{{ _('Email Address') }} *</label>
+                        <input type="email" class="form-control" id="new-email" name="email" required>
                     </div>
-                    <div class="mb-3">
-                        <label for="password" class="form-label">Mot de passe *</label>
-                        <input type="password" class="form-control bg-secondary text-light border-secondary" id="password" name="password" required minlength="6">
-                        <small class="text-muted">Minimum 6 caractères</small>
+                    <div class="profile-field">
+                        <label for="new-password">{{ _('Password') }} *</label>
+                        <input type="password" class="form-control" id="new-password" name="password" required minlength="6">
+                        <small class="profile-field-hint">{{ _('Minimum 6 characters') }}</small>
                     </div>
-                    <div class="mb-3">
-                        <label for="role" class="form-label">Rôle *</label>
-                        <select class="form-select bg-secondary text-light border-secondary" id="role" name="role" required>
-                            <option value="developer">Developer</option>
-                            <option value="admin">Admin</option>
+                    <div class="profile-field">
+                        <label for="new-role">{{ _('Access Role') }} *</label>
+                        <select class="form-control" id="new-role" name="role" required>
+                            <option value="developer">{{ _('Developer') }}</option>
+                            <option value="admin">{{ _('Admin') }}</option>
                         </select>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                    <button type="submit" class="btn btn-primary">Créer l'utilisateur</button>
+                    <button type="button" class="ghost-btn" data-bs-dismiss="modal">{{ _('Cancel') }}</button>
+                    <button type="submit" class="btn-primary-teal">
+                        <span class="material-symbols-outlined">add</span>
+                        <span>{{ _('Create user') }}</span>
+                    </button>
                 </div>
             </form>
         </div>
@@ -92,35 +141,35 @@ async function createUser(event) {
         password: form.password.value,
         role: form.role.value
     };
-    
     try {
         const response = await fetch('/admin/api/users/create', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(formData)
         });
-        
         const data = await response.json();
         if (data.success) {
             location.reload();
         } else {
-            alert('Erreur: ' + data.error);
+            if (window.showError) showError(data.error);
+            else alert('Error: ' + data.error);
         }
     } catch (error) {
-        alert('Erreur: ' + error.message);
+        if (window.showError) showError(error.message);
+        else alert('Error: ' + error.message);
     }
 }
 
 async function deleteUser(username) {
-    if (!confirm(`Supprimer l'utilisateur ${username} ?`)) return;
+    if (!confirm(`{{ _("Delete user") }} ${username} ?`)) return;
     const response = await fetch(`/admin/api/users/${username}`, {method: 'DELETE'});
     if (response.ok) {
-        alert('Utilisateur supprimé avec succès');
+        if (window.showSuccess) showSuccess('{{ _("User deleted") }}');
         location.reload();
     } else {
-        alert('Erreur lors de la suppression');
+        if (window.showError) showError('{{ _("Deletion failed") }}');
+        else alert('Error');
     }
 }
 </script>
 {% endblock %}
-

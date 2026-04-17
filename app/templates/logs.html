@@ -1,32 +1,37 @@
 {% extends "base.html" %}
 
-{% block title %}Gestion des Logs - WordPress Launcher{% endblock %}
+{% block title %}{{ _('Logs management') }} - {{ _('WordPress Launcher') }}{% endblock %}
 
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/logs.css') }}">
 {% endblock %}
 
 {% block content %}
+<header class="page-header">
+    <div class="page-header-text">
+        <h1 class="page-title">{{ _('Logs') }}</h1>
+        <p class="page-subtitle">{{ _('Browse, filter and clean application and system logs.') }}</p>
+    </div>
+    <div class="page-header-actions action-buttons">
+        <button class="btn-refresh" onclick="refreshLogs()">
+            <i class="fas fa-sync-alt"></i>
+            <span>{{ _('Refresh') }}</span>
+        </button>
+        <button class="btn-delete-all" onclick="deleteAllLogs()">
+            <i class="fas fa-trash-alt"></i>
+            <span>{{ _('Delete all') }}</span>
+        </button>
+    </div>
+</header>
+
+<div class="page-content">
     <div class="logs-container">
         <!-- Panneau de gauche -->
         <div class="logs-left-panel">
-            <!-- Actions et Tabs -->
+            <!-- Tabs (générés dynamiquement) -->
             <div class="logs-actions">
-                <!-- Tabs -->
                 <div class="logs-tabs" id="logsTabs">
                     <!-- Les onglets seront générés dynamiquement -->
-                </div>
-                
-                <!-- Boutons d'action -->
-                <div class="action-buttons">
-                    <button class="btn-refresh" onclick="refreshLogs()">
-                        <i class="fas fa-sync-alt"></i>
-                        Actualiser
-                    </button>
-                    <button class="btn-delete-all" onclick="deleteAllLogs()">
-                        <i class="fas fa-trash-alt"></i>
-                        Tout supprimer
-                    </button>
                 </div>
             </div>
             <!-- Content -->
@@ -41,9 +46,9 @@
         <div class="logs-right-panel">
             <div class="log-viewer" id="logViewer">
                 <div class="log-viewer-header">
-                    <h3 class="log-viewer-title" id="logViewerTitle">Aucun fichier sélectionné</h3>
+                    <h3 class="log-viewer-title" id="logViewerTitle">{{ _('No file selected') }}</h3>
                     <div class="log-viewer-controls">
-                        <label for="linesSelector">Lignes:</label>
+                        <label for="linesSelector">{{ _('Lines:') }}</label>
                         <select class="lines-selector" id="linesSelector" onchange="loadLogContent()">
                             <option value="50">50</option>
                             <option value="100">100</option>
@@ -57,12 +62,13 @@
                     </div>
                 </div>
                 <div class="log-content" id="logContent">
-                    Sélectionnez un fichier de log pour voir son contenu...
+                    {{ _('Select a log file to view its content...') }}
                 </div>
                 <div class="log-stats" id="logStats"></div>
             </div>
         </div>
     </div>
+</div>
 {% endblock %}
 
 {% block scripts %}

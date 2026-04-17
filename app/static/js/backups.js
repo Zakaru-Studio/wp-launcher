@@ -54,7 +54,10 @@ async function refreshBackupList() {
             document.getElementById('mongodb-count').textContent = data.total_mongodb;
             currentMongodbPage = 1;
             renderMongodbPage();
-            
+
+            // Storage panel (Stitch aside)
+            updateStoragePanel();
+
             showToast('Liste des backups actualisée', 'success');
         } else {
             showToast('Erreur lors du chargement des backups', 'error');
@@ -184,43 +187,86 @@ function nextMongodbPage() {
 }
 
 /**
- * Crée l'HTML pour un item de backup
+ * Crée l'HTML pour un item de backup (Stitch .backup-row layout)
  */
 function createBackupItem(backup, type) {
     const date = new Date(backup.created * 1000);
     const dateStr = date.toLocaleString('fr-FR', {
         year: 'numeric',
-        month: 'long',
+        month: 'short',
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit'
     });
-    
+
+    const typeLabel = type === 'mysql' ? 'MySQL' : 'MongoDB';
+    const iconClass = type === 'mysql' ? 'fas fa-database' : 'fas fa-leaf';
+    const destination = type === 'mysql'
+        ? 'Local / backups/mysql'
+        : 'Local / backups/mongodb';
+
+    const sizeMb = backup.size_mb != null ? backup.size_mb : 0;
+    const sizeDisplay = sizeMb >= 1024
+        ? `${(sizeMb / 1024).toFixed(1)} GB`
+        : `${sizeMb} MB`;
+
     return `
-        <div class="backup-item">
-            <div class="backup-info">
-                <div class="backup-project-name">
-                    <i class="fas fa-folder me-2"></i>${backup.project}
-                </div>
-                <div class="backup-meta">
-                    <span>
-                        <i class="fas fa-calendar"></i>${dateStr}
-                    </span>
-                    <span>
-                        <i class="fas fa-hdd"></i>${backup.size_mb} MB
-                    </span>
-                    <span>
-                        <i class="fas fa-file"></i>${backup.filename}
-                    </span>
+        <div class="backup-row" data-backup-project="${backup.project}" data-backup-file="${backup.filename}">
+            <div class="backup-row-name">
+                <div class="backup-row-icon"><i class="${iconClass}"></i></div>
+                <div class="backup-row-text">
+                    <div class="backup-row-title">${backup.project}</div>
+                    <div class="backup-row-dest">
+                        <i class="fas fa-cloud"></i>
+                        <span>${destination}</span>
+                    </div>
                 </div>
             </div>
-            <div class="backup-actions">
-                <button class="backup-action-btn danger" onclick="deleteBackup('${type}', '${backup.project}', '${backup.filename}')" title="Supprimer">
+            <div class="backup-row-type-cell">
+                <span class="backup-row-type">${typeLabel}</span>
+            </div>
+            <div class="backup-row-size-cell">
+                <div class="backup-row-size">${sizeDisplay}</div>
+                <div class="backup-row-time">${dateStr}</div>
+            </div>
+            <div class="backup-row-status">
+                <span class="backup-status-pill">
+                    <span class="status-dot"></span>
+                    Complete
+                </span>
+                <button class="backup-kebab backup-action-btn danger" onclick="deleteBackup('${type}', '${backup.project}', '${backup.filename}')" title="Supprimer">
                     <i class="fas fa-trash"></i>
                 </button>
             </div>
         </div>
     `;
+}
+
+/**
+ * Met à jour le panneau Storage Utilization
+ */
+function updateStoragePanel() {
+    const totalMbMysql = allMysqlBackups.reduce((sum, b) => sum + (b.size_mb || 0), 0);
+    const totalMbMongo = allMongodbBackups.reduce((sum, b) => sum + (b.size_mb || 0), 0);
+    const totalMb = totalMbMysql + totalMbMongo;
+    const totalGb = totalMb / 1024;
+
+    const usedEl = document.getElementById('storage-used-value');
+    const fillEl = document.getElementById('storage-bar-fill');
+    const dbEl = document.getElementById('storage-db-value');
+    const filesEl = document.getElementById('storage-files-value');
+    if (!usedEl || !fillEl) return;
+
+    usedEl.textContent = totalGb >= 1 ? totalGb.toFixed(1) : totalMb.toFixed(0);
+    const unitEl = document.getElementById('storage-used-unit');
+    if (unitEl) unitEl.textContent = totalGb >= 1 ? 'GB Used' : 'MB Used';
+
+    // Progress relative to a soft 100 GB ceiling (arbitrary cap)
+    const pct = Math.max(2, Math.min(100, (totalGb / 100) * 100));
+    fillEl.style.width = pct + '%';
+
+    if (dbEl) dbEl.textContent = (totalMbMysql / 1024).toFixed(1) + ' GB';
+    if (filesEl) filesEl.textContent = (totalMbMongo / 1024).toFixed(1) + ' GB';
 }
 
 /**

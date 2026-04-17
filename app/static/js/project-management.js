@@ -810,67 +810,90 @@ function createProjectHTML(project) {
         }
     }
 
+    // Meta row values (Stitch: domain  ·  server  ·  PHP)
+    const host = (window.APP_CONFIG && window.APP_CONFIG.host) ? window.APP_CONFIG.host : 'localhost';
+    const metaDomain = project.status === 'active' && project.port
+        ? `${host}:${project.port}`
+        : (project.domain || projectTypeLabel);
+    const metaServer = project.server || (isNextjsApp ? 'Next.js Runtime' : 'Docker Compose');
+    const metaTech = isNextjsApp
+        ? (project.node_version ? `Node ${project.node_version}` : 'Node.js')
+        : (project.php_version ? `PHP ${project.php_version}` : 'PHP 8.2');
+
+    // Status pill (running / stopped / error-like)
+    let statusPillClass = 'status-pill-stopped';
+    let statusLabel = 'Stopped';
+    let statusDotAnim = '';
+    if (project.status === 'active') {
+        statusPillClass = 'status-pill-running';
+        statusLabel = 'Running';
+        statusDotAnim = 'is-pulse';
+    } else if (project.status === 'error') {
+        statusPillClass = 'status-pill-error';
+        statusLabel = 'Update Failed';
+    }
+
+    // Icon square colorway
+    let iconBoxClass = 'instance-icon';
+    if (project.status === 'error') iconBoxClass = 'instance-icon instance-icon-error';
+    else if (project.status !== 'active') iconBoxClass = 'instance-icon instance-icon-muted';
+
     return `
-        <div class="project-item" 
-             data-project="${project.name}" 
+        <div class="project-item instance-strip ${project.status === 'error' ? 'is-error' : ''} ${project.status === 'active' ? 'is-active' : 'is-inactive'}"
+             data-project="${project.name}"
              data-project-name="${project.name}"
              data-port-wordpress="${project.port || ''}"
              data-port-phpmyadmin="${project.pma_port || ''}"
              data-port-mailpit="${project.mailpit_port || ''}">
-            <div class="project-header" ${project.status === 'active' ? `onclick="toggleProject('${project.name}')" style="cursor: pointer;"` : 'style="cursor: default;"'}>
-                <div class="project-header-info">
-                    <div class="project-title">
-                        <i class="${mainIcon} me-2"></i>
-                        ${project.name}
-                        ${project.status === 'active' ? `
-                        <button class="project-toggle-btn" onclick="event.stopPropagation(); toggleProject('${project.name}')" title="Masquer/Afficher les détails">
-                            <i class="fas fa-chevron-down"></i>
-                        </button>
-                        ` : ''}
-                    </div>    
 
-                    ${project.status === 'active' && mainUrl ? `
-                        <div class="project-ip-port">
-                        <a href="${mainUrl}" target="_blank" class="ip-port-link" onclick="event.stopPropagation();">
-                        <i class="fas fa-external-link-alt me-1"></i>
-                                ${window.APP_CONFIG.host}:${project.port}
-                            </a>
-                        </div>
-                    ` : ''}
-                    
-                    ${(project.nextjs_enabled || project.has_nextjs) && project.nextjs_port ? `
-                        <div class="project-nextjs-ip" style="display: none;">
-                            <i class="fab fa-react me-1"></i>
-                            <a href="${getProjectUrl(project.nextjs_port)}" target="_blank" class="nextjs-ip-link" onclick="event.stopPropagation();">
-                                Next.js: ${window.APP_CONFIG.host}:${project.nextjs_port}
-                            </a>
-                        </div>
-                    ` : ''}
+            <div class="instance-strip-main" ${project.status === 'active' ? `onclick="toggleProject('${project.name}')" style="cursor: pointer;"` : 'style="cursor: default;"'}>
+                <div class="${iconBoxClass}">
+                    <i class="${mainIcon}"></i>
                 </div>
-                <div class="project-header-right" onclick="event.stopPropagation();">
+
+                <div class="instance-body">
+                    <div class="instance-title-row">
+                        <h3 class="project-title instance-title">${project.name}</h3>
+                        <span class="status-pill ${statusPillClass}">
+                            <span class="status-dot ${statusDotAnim}"></span>
+                            ${statusLabel}
+                        </span>
+                        ${project.status === 'active' ? `
+                            <button class="project-toggle-btn instance-toggle" onclick="event.stopPropagation(); toggleProject('${project.name}')" title="Masquer/Afficher les détails">
+                                <i class="fas fa-chevron-down"></i>
+                            </button>
+                        ` : ''}
+                    </div>
+                    <div class="instance-meta">
+                        <span class="instance-meta-item"><i class="fas fa-link"></i> ${metaDomain}</span>
+                        <span class="instance-meta-item"><i class="fas fa-server"></i> ${metaServer}</span>
+                        <span class="instance-meta-item"><i class="fas fa-code"></i> ${metaTech}</span>
+                    </div>
+                </div>
+
+                <div class="instance-actions project-header-right" onclick="event.stopPropagation();">
                     ${isWordPress ? `
                     <div class="btn-group">
-                        <button class="btn-modern btn-secondary instance-dropdown-btn" type="button" 
-                                data-bs-toggle="dropdown" 
-                                data-bs-auto-close="true" 
-                                aria-expanded="false" 
+                        <button class="instance-ghost-btn instance-dropdown-btn" type="button"
+                                data-bs-toggle="dropdown"
+                                data-bs-auto-close="true"
+                                aria-expanded="false"
                                 title="Instances de développement"
                                 id="instances-dropdown-${project.name}">
-                            <i class="fas fa-server me-1"></i>
-                            <span class="instance-label">Instance principale</span>
-                            <i class="fas fa-chevron-down ms-1"></i>
+                            <i class="fas fa-server"></i>
+                            <span class="instance-label">Instance</span>
+                            <i class="fas fa-chevron-down"></i>
                         </button>
-                        <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end instances-dropdown" 
+                        <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end instances-dropdown"
                             data-project="${project.name}">
                             <li class="dropdown-header"><small>Chargement...</small></li>
                         </ul>
                     </div>
                     ` : ''}
+
                     <div class="btn-group">
-                        <button class="btn-modern btn-secondary" type="button" data-bs-toggle="dropdown" data-bs-auto-close="true" aria-expanded="false" title="Commandes du projet">
-                            <i class="fas fa-bolt me-1"></i>
-                            Commandes
-                            <i class="fas fa-chevron-down ms-1"></i>
+                        <button class="instance-icon-btn" type="button" data-bs-toggle="dropdown" data-bs-auto-close="true" aria-expanded="false" title="Commandes du projet">
+                            <i class="fas fa-cog"></i>
                         </button>
                         <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end project-commands-dropdown">
                             <li><a class="dropdown-item" href="#" onclick="restartProject('${project.name}'); return false;"><i class="fas fa-redo me-2"></i>Redémarrer</a></li>
@@ -890,22 +913,28 @@ function createProjectHTML(project) {
                             <li><a class="dropdown-item text-danger" href="#" onclick="deleteProject('${project.name}'); return false;"><i class="fas fa-trash me-2"></i>Supprimer le site</a></li>
                         </ul>
                     </div>
-                    
+
+                    ${project.status === 'active' && mainUrl ? `
+                        <a href="${mainUrl}/wp-admin/" target="_blank" class="instance-link-btn" onclick="event.stopPropagation();">
+                            WP Admin
+                        </a>
+                    ` : ''}
+
                     ${project.status === 'active' ? `
-                        <button class="btn-modern btn-running" onclick="stopProject('${project.name}')" title="Arrêter le projet">
-                            Running
-                            <i class="fas fa-stop me-1"></i>
+                        <button class="instance-pill-btn pill-danger btn-modern btn-running" onclick="stopProject('${project.name}')" title="Arrêter le projet">
+                            <span class="material-symbols-outlined">stop</span>
+                            <span>Stop</span>
                         </button>
                     ` : `
-                        <button class="btn-modern btn-start" onclick="startProject('${project.name}')" title="Démarrer le projet">
-                            Start
-                            <i class="fas fa-play me-1"></i>
+                        <button class="instance-pill-btn pill-success btn-modern btn-start" onclick="startProject('${project.name}')" title="Démarrer le projet">
+                            <span class="material-symbols-outlined">play_arrow</span>
+                            <span>Start</span>
                         </button>
                     `}
                 </div>
             </div>
 
-            <div class="project-content ${project.status === 'active' ? 'open' : 'collapsed'}" id="project-content-${project.name}">
+            <div class="project-content ${project.status === 'active' ? 'collapsed' : 'collapsed'}" id="project-content-${project.name}">
                 ${project.status === 'active' ? `
                     ${services.length > 0 ? `
                         <div class="services-grid">
@@ -944,8 +973,7 @@ function createProjectHTML(project) {
                             </p>
                         </div>
                     `}
-                ` : `
-                `}
+                ` : ``}
             </div>
         </div>
     `;

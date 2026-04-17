@@ -1175,6 +1175,18 @@ class TaskManager {
             badgeCountElement.textContent = count;
             badgeCountElement.style.display = count > 0 ? 'flex' : 'none';
         }
+
+        // Sync the new bell badges in the topbar (desktop + mobile)
+        ['notif-bell-badge', 'notif-bell-badge-mobile'].forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.textContent = count;
+            if (count > 0) {
+                el.removeAttribute('hidden');
+            } else {
+                el.setAttribute('hidden', '');
+            }
+        });
     }
 
     /**

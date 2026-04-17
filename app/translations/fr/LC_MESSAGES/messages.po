@@ -1,0 +1,219 @@
+# French translations for WP Launcher.
+# Copyright (C) 2026 WP Launcher
+# This file is distributed under the same license as the WP Launcher project.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: WP Launcher 1.0\n"
+"Report-Msgid-Bugs-To: support@zakaru.studio\n"
+"POT-Creation-Date: 2026-04-17 00:00+0000\n"
+"PO-Revision-Date: 2026-04-17 00:00+0000\n"
+"Last-Translator: WP Launcher Team <support@zakaru.studio>\n"
+"Language: fr\n"
+"Language-Team: fr <LL@li.org>\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+msgid "Sites"
+msgstr "Sites"
+
+msgid "Logs"
+msgstr "Logs"
+
+msgid "Monitoring"
+msgstr "Monitoring"
+
+msgid "Backups"
+msgstr "Sauvegardes"
+
+msgid "Settings"
+msgstr "Paramètres"
+
+msgid "Add"
+msgstr "Ajouter"
+
+msgid "Search instances..."
+msgstr "Rechercher une instance..."
+
+msgid "Search backups..."
+msgstr "Rechercher une sauvegarde..."
+
+msgid "Sync"
+msgstr "Synchroniser"
+
+msgid "Sync All"
+msgstr "Tout synchroniser"
+
+msgid "Notifications"
+msgstr "Notifications"
+
+msgid "My profile"
+msgstr "Mon profil"
+
+msgid "User management"
+msgstr "Gestion des utilisateurs"
+
+msgid "Logout"
+msgstr "Déconnexion"
+
+msgid "Managed Sites"
+msgstr "Sites gérés"
+
+msgid "Overview and status of all active WordPress environments."
+msgstr "Vue d'ensemble et statut de tous les environnements WordPress actifs."
+
+msgid "Total Instances"
+msgstr "Instances totales"
+
+msgid "Running"
+msgstr "Actif"
+
+msgid "Stopped"
+msgstr "Arrêté"
+
+msgid "Needs Attention"
+msgstr "Attention requise"
+
+msgid "Filter"
+msgstr "Filtrer"
+
+msgid "Sort"
+msgstr "Trier"
+
+msgid "Site"
+msgstr "Site"
+
+msgid "Admin"
+msgstr "Admin"
+
+msgid "WP Admin"
+msgstr "Admin WP"
+
+msgid "Start"
+msgstr "Démarrer"
+
+msgid "Stop"
+msgstr "Arrêter"
+
+msgid "Restart"
+msgstr "Redémarrer"
+
+msgid "View Logs"
+msgstr "Voir les logs"
+
+msgid "Restore Backup"
+msgstr "Restaurer la sauvegarde"
+
+msgid "Manage and restore point-in-time snapshots of your infrastructure."
+msgstr "Gérez et restaurez des instantanés ponctuels de votre infrastructure."
+
+msgid "Backup Now"
+msgstr "Sauvegarder maintenant"
+
+msgid "Storage Utilization"
+msgstr "Utilisation du stockage"
+
+msgid "Database"
+msgstr "Base de données"
+
+msgid "Files"
+msgstr "Fichiers"
+
+msgid "Retention Policy"
+msgstr "Politique de rétention"
+
+msgid "Configure Policies"
+msgstr "Configurer les politiques"
+
+msgid "Server Telemetry"
+msgstr "Télémétrie serveur"
+
+msgid "Real-time resource utilization across all active instances."
+msgstr "Utilisation des ressources en temps réel sur toutes les instances actives."
+
+msgid "CPU Usage"
+msgstr "Utilisation CPU"
+
+msgid "Memory Allocation"
+msgstr "Allocation mémoire"
+
+msgid "Disk I/O"
+msgstr "E/S disque"
+
+msgid "Active Node Topology"
+msgstr "Topologie des nœuds actifs"
+
+msgid "View Full Map"
+msgstr "Voir la carte complète"
+
+msgid "Theme"
+msgstr "Thème"
+
+msgid "Language"
+msgstr "Langue"
+
+msgid "English"
+msgstr "Anglais"
+
+msgid "French"
+msgstr "Français"
+
+msgid "Cancel"
+msgstr "Annuler"
+
+msgid "Confirm"
+msgstr "Confirmer"
+
+msgid "Save"
+msgstr "Enregistrer"
+
+msgid "Delete"
+msgstr "Supprimer"
+
+msgid "Username"
+msgstr "Nom d'utilisateur"
+
+msgid "Password"
+msgstr "Mot de passe"
+
+msgid "Login"
+msgstr "Connexion"
+
+msgid "Sign in with GitHub"
+msgstr "Se connecter avec GitHub"
+
+msgid "Connection"
+msgstr "Connexion"
+
+msgid "Type"
+msgstr "Type"
+
+msgid "Status"
+msgstr "Statut"
+
+msgid "Actions"
+msgstr "Actions"
+
+msgid "Loading..."
+msgstr "Chargement..."
+
+msgid "No projects yet"
+msgstr "Aucun projet pour le moment"
+
+msgid "Create your first WordPress project to get started"
+msgstr "Créez votre premier projet WordPress pour commencer"
+
+msgid "Add a site"
+msgstr "Ajouter un site"
+
+msgid "Project name"
+msgstr "Nom du projet"
+
+msgid "Project type"
+msgstr "Type de projet"
+
+msgid "Database type"
+msgstr "Type de base de données"

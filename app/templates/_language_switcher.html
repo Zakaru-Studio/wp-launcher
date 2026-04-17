@@ -1,0 +1,5 @@
+<form method="POST" action="{{ url_for('main.set_locale') }}" class="language-switcher">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" name="locale" value="en" class="lang-btn {{ 'active' if g.current_locale == 'en' else '' }}">EN</button>
+    <button type="submit" name="locale" value="fr" class="lang-btn {{ 'active' if g.current_locale == 'fr' else '' }}">FR</button>
+</form>

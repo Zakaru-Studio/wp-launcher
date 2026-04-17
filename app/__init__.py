@@ -16,6 +16,17 @@ from flask_wtf.csrf import CSRFProtect, CSRFError
 # Instance CSRF globale — exposée pour permettre `@csrf.exempt` sur des routes précises
 csrf = CSRFProtect()
 
+# ==================== I18N (Flask-Babel) ====================
+# Fallback gracieux si Flask-Babel n'est pas installé : on fournit un objet factice
+# qui permet à l'app de démarrer et remplace gettext par un passthrough.
+try:
+    from flask_babel import Babel
+    babel = Babel()
+    _BABEL_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    babel = None
+    _BABEL_AVAILABLE = False
+
 def create_app():
     """Factory pour créer et configurer l'application Flask"""
     from dotenv import load_dotenv
@@ -34,6 +45,34 @@ def create_app():
     # Exposer l'instance csrf via les extensions Flask pour usage dans les blueprints
     app.extensions['csrf'] = csrf
 
+    # ==================== I18N (Flask-Babel) ====================
+    # L'app Flask a son root_path dans app/config/ — on pointe donc explicitement
+    # vers app/translations via un chemin absolu pour éviter toute ambiguïté.
+    _translations_dir = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), 'translations'
+    )
+    app.config['BABEL_DEFAULT_LOCALE'] = 'en'
+    app.config['BABEL_SUPPORTED_LOCALES'] = ['en', 'fr']
+    app.config['BABEL_TRANSLATION_DIRECTORIES'] = _translations_dir
+
+    def get_locale():
+        from flask import session, request as _req
+        # 1. Cookie / session preference
+        if 'locale' in session:
+            return session['locale']
+        # 2. Browser preference
+        return _req.accept_languages.best_match(app.config['BABEL_SUPPORTED_LOCALES']) or 'en'
+
+    if _BABEL_AVAILABLE and babel is not None:
+        # init_app enregistre déjà babel dans app.extensions['babel']
+        # (sous forme de BabelConfiguration). Ne pas l'écraser.
+        babel.init_app(app, locale_selector=get_locale)
+    else:
+        # Fallback gracieux : expose un _() identité dans les templates Jinja
+        app.jinja_env.globals['_'] = lambda s, **kw: s
+        app.jinja_env.globals['gettext'] = lambda s, **kw: s
+        app.jinja_env.globals['ngettext'] = lambda s, p, n, **kw: s if n == 1 else p
+
     @app.errorhandler(CSRFError)
     def handle_csrf_error(e):
         from flask import jsonify, request
@@ -48,12 +87,23 @@ def create_app():
     def load_user():
         """Charger l'utilisateur connecté avant chaque requête"""
         g.current_user = None
-        
+
         # Si système auth activé, charger l'utilisateur
         if hasattr(app, 'extensions') and 'user_service' in app.extensions:
             if 'user_id' in session:
                 user_service = app.extensions['user_service']
                 g.current_user = user_service.get_user_by_id(session['user_id'])
+
+        # Expose la locale courante à tous les templates via g.current_locale
+        if _BABEL_AVAILABLE:
+            try:
+                from flask_babel import get_locale as babel_get_locale
+                _loc = babel_get_locale()
+                g.current_locale = str(_loc) if _loc else 'en'
+            except Exception:
+                g.current_locale = 'en'
+        else:
+            g.current_locale = 'en'
     
     # Context processor pour rendre les variables globales disponibles dans tous les templates
     @app.context_processor

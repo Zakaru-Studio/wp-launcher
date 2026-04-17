@@ -1,25 +1,29 @@
 /* ========================================
-   MONITORING - Arctic Void Theme
+   MONITORING — Architectural Ledger
    ======================================== */
 
 .monitor-card {
-    background: var(--bg-dark-card);
-    border: 1px solid var(--glass-border);
+    background: var(--al-surface-container-lowest);
+    border: none;
     border-radius: var(--border-radius);
     padding: 1.5rem;
-    backdrop-filter: blur(10px);
     margin-bottom: 1.25rem;
+    box-shadow: var(--shadow-ambient);
+    position: relative;
+    overflow: hidden;
 }
 
 .monitor-card h3 {
-    color: var(--text-primary);
-    font-size: 1.05rem;
-    font-weight: 600;
+    color: var(--al-primary);
+    font-size: 0.85rem;
+    font-weight: 700;
     margin-bottom: 1rem;
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    letter-spacing: -0.02em;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-family: 'Manrope', sans-serif;
 }
 
 .monitoring-grid {
@@ -30,16 +34,19 @@
 }
 
 .stat-value {
-    font-size: 2.2rem;
-    font-weight: 700;
-    color: var(--primary-color);
-    font-family: 'JetBrains Mono', monospace;
+    font-size: 2.4rem;
+    font-weight: 800;
+    color: var(--al-primary);
+    font-family: 'Manrope', sans-serif;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
 }
 
 .stat-label {
-    color: var(--text-secondary);
-    font-size: 0.85rem;
+    color: var(--al-on-surface-variant);
+    font-size: 0.82rem;
     margin-top: 0.5rem;
+    letter-spacing: 0.02em;
 }
 
 .chart-container {
@@ -56,7 +63,7 @@
 
 .docker-list::-webkit-scrollbar { width: 6px; }
 .docker-list::-webkit-scrollbar-track { background: transparent; }
-.docker-list::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.12); border-radius: 3px; }
+.docker-list::-webkit-scrollbar-thumb { background: var(--al-outline-variant); border-radius: 3px; }
 
 /* Process list */
 .process-list {
@@ -67,19 +74,21 @@
 
 .process-list::-webkit-scrollbar { width: 6px; }
 .process-list::-webkit-scrollbar-track { background: transparent; }
-.process-list::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.12); border-radius: 3px; }
+.process-list::-webkit-scrollbar-thumb { background: var(--al-outline-variant); border-radius: 3px; }
 
 .process-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.7rem;
-    border-bottom: 1px solid var(--glass-border);
+    padding: 0.75rem 0.85rem;
+    border: none;
     transition: var(--transition);
+    border-radius: var(--border-radius-small);
+    margin-bottom: 0.25rem;
 }
 
 .process-item:hover {
-    background: rgba(56, 189, 248, 0.03);
+    background: var(--al-surface-container-high);
 }
 
 .process-info { flex: 1; }
@@ -90,59 +99,62 @@
 }
 
 .btn-kill {
-    background: rgba(248, 113, 113, 0.06);
-    border: 1px solid rgba(248, 113, 113, 0.15);
-    color: #f87171;
-    padding: 0.35rem 0.7rem;
-    border-radius: 6px;
+    background: var(--al-error-container);
+    border: none;
+    color: var(--al-on-error-container);
+    padding: 0.35rem 0.8rem;
+    border-radius: var(--border-radius-small);
     cursor: pointer;
     transition: var(--transition);
     font-size: 0.82rem;
     font-family: inherit;
+    font-weight: 500;
 }
 
 .btn-kill:hover {
-    background: rgba(248, 113, 113, 0.1);
-    border-color: rgba(248, 113, 113, 0.3);
+    background: #ffb4ab;
     transform: translateY(-1px);
 }
 
 /* Docker containers */
 .docker-container-item {
-    background: rgba(10, 15, 30, 0.5);
-    border: 1px solid var(--glass-border);
-    border-radius: 10px;
-    padding: 1rem;
+    background: var(--al-surface-container-low);
+    border: none;
+    border-radius: var(--border-radius);
+    padding: 1rem 1.15rem;
     margin-bottom: 0.6rem;
     transition: var(--transition);
 }
 
 .docker-container-item:hover {
-    border-color: rgba(56, 189, 248, 0.08);
+    background: var(--al-surface-container-lowest);
+    box-shadow: var(--shadow-medium);
+    transform: translateY(-1px);
 }
 
 .container-stats {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 0.75rem;
-    margin-top: 0.5rem;
+    margin-top: 0.75rem;
 }
 
 .container-stat { text-align: center; }
 
 .container-stat-label {
-    font-size: 0.72rem;
-    color: var(--text-muted);
+    font-size: 0.68rem;
+    color: var(--al-on-surface-variant);
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    font-weight: 500;
+    letter-spacing: 0.06em;
+    font-weight: 600;
 }
 
 .container-stat-value {
-    font-size: 1.15rem;
-    font-weight: 600;
-    color: var(--primary-color);
-    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: var(--al-primary);
+    font-family: 'Manrope', sans-serif;
+    letter-spacing: -0.02em;
 }
 
 /* Backup items in monitoring */
@@ -150,10 +162,10 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.85rem;
-    background: rgba(10, 15, 30, 0.5);
-    border: 1px solid var(--glass-border);
-    border-radius: 10px;
+    padding: 0.85rem 1rem;
+    background: var(--al-surface-container-low);
+    border: none;
+    border-radius: var(--border-radius);
     margin-bottom: 0.5rem;
 }
 
@@ -167,14 +179,25 @@
     display: flex;
     gap: 0.35rem;
     margin-bottom: 1.5rem;
-    border-bottom: 1px solid var(--glass-border);
+    border: none;
     padding-bottom: 0;
+    position: relative;
+}
+
+.monitoring-tabs::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 1px;
+    background: var(--al-surface-container-high);
 }
 
 .monitoring-tab {
     background: transparent;
     border: none;
-    color: var(--text-muted);
+    color: var(--al-on-surface-variant);
     padding: 0.85rem 1.25rem;
     font-size: 0.92rem;
     cursor: pointer;
@@ -183,35 +206,212 @@
     margin-bottom: -1px;
     font-family: inherit;
     font-weight: 500;
+    position: relative;
+    z-index: 1;
 }
 
 .monitoring-tab:hover {
-    color: var(--text-primary);
-    background: rgba(56, 189, 248, 0.03);
+    color: var(--al-primary);
+    background: var(--al-surface-container-high);
+    border-radius: var(--border-radius-small) var(--border-radius-small) 0 0;
 }
 
 .monitoring-tab.active {
-    color: var(--primary-color);
-    border-bottom-color: var(--primary-color);
+    color: var(--al-secondary);
+    border-bottom-color: var(--al-secondary);
+    font-weight: 600;
 }
 
 .tab-content-pane { display: none; }
 .tab-content-pane.active { display: block; }
 
 .refresh-btn {
-    background: var(--primary-gradient);
+    background: var(--al-primary);
     border: none;
-    color: white;
-    padding: 0.45rem 0.9rem;
-    border-radius: 8px;
+    color: var(--al-on-primary);
+    padding: 0.5rem 1rem;
+    border-radius: var(--border-radius-small);
     cursor: pointer;
     font-size: 0.85rem;
-    font-weight: 500;
+    font-weight: 700;
     transition: var(--transition);
     font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    box-shadow: 0 4px 16px -6px rgba(12, 20, 39, 0.25);
 }
 
 .refresh-btn:hover {
-    box-shadow: 0 4px 16px rgba(56, 189, 248, 0.2);
-    transform: translateY(-2px);
+    background: var(--al-primary-container);
+    box-shadow: 0 8px 24px -8px rgba(12, 20, 39, 0.35);
+    transform: translateY(-1px);
 }
+
+/* ============================================
+   Stitch refresh range pill (1H/6H/24H)
+   ============================================ */
+.refresh-range-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px;
+    background: var(--al-surface-container-low);
+    border-radius: 10px;
+    box-shadow: 0 2px 8px -2px rgba(12, 20, 39, 0.04);
+}
+.range-btn {
+    padding: 6px 14px;
+    border: none;
+    background: transparent;
+    color: var(--al-on-surface-variant);
+    font-family: 'Inter', sans-serif;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.range-btn:hover { color: var(--al-on-surface); }
+.range-btn.active {
+    background: var(--al-surface-container-lowest);
+    color: var(--al-on-surface);
+    box-shadow: 0 2px 4px -1px rgba(12, 20, 39, 0.06);
+}
+
+/* Metric subline (under big number) */
+.metric-subline {
+    margin-top: 6px;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.75rem;
+    color: var(--al-on-surface-variant);
+}
+
+/* Topology card */
+.topology-card {
+    background: var(--al-surface-container-lowest);
+    border-radius: var(--border-radius);
+    box-shadow: 0 12px 40px -10px rgba(12, 20, 39, 0.06);
+    overflow: hidden;
+}
+.topology-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 22px 22px 14px;
+}
+.topology-title {
+    font-family: 'Manrope', sans-serif;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--al-primary);
+    letter-spacing: -0.015em;
+    margin: 0;
+}
+.topology-link {
+    color: var(--al-secondary);
+    text-decoration: none;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.topology-link:hover { color: var(--al-secondary-fixed-dim); }
+
+.topology-canvas {
+    position: relative;
+    height: 240px;
+    background: var(--al-surface-container-low);
+    background-image: radial-gradient(circle at 2px 2px, rgba(197,198,205,0.4) 1px, transparent 0);
+    background-size: 16px 16px;
+    mask-image: linear-gradient(to bottom, white, transparent 95%);
+    -webkit-mask-image: linear-gradient(to bottom, white, transparent 95%);
+}
+.topology-lines {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    color: var(--al-secondary-container);
+    pointer-events: none;
+}
+.topology-node {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    z-index: 2;
+}
+.topology-node-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: var(--al-surface-container-lowest);
+    color: var(--al-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 16px -4px rgba(12, 20, 39, 0.1);
+    position: relative;
+}
+.topology-node-primary .topology-node-icon {
+    border: 1.5px solid var(--al-secondary-fixed);
+}
+.topology-node-secondary .topology-node-icon {
+    width: 40px;
+    height: 40px;
+    color: var(--al-on-surface-variant);
+    border: 1px solid var(--al-outline-variant);
+}
+.topology-node-label {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--al-on-surface-variant);
+}
+.topology-node-primary {
+    top: 50%;
+    left: 20%;
+    transform: translateY(-50%);
+}
+.topology-node-top {
+    top: 24%;
+    left: 64%;
+    transform: translateY(-50%);
+}
+.topology-node-bottom {
+    top: 76%;
+    left: 64%;
+    transform: translateY(-50%);
+}
+.topology-node-dot {
+    position: absolute;
+    bottom: 4px;
+    right: 12px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--al-secondary);
+    box-shadow: 0 0 0 2px var(--al-surface-container-lowest);
+    animation: pulseDot 2s ease-in-out infinite;
+}
+@keyframes pulseDot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+}
+
+@media (max-width: 768px) {
+    .topology-canvas { height: 200px; }
+    .topology-node-primary { left: 12%; }
+    .topology-node-top, .topology-node-bottom { left: 62%; }
+}
+
+/* Dark mode: small tweaks */
+[data-theme="dark"] .topology-canvas {
+    background-image: radial-gradient(circle at 2px 2px, rgba(100,101,108,0.35) 1px, transparent 0);
+}
+

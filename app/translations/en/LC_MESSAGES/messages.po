@@ -1,0 +1,219 @@
+# English translations for WP Launcher.
+# Copyright (C) 2026 WP Launcher
+# This file is distributed under the same license as the WP Launcher project.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: WP Launcher 1.0\n"
+"Report-Msgid-Bugs-To: support@zakaru.studio\n"
+"POT-Creation-Date: 2026-04-17 00:00+0000\n"
+"PO-Revision-Date: 2026-04-17 00:00+0000\n"
+"Last-Translator: WP Launcher Team <support@zakaru.studio>\n"
+"Language: en\n"
+"Language-Team: en <LL@li.org>\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+msgid "Sites"
+msgstr "Sites"
+
+msgid "Logs"
+msgstr "Logs"
+
+msgid "Monitoring"
+msgstr "Monitoring"
+
+msgid "Backups"
+msgstr "Backups"
+
+msgid "Settings"
+msgstr "Settings"
+
+msgid "Add"
+msgstr "Add"
+
+msgid "Search instances..."
+msgstr "Search instances..."
+
+msgid "Search backups..."
+msgstr "Search backups..."
+
+msgid "Sync"
+msgstr "Sync"
+
+msgid "Sync All"
+msgstr "Sync All"
+
+msgid "Notifications"
+msgstr "Notifications"
+
+msgid "My profile"
+msgstr "My profile"
+
+msgid "User management"
+msgstr "User management"
+
+msgid "Logout"
+msgstr "Logout"
+
+msgid "Managed Sites"
+msgstr "Managed Sites"
+
+msgid "Overview and status of all active WordPress environments."
+msgstr "Overview and status of all active WordPress environments."
+
+msgid "Total Instances"
+msgstr "Total Instances"
+
+msgid "Running"
+msgstr "Running"
+
+msgid "Stopped"
+msgstr "Stopped"
+
+msgid "Needs Attention"
+msgstr "Needs Attention"
+
+msgid "Filter"
+msgstr "Filter"
+
+msgid "Sort"
+msgstr "Sort"
+
+msgid "Site"
+msgstr "Site"
+
+msgid "Admin"
+msgstr "Admin"
+
+msgid "WP Admin"
+msgstr "WP Admin"
+
+msgid "Start"
+msgstr "Start"
+
+msgid "Stop"
+msgstr "Stop"
+
+msgid "Restart"
+msgstr "Restart"
+
+msgid "View Logs"
+msgstr "View Logs"
+
+msgid "Restore Backup"
+msgstr "Restore Backup"
+
+msgid "Manage and restore point-in-time snapshots of your infrastructure."
+msgstr "Manage and restore point-in-time snapshots of your infrastructure."
+
+msgid "Backup Now"
+msgstr "Backup Now"
+
+msgid "Storage Utilization"
+msgstr "Storage Utilization"
+
+msgid "Database"
+msgstr "Database"
+
+msgid "Files"
+msgstr "Files"
+
+msgid "Retention Policy"
+msgstr "Retention Policy"
+
+msgid "Configure Policies"
+msgstr "Configure Policies"
+
+msgid "Server Telemetry"
+msgstr "Server Telemetry"
+
+msgid "Real-time resource utilization across all active instances."
+msgstr "Real-time resource utilization across all active instances."
+
+msgid "CPU Usage"
+msgstr "CPU Usage"
+
+msgid "Memory Allocation"
+msgstr "Memory Allocation"
+
+msgid "Disk I/O"
+msgstr "Disk I/O"
+
+msgid "Active Node Topology"
+msgstr "Active Node Topology"
+
+msgid "View Full Map"
+msgstr "View Full Map"
+
+msgid "Theme"
+msgstr "Theme"
+
+msgid "Language"
+msgstr "Language"
+
+msgid "English"
+msgstr "English"
+
+msgid "French"
+msgstr "French"
+
+msgid "Cancel"
+msgstr "Cancel"
+
+msgid "Confirm"
+msgstr "Confirm"
+
+msgid "Save"
+msgstr "Save"
+
+msgid "Delete"
+msgstr "Delete"
+
+msgid "Username"
+msgstr "Username"
+
+msgid "Password"
+msgstr "Password"
+
+msgid "Login"
+msgstr "Login"
+
+msgid "Sign in with GitHub"
+msgstr "Sign in with GitHub"
+
+msgid "Connection"
+msgstr "Connection"
+
+msgid "Type"
+msgstr "Type"
+
+msgid "Status"
+msgstr "Status"
+
+msgid "Actions"
+msgstr "Actions"
+
+msgid "Loading..."
+msgstr "Loading..."
+
+msgid "No projects yet"
+msgstr "No projects yet"
+
+msgid "Create your first WordPress project to get started"
+msgstr "Create your first WordPress project to get started"
+
+msgid "Add a site"
+msgstr "Add a site"
+
+msgid "Project name"
+msgstr "Project name"
+
+msgid "Project type"
+msgstr "Project type"
+
+msgid "Database type"
+msgstr "Database type"

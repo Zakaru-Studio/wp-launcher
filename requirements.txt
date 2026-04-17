@@ -11,6 +11,9 @@ Flask-SocketIO==5.4.0
 python-socketio==5.11.0
 eventlet==0.33.3
 
+# I18n
+Flask-Babel==4.0.0
+
 # Utilities
 chardet==5.2.0
 python-dotenv==1.0.0

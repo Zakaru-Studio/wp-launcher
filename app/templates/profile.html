@@ -1,150 +1,169 @@
 {% extends "base.html" %}
 
-{% block title %}Mon profil - WP Launcher{% endblock %}
+{% block title %}{{ _('Profile Settings') }} - WP Launcher{% endblock %}
 
 {% block content %}
-<div class="container mt-5" style="max-height: calc(100vh - 150px); overflow-y: auto; padding-bottom: 3rem;">
-    <div class="row">
-        <div class="col-md-8 offset-md-2">
-            <h2 class="mb-4 text-light">
-                <i class="fas fa-user-circle me-2"></i>Mon profil
-            </h2>
-
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                        <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
-                            {{ message }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                        </div>
-                    {% endfor %}
-                {% endif %}
-            {% endwith %}
-
-            <!-- Avatar Section -->
-            <div class="card bg-dark text-light mb-4">
-                <div class="card-body">
-                    <h5 class="card-title"><i class="fas fa-image me-2"></i>Photo de profil</h5>
-                    <div class="text-center mb-3">
-                        <img src="{{ g.current_user.get_avatar_url() }}" alt="Avatar" 
-                             class="rounded-circle" style="width: 150px; height: 150px; object-fit: cover; border: 3px solid #667eea;">
-                    </div>
-                    <form method="POST" action="{{ url_for('auth.upload_avatar') }}" enctype="multipart/form-data">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <div class="mb-3">
-                            <input type="file" class="form-control bg-secondary text-light border-secondary"
-                                   name="avatar" accept="image/*" required>
-                        </div>
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-upload me-2"></i>Changer la photo
-                        </button>
-                    </form>
-                    {% if g.current_user.github_username %}
-                        <small class="text-muted d-block mt-2">
-                            <i class="fab fa-github me-1"></i>Photo importée depuis GitHub
-                        </small>
-                    {% endif %}
-                </div>
-            </div>
-
-            <!-- Profile Information -->
-            <div class="card bg-dark text-light mb-4">
-                <div class="card-body">
-                    <h5 class="card-title"><i class="fas fa-info-circle me-2"></i>Informations personnelles</h5>
-                    <form method="POST" action="{{ url_for('auth.update_profile') }}">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label for="first_name" class="form-label">Prénom</label>
-                                <input type="text" class="form-control bg-secondary text-light border-secondary" 
-                                       id="first_name" name="first_name" value="{{ g.current_user.first_name or '' }}">
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label for="last_name" class="form-label">Nom</label>
-                                <input type="text" class="form-control bg-secondary text-light border-secondary" 
-                                       id="last_name" name="last_name" value="{{ g.current_user.last_name or '' }}">
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <label for="email" class="form-label">Email</label>
-                            <input type="email" class="form-control bg-secondary text-light border-secondary" 
-                                   id="email" name="email" value="{{ g.current_user.email }}" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Nom d'utilisateur</label>
-                            <input type="text" class="form-control bg-secondary text-light border-secondary" 
-                                   value="{{ g.current_user.username }}" disabled>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Rôle</label>
-                            <input type="text" class="form-control bg-secondary text-light border-secondary" 
-                                   value="{{ g.current_user.role }}" disabled>
-                        </div>
-                        <button type="submit" class="btn btn-success">
-                            <i class="fas fa-save me-2"></i>Enregistrer les modifications
-                        </button>
-                    </form>
-                </div>
-            </div>
-
-            <!-- SSH Key Section -->
-            <div class="card bg-dark text-light mb-4">
-                <div class="card-body">
-                    <h5 class="card-title"><i class="fas fa-key me-2"></i>Clé SSH publique</h5>
-                    {% if g.current_user.github_username %}
-                        <div class="alert alert-info">
-                            <i class="fab fa-github me-2"></i>Clé SSH importée automatiquement depuis GitHub
-                        </div>
-                    {% endif %}
-                    <div class="mb-3">
-                        <label for="ssh_key" class="form-label">Votre clé SSH publique</label>
-                        <textarea class="form-control bg-secondary text-light border-secondary" 
-                                  id="ssh_key" rows="5" 
-                                  placeholder="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ...">{{ g.current_user.ssh_public_key or '' }}</textarea>
-                        <small class="text-muted">
-                            Cette clé sera utilisée pour l'accès SSH à vos instances de développement.
-                            <br>Pour générer une clé: <code>ssh-keygen -t rsa -b 4096 -C "votre@email.com"</code>
-                        </small>
-                    </div>
-                    <button type="button" class="btn btn-primary" onclick="updateSSHKey()">
-                        <i class="fas fa-save me-2"></i>Mettre à jour la clé SSH
-                    </button>
-                </div>
-            </div>
-
-            <div class="text-center">
-                <a href="{{ url_for('main.index') }}" class="btn btn-secondary">
-                    <i class="fas fa-arrow-left me-2"></i>Retour au dashboard
-                </a>
-            </div>
-        </div>
+<header class="page-header">
+    <div class="page-header-text">
+        <h1 class="page-title">{{ _('Profile Settings') }}</h1>
+        <p class="page-subtitle">{{ _('Manage your personal information and architectural access levels.') }}</p>
     </div>
+</header>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        <div class="profile-flash">
+        {% for category, message in messages %}
+            <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        {% endfor %}
+        </div>
+    {% endif %}
+{% endwith %}
+
+<div class="profile-grid">
+    <!-- Avatar card -->
+    <aside class="profile-avatar-card">
+        <div class="profile-avatar-frame">
+            <img src="{{ g.current_user.get_avatar_url() }}" alt="{{ _('Avatar') }}" class="profile-avatar-img">
+            <button type="button" class="profile-avatar-edit" onclick="document.getElementById('avatar-input').click()" aria-label="{{ _('Change picture') }}">
+                <span class="material-symbols-outlined">photo_camera</span>
+            </button>
+        </div>
+        <div class="profile-avatar-meta">
+            <div class="profile-avatar-title">{{ _('Profile picture') }}</div>
+            <div class="profile-avatar-hint">{{ _('JPG, GIF or PNG. Max size of 800K') }}</div>
+        </div>
+        <form method="POST" action="{{ url_for('auth.upload_avatar') }}" enctype="multipart/form-data" id="avatar-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="file" id="avatar-input" name="avatar" accept="image/*" hidden onchange="document.getElementById('avatar-form').submit()">
+            <button type="button" class="btn-primary-teal" onclick="document.getElementById('avatar-input').click()">
+                <span class="material-symbols-outlined">cloud_upload</span>
+                <span>{{ _('Upload New Picture') }}</span>
+            </button>
+        </form>
+        <button type="button" class="btn-text-muted">{{ _('Remove') }}</button>
+        {% if g.current_user.github_username %}
+        <small class="profile-avatar-source">
+            <span class="material-symbols-outlined">verified</span>
+            {{ _('Imported from GitHub') }}
+        </small>
+        {% endif %}
+    </aside>
+
+    <!-- Personal info card -->
+    <section class="profile-info-card">
+        <header class="profile-card-header">
+            <h2 class="profile-card-title">{{ _('Personal information') }}</h2>
+            <p class="profile-card-subtitle">{{ _('Update your core identity details on the ledger.') }}</p>
+        </header>
+
+        <form method="POST" action="{{ url_for('auth.update_profile') }}" class="profile-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="profile-form-row two-cols">
+                <div class="profile-field">
+                    <label for="first_name">{{ _('First Name') }}</label>
+                    <input type="text" id="first_name" name="first_name" class="form-control"
+                           value="{{ g.current_user.first_name or '' }}" placeholder="{{ _('e.g. Jane') }}">
+                </div>
+                <div class="profile-field">
+                    <label for="last_name">{{ _('Last Name') }}</label>
+                    <input type="text" id="last_name" name="last_name" class="form-control"
+                           value="{{ g.current_user.last_name or '' }}" placeholder="{{ _('e.g. Doe') }}">
+                </div>
+            </div>
+
+            <div class="profile-field">
+                <label for="email">{{ _('Email Address') }}</label>
+                <input type="email" id="email" name="email" class="form-control"
+                       value="{{ g.current_user.email }}" required>
+            </div>
+
+            <div class="profile-field">
+                <label for="username-display">{{ _('Username') }}</label>
+                <div class="profile-input-prefixed">
+                    <span class="profile-input-prefix">@</span>
+                    <input type="text" id="username-display" class="form-control"
+                           value="{{ g.current_user.username }}" disabled>
+                </div>
+            </div>
+
+            <div class="profile-field">
+                <label for="role-display">{{ _('Role Configuration') }}</label>
+                <div class="profile-input-prefixed">
+                    <span class="material-symbols-outlined profile-input-prefix-icon">shield_person</span>
+                    <input type="text" id="role-display" class="form-control"
+                           value="{% if g.current_user.role == 'admin' %}{{ _('System Administrator') }}{% else %}{{ _('Developer') }}{% endif %}" disabled>
+                </div>
+                <small class="profile-field-hint">{{ _('Defines platform access level and permissions.') }}</small>
+            </div>
+
+            <div class="profile-form-actions">
+                <button type="submit" class="btn-primary-teal">
+                    <span class="material-symbols-outlined">save</span>
+                    <span>{{ _('Save Changes') }}</span>
+                </button>
+            </div>
+        </form>
+    </section>
 </div>
+
+<!-- SSH Key card -->
+<section class="profile-info-card profile-card-full">
+    <header class="profile-card-header">
+        <h2 class="profile-card-title">{{ _('SSH Public Key') }}</h2>
+        <p class="profile-card-subtitle">{{ _('Used for SSH access to your development instances.') }}</p>
+    </header>
+
+    {% if g.current_user.github_username %}
+    <div class="profile-info-banner">
+        <span class="material-symbols-outlined">verified</span>
+        <span>{{ _('SSH key auto-imported from GitHub') }}</span>
+    </div>
+    {% endif %}
+
+    <div class="profile-field">
+        <label for="ssh_key">{{ _('Your SSH public key') }}</label>
+        <textarea id="ssh_key" rows="5" class="form-control profile-textarea"
+                  placeholder="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ...">{{ g.current_user.ssh_public_key or '' }}</textarea>
+        <small class="profile-field-hint">
+            {{ _('To generate a key:') }}
+            <code>ssh-keygen -t rsa -b 4096 -C "your@email.com"</code>
+        </small>
+    </div>
+
+    <div class="profile-form-actions">
+        <button type="button" class="btn-primary-teal" onclick="updateSSHKey()">
+            <span class="material-symbols-outlined">save</span>
+            <span>{{ _('Update SSH key') }}</span>
+        </button>
+    </div>
+</section>
 
 <script>
 async function updateSSHKey() {
     const sshKey = document.getElementById('ssh_key').value.trim();
-    
     try {
         const response = await fetch('{{ url_for("auth.update_ssh_key") }}', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ssh_key: sshKey })
         });
-        
         const data = await response.json();
-        
         if (data.success) {
-            alert('Clé SSH mise à jour avec succès!');
+            if (window.showSuccess) showSuccess('{{ _("SSH key updated successfully") }}');
+            else alert('{{ _("SSH key updated successfully") }}');
         } else {
-            alert('Erreur: ' + data.error);
+            if (window.showError) showError(data.error);
+            else alert('Error: ' + data.error);
         }
     } catch (error) {
-        alert('Erreur lors de la mise à jour de la clé SSH');
+        if (window.showError) showError('{{ _("Failed to update SSH key") }}');
+        else alert('Error');
     }
 }
 </script>
 {% endblock %}
-

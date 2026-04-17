@@ -1,35 +1,39 @@
-<!-- Barre latérale des tâches -->
-<div id="task-sidebar" class="task-sidebar">
-    <div class="task-sidebar-header">
-        <div class="task-sidebar-title">
-            <i class="fas fa-tasks me-2"></i>
-            Tâches
+<!--
+  Notifications popover (anchored to the topbar bell).
+  Legacy ids/classes kept so task-manager.js keeps working unchanged.
+-->
+<div id="task-sidebar" class="task-popover" role="dialog" aria-modal="false" aria-labelledby="task-popover-title" hidden>
+    <header class="task-popover-header">
+        <div class="task-popover-title" id="task-popover-title">
+            <i class="fas fa-bell"></i>
+            <span>{{ _('Notifications') }}</span>
             <span class="task-count" id="task-count">0</span>
         </div>
-    </div>
-    <div class="task-sidebar-content" id="task-sidebar-content">
+        <button type="button" class="task-popover-close" onclick="toggleTaskSidebar()" aria-label="{{ _('Close') }}">
+            <i class="fas fa-xmark"></i>
+        </button>
+    </header>
+
+    <div class="task-popover-body" id="task-sidebar-content">
         <div class="task-sidebar-empty" id="task-sidebar-empty">
             <i class="fas fa-inbox"></i>
-            <p>Aucune tâche en cours</p>
+            <p>{{ _('No notifications yet') }}</p>
         </div>
     </div>
-    <div class="task-sidebar-footer">
-        <div class="d-flex gap-2 w-100">
-            <button class="flex-1 delete-all-tasks" onclick="clearAllTasks()" title="Supprimer toutes les tâches">
-                <i class="fas fa-trash me-1"></i>Supprimer les notifications
-            </button>
-        </div>
-    </div>
+
+    <footer class="task-popover-footer">
+        <button class="task-popover-clear delete-all-tasks" onclick="clearAllTasks()" type="button">
+            <i class="fas fa-trash-can"></i>
+            <span>{{ _('Clear all') }}</span>
+        </button>
+    </footer>
 </div>
 
-<!-- Badge flottant pour les tâches -->
-<button id="task-sidebar-badge" class="task-sidebar-badge" onclick="toggleTaskSidebar()">
+<!-- Backdrop (taps outside to close on mobile) -->
+<div id="task-popover-backdrop" class="task-popover-backdrop" onclick="toggleTaskSidebar()"></div>
+
+<!-- Legacy hidden FAB-style badge: kept in DOM for backward-compat with older JS references -->
+<button id="task-sidebar-badge" class="task-sidebar-badge" hidden aria-hidden="true" tabindex="-1">
     <i class="fas fa-tasks"></i>
-    <span class="task-badge-count" id="task-badge-count" style="display: none;">0</span>
+    <span class="task-badge-count" id="task-badge-count" hidden>0</span>
 </button>
-
-
-
-
-
-

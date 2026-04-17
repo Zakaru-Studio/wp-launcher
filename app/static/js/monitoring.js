@@ -55,10 +55,27 @@ function updateRefreshInterval() {
     const select = document.getElementById('refresh-interval');
     refreshIntervalDelay = parseInt(select.value);
     startAutoRefresh();
-    
+
     if (typeof showToast === 'function') {
         showToast(`Actualisation réglée sur ${refreshIntervalDelay / 1000}s`, 'success');
     }
+}
+
+/**
+ * Stitch refresh range pill toggle (5S/10S/30S/1M)
+ */
+function setRefreshRange(ms, btn) {
+    refreshIntervalDelay = ms;
+    const select = document.getElementById('refresh-interval');
+    if (select) {
+        const val = String(ms);
+        if ([...select.options].some(o => o.value === val)) {
+            select.value = val;
+        }
+    }
+    document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    startAutoRefresh();
 }
 
 // Nettoyer l'intervalle quand on quitte la page
@@ -223,22 +240,35 @@ async function loadSystemStats() {
         const data = await response.json();
 
         if (data.success) {
-            // CPU
+            // CPU (Stitch: "42" with % implicit; we keep a compact label)
             updateChart(cpuChart, data.cpu.percent);
-            document.getElementById('cpu-value').textContent = data.cpu.percent.toFixed(1) + '%';
+            const cpuEl = document.getElementById('cpu-value');
+            if (cpuEl) cpuEl.innerHTML = `${data.cpu.percent.toFixed(0)}<span class="metric-value-unit">%</span>`;
 
-            // Memory
+            // Memory — new Stitch layout: big number = used GB, total displayed separately
             updateChart(memoryChart, data.memory.percent);
-            document.getElementById('memory-value').textContent = data.memory.percent.toFixed(1) + '%';
-            document.getElementById('memory-used').textContent = data.memory.used.toFixed(1);
-            document.getElementById('memory-total').textContent = data.memory.total.toFixed(1);
+            const memValueEl = document.getElementById('memory-value');
+            if (memValueEl) memValueEl.innerHTML = `${data.memory.used.toFixed(1)}<span class="metric-value-unit">GB</span>`;
+            const memUsed = document.getElementById('memory-used');
+            const memTotal = document.getElementById('memory-total');
+            if (memUsed) memUsed.textContent = data.memory.used.toFixed(1);
+            if (memTotal) memTotal.textContent = data.memory.total.toFixed(1);
+            const memPct = document.getElementById('memory-pct-label');
+            if (memPct) memPct.textContent = data.memory.percent.toFixed(1);
+            const memFill = document.getElementById('memory-progress-fill');
+            if (memFill) memFill.style.width = `${data.memory.percent}%`;
+            const memTotalDisplay = document.getElementById('memory-total-display');
+            if (memTotalDisplay) memTotalDisplay.textContent = `/ ${data.memory.total.toFixed(1)} GB`;
 
             // Disk
             diskChart.data.datasets[0].data = [data.disk.percent, 100 - data.disk.percent];
             diskChart.update();
-            document.getElementById('disk-value').textContent = data.disk.percent.toFixed(1) + '%';
-            document.getElementById('disk-used').textContent = data.disk.used.toFixed(1);
-            document.getElementById('disk-total').textContent = data.disk.total.toFixed(1);
+            const diskEl = document.getElementById('disk-value');
+            if (diskEl) diskEl.innerHTML = `${data.disk.percent.toFixed(0)}<span class="metric-value-unit">%</span>`;
+            const diskUsed = document.getElementById('disk-used');
+            const diskTotal = document.getElementById('disk-total');
+            if (diskUsed) diskUsed.textContent = data.disk.used.toFixed(1);
+            if (diskTotal) diskTotal.textContent = data.disk.total.toFixed(1);
         }
     } catch (error) {
         console.error('Erreur chargement stats système:', error);

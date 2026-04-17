@@ -88,7 +88,7 @@ function showConfigModal(title, config, schema, configType, wpTypeData = null) {
         
         wpTypeSectionHtml = `
             <div class="wordpress-type-selector mb-4">
-                <h6 class="text-light mb-3">
+                <h6 class="mb-3">
                     <i class="fas fa-server me-2"></i>Type de site WordPress
                 </h6>
                 <div class="row g-3">
@@ -100,7 +100,7 @@ function showConfigModal(title, config, schema, configType, wpTypeData = null) {
                                 <div class="form-check">
                                     <input class="form-check-input" type="radio" name="wordpress_type" 
                                            id="wp_type_${typeKey}" value="${typeKey}" ${isChecked}>
-                                    <label class="form-check-label text-light" for="wp_type_${typeKey}">
+                                    <label class="form-check-label" for="wp_type_${typeKey}">
                                         <div style="font-size: 1.15em; margin-bottom: 5px;">
                                             <i class="${typeInfo.icon}"></i>
                                         </div>
@@ -122,9 +122,9 @@ function showConfigModal(title, config, schema, configType, wpTypeData = null) {
     const modalHtml = `
         <div class="modal fade" id="configModal" tabindex="-1" aria-labelledby="configModalLabel" aria-hidden="true">
             <div class="modal-dialog modal-lg">
-                <div class="modal-content bg-dark">
+                <div class="modal-content">
                     <div class="modal-header border-secondary">
-                        <h5 class="modal-title text-light" id="configModalLabel">
+                        <h5 class="modal-title" id="configModalLabel">
                             <i class="fas fa-cog me-2"></i>${title} - ${currentConfigProject}
                         </h5>
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -209,7 +209,7 @@ function generateConfigFields(config, schema) {
         
         fieldsHtml += `
             <div class="col-md-6 mb-3">
-                <label for="config_${key}" class="form-label text-light">
+                <label for="config_${key}" class="form-label">
                     ${fieldSchema.label}
                     ${fieldSchema.description ? `<i class="fas fa-info-circle ms-1" title="${fieldSchema.description}"></i>` : ''}
                 </label>
@@ -225,7 +225,7 @@ function generateConfigFields(config, schema) {
  * Génère un champ d'entrée basé sur le type
  */
 function generateFieldInput(key, fieldSchema, currentValue) {
-    const baseClasses = 'form-control bg-secondary text-light border-secondary';
+    const baseClasses = 'form-control';
     
     switch (fieldSchema.type) {
         case 'select':
@@ -263,7 +263,7 @@ function generateFieldInput(key, fieldSchema, currentValue) {
                            data-checked-label="${checkedLabel}"
                            data-unchecked-label="${uncheckedLabel}"
                            value="${isChecked ? checkedValue : uncheckedValue}">
-                    <label class="form-check-label text-light" for="config_${key}">
+                    <label class="form-check-label" for="config_${key}">
                         ${isChecked ? checkedLabel : uncheckedLabel}
                     </label>
                 </div>

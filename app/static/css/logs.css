@@ -1,11 +1,11 @@
 /* ========================================
-   LOGS - Arctic Void Theme
+   LOGS — Architectural Ledger
    ======================================== */
 
 body {
-    background: #030712;
-    color: var(--text-primary);
-    font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--al-background);
+    color: var(--al-on-background);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     margin: 0;
     padding: 0;
     min-height: 100vh;
@@ -19,16 +19,16 @@ body::before {
     position: fixed;
     inset: 0;
     background:
-        radial-gradient(ellipse 80% 50% at 50% -15%, rgba(56, 189, 248, 0.06), transparent 70%),
-        radial-gradient(ellipse 50% 60% at -5% 100%, rgba(129, 140, 248, 0.045), transparent 55%);
+        radial-gradient(ellipse 70% 50% at 50% -10%, rgba(12, 20, 39, 0.025), transparent 65%),
+        radial-gradient(ellipse 50% 60% at -5% 100%, rgba(0, 106, 97, 0.03), transparent 55%);
     pointer-events: none;
     z-index: -1;
 }
 
 .logs-page-header {
-    background: rgba(13, 21, 37, 0.65);
+    background: rgba(247, 249, 251, 0.85);
     backdrop-filter: blur(16px);
-    border-bottom: 1px solid var(--glass-border);
+    border: none;
     padding: 1rem 2rem;
     display: flex;
     align-items: center;
@@ -39,30 +39,33 @@ body::before {
     display: flex;
     align-items: center;
     gap: 1rem;
-    color: var(--text-primary);
+    color: var(--al-primary);
     font-size: 1.4rem;
-    font-weight: 600;
+    font-weight: 800;
     margin: 0;
     letter-spacing: -0.02em;
+    font-family: 'Manrope', sans-serif;
 }
 
 .btn-back {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.5rem 1rem;
-    background: var(--primary-gradient);
-    color: white;
+    padding: 0.55rem 1.1rem;
+    background: var(--al-primary);
+    color: var(--al-on-primary);
     text-decoration: none;
     border-radius: var(--border-radius-small);
-    font-weight: 500;
+    font-weight: 700;
     font-size: 0.85rem;
     transition: var(--transition);
+    box-shadow: 0 4px 16px -6px rgba(12, 20, 39, 0.25);
 }
 
 .btn-back:hover {
-    box-shadow: 0 4px 16px rgba(56, 189, 248, 0.2);
-    color: white;
+    background: var(--al-primary-container);
+    box-shadow: 0 8px 24px -8px rgba(12, 20, 39, 0.35);
+    color: var(--al-on-primary);
     text-decoration: none;
     transform: translateY(-1px);
 }
@@ -92,18 +95,20 @@ body::before {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 20px;
-    padding: 1.15rem;
-    background: var(--bg-dark-card);
+    padding: 1.25rem 1.5rem;
+    background: var(--al-surface-container-lowest);
     border-radius: var(--border-radius);
-    border: 1px solid var(--glass-border);
+    border: none;
+    box-shadow: 0 1px 3px -1px rgba(12, 20, 39, 0.04);
 }
 
 .logs-title {
-    color: var(--text-primary);
+    color: var(--al-primary);
     font-size: 1.6rem;
-    font-weight: 600;
+    font-weight: 800;
     margin: 0;
     letter-spacing: -0.02em;
+    font-family: 'Manrope', sans-serif;
 }
 
 .logs-actions {
@@ -122,7 +127,7 @@ body::before {
 
 .btn-refresh,
 .btn-delete-all {
-    padding: 0.45rem 0.9rem;
+    padding: 0.5rem 1rem;
     border: none;
     border-radius: var(--border-radius-small);
     font-weight: 500;
@@ -137,46 +142,25 @@ body::before {
     font-family: inherit;
 }
 
-.btn-refresh::before,
-.btn-delete-all::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent);
-    transition: 0.4s ease;
-}
-
-.btn-refresh:hover::before,
-.btn-delete-all:hover::before {
-    left: 100%;
-}
-
 .btn-refresh {
-    background: transparent;
-    border: 1px solid rgba(56, 189, 248, 0.2);
-    color: var(--primary-color);
+    background: var(--al-secondary-container);
+    color: var(--al-on-secondary-container);
 }
 
 .btn-refresh:hover {
-    background: rgba(56, 189, 248, 0.06);
-    border-color: rgba(56, 189, 248, 0.4);
-    color: #7dd3fc;
+    background: var(--al-secondary-fixed);
+    color: var(--al-on-secondary-container);
     transform: translateY(-1px);
 }
 
 .btn-delete-all {
-    background: transparent;
-    border: 1px solid rgba(248, 113, 113, 0.2);
-    color: #f87171;
+    background: var(--al-error-container);
+    color: var(--al-on-error-container);
 }
 
 .btn-delete-all:hover {
-    background: rgba(248, 113, 113, 0.06);
-    border-color: rgba(248, 113, 113, 0.4);
-    color: #fca5a5;
+    background: #ffb4ab;
+    color: var(--al-on-error-container);
     transform: translateY(-1px);
 }
 
@@ -187,43 +171,43 @@ body::before {
 }
 
 .log-tab {
-    padding: 0.45rem 0.9rem;
-    background: rgba(10, 15, 30, 0.5);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--border-radius-small);
-    color: var(--text-secondary);
+    padding: 0.45rem 0.95rem;
+    background: var(--al-surface-container-lowest);
+    border: none;
+    border-radius: var(--border-radius-full);
+    color: var(--al-on-surface-variant);
     cursor: pointer;
     transition: var(--transition);
     white-space: nowrap;
     font-weight: 500;
     text-transform: capitalize;
     font-size: 0.85rem;
+    box-shadow: 0 1px 2px -1px rgba(12, 20, 39, 0.04);
 }
 
 .log-tab:hover {
-    background: rgba(56, 189, 248, 0.04);
-    border-color: var(--glass-border-hover);
-    color: var(--text-primary);
+    background: var(--al-surface-container-high);
+    color: var(--al-primary);
     transform: translateY(-1px);
 }
 
 .log-tab.active {
-    background: var(--primary-gradient);
-    border-color: transparent;
-    color: white;
-    box-shadow: 0 4px 16px rgba(56, 189, 248, 0.15);
+    background: var(--al-primary);
+    color: var(--al-on-primary);
+    box-shadow: 0 4px 16px -6px rgba(12, 20, 39, 0.25);
 }
 
 .logs-content {
-    background: var(--bg-dark-card);
+    background: var(--al-surface-container-lowest);
     backdrop-filter: blur(16px);
-    border: 1px solid var(--glass-border);
+    border: none;
     border-radius: var(--border-radius);
     flex: 1;
     display: flex;
     flex-direction: column;
     min-height: 0;
     overflow: hidden;
+    box-shadow: 0 1px 3px -1px rgba(12, 20, 39, 0.04);
 }
 
 #logsTabsContent {
@@ -250,7 +234,7 @@ body::before {
 
 .tab-content::-webkit-scrollbar { width: 6px; }
 .tab-content::-webkit-scrollbar-track { background: transparent; }
-.tab-content::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.12); border-radius: 3px; }
+.tab-content::-webkit-scrollbar-thumb { background: var(--al-outline-variant); border-radius: 3px; }
 
 .log-files-grid {
     display: grid;
@@ -259,7 +243,7 @@ body::before {
     flex: 1;
     overflow-y: auto;
     scrollbar-width: thin;
-    scrollbar-color: rgba(148, 163, 184, 0.12) transparent;
+    scrollbar-color: var(--al-outline-variant) transparent;
     padding-right: 8px;
     min-height: 0;
     max-height: 100%;
@@ -267,11 +251,11 @@ body::before {
 
 .log-files-grid::-webkit-scrollbar { width: 6px; }
 .log-files-grid::-webkit-scrollbar-track { background: transparent; }
-.log-files-grid::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.12); border-radius: 3px; }
+.log-files-grid::-webkit-scrollbar-thumb { background: var(--al-outline-variant); border-radius: 3px; }
 
 .log-file-card {
-    background: rgba(10, 15, 30, 0.5);
-    border: 1px solid var(--glass-border);
+    background: var(--al-surface-container-low);
+    border: none;
     border-radius: var(--border-radius);
     padding: 1rem;
     cursor: pointer;
@@ -289,7 +273,7 @@ body::before {
     left: 0;
     right: 0;
     height: 3px;
-    background: var(--primary-gradient);
+    background: var(--al-secondary);
     transform: translateX(-100%);
     transition: transform 0.35s var(--ease, cubic-bezier(0.16, 1, 0.3, 1));
 }
@@ -299,32 +283,41 @@ body::before {
 }
 
 .log-file-card:hover {
+    background: var(--al-surface-container-lowest);
     transform: translateY(-2px);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2), 0 0 20px rgba(56, 189, 248, 0.06);
-    border-color: rgba(56, 189, 248, 0.12);
+    box-shadow: var(--shadow-ambient);
 }
 
 .log-file-card.selected {
-    border-color: rgba(56, 189, 248, 0.25);
-    background: rgba(56, 189, 248, 0.04);
-    box-shadow: 0 0 24px rgba(56, 189, 248, 0.08);
+    background: var(--al-secondary-container);
+    box-shadow: 0 0 0 2px var(--al-secondary), var(--shadow-medium);
 }
 
 .log-file-card.selected::before {
     transform: translateX(0);
 }
 
+.log-file-card.selected .log-file-name {
+    color: var(--al-on-secondary-container);
+}
+
+.log-file-card.selected .log-file-info {
+    color: var(--al-on-secondary-container);
+}
+
 .log-file-name {
-    color: var(--text-primary);
-    font-weight: 600;
+    color: var(--al-primary);
+    font-weight: 700;
     margin-bottom: 8px;
     font-size: 0.92rem;
+    font-family: 'Manrope', sans-serif;
+    letter-spacing: -0.01em;
 }
 
 .log-file-info {
     display: flex;
     justify-content: space-between;
-    color: var(--text-secondary);
+    color: var(--al-on-surface-variant);
     font-size: 0.82rem;
     margin-bottom: 10px;
 }
@@ -351,44 +344,25 @@ body::before {
     overflow: hidden;
 }
 
-.btn-view::before,
-.btn-delete::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent);
-    transition: 0.4s ease;
-}
-
-.btn-view:hover::before,
-.btn-delete:hover::before { left: 100%; }
-
 .btn-view {
-    background: transparent;
-    border: 1px solid rgba(56, 189, 248, 0.2);
-    color: var(--primary-color);
+    background: var(--al-secondary-container);
+    color: var(--al-on-secondary-container);
 }
 
 .btn-view:hover {
-    background: rgba(56, 189, 248, 0.06);
-    border-color: rgba(56, 189, 248, 0.4);
-    color: #7dd3fc;
+    background: var(--al-secondary-fixed);
+    color: var(--al-on-secondary-container);
     transform: translateY(-1px);
 }
 
 .btn-delete {
-    background: transparent;
-    border: 1px solid rgba(248, 113, 113, 0.2);
-    color: #f87171;
+    background: var(--al-error-container);
+    color: var(--al-on-error-container);
 }
 
 .btn-delete:hover {
-    background: rgba(248, 113, 113, 0.06);
-    border-color: rgba(248, 113, 113, 0.4);
-    color: #fca5a5;
+    background: #ffb4ab;
+    color: var(--al-on-error-container);
     transform: translateY(-1px);
 }
 
@@ -397,10 +371,11 @@ body::before {
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: var(--bg-dark-card);
-    border: 1px solid var(--glass-border);
+    background: var(--al-surface-container-lowest);
+    border: none;
     border-radius: var(--border-radius);
     overflow: hidden;
+    box-shadow: 0 1px 3px -1px rgba(12, 20, 39, 0.04);
 }
 
 .log-viewer.active { display: flex; }
@@ -409,17 +384,19 @@ body::before {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.85rem 1rem;
-    background: rgba(13, 21, 37, 0.6);
-    border-bottom: 1px solid var(--glass-border);
+    padding: 0.9rem 1.1rem;
+    background: var(--al-surface-container-low);
+    border: none;
     flex-shrink: 0;
 }
 
 .log-viewer-title {
-    color: var(--text-primary);
-    font-weight: 600;
+    color: var(--al-primary);
+    font-weight: 700;
     font-size: 0.95rem;
     margin: 0;
+    font-family: 'Manrope', sans-serif;
+    letter-spacing: -0.01em;
 }
 
 .log-viewer-controls {
@@ -429,30 +406,31 @@ body::before {
 }
 
 .lines-selector {
-    padding: 0.4rem 0.6rem;
-    background: var(--bg-darker-card);
-    border: 1px solid var(--glass-border);
-    border-radius: 6px;
-    color: var(--text-primary);
+    padding: 0.4rem 0.7rem;
+    background: var(--al-surface-container-lowest);
+    border: none;
+    border-radius: var(--border-radius-small);
+    color: var(--al-on-surface);
     font-size: 0.82rem;
     transition: var(--transition);
     font-family: inherit;
 }
 
 .lines-selector:focus {
-    border-color: rgba(56, 189, 248, 0.3);
+    box-shadow: 0 0 0 3px rgba(0, 106, 97, 0.12);
     outline: none;
-    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.06);
+    background: var(--al-surface-container);
 }
 
 .lines-selector option {
-    background: var(--bg-dark-card);
-    color: var(--text-primary);
+    background: var(--al-surface-container-lowest);
+    color: var(--al-on-surface);
 }
 
+/* Log content — kept dark for code readability on both themes */
 .log-content {
-    background: rgba(3, 7, 18, 0.6);
-    color: #94a3b8;
+    background: #0c1427;
+    color: #c5c6cd;
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.8rem;
     padding: 1rem;
@@ -460,20 +438,20 @@ body::before {
     overflow-y: auto;
     white-space: pre-wrap;
     word-wrap: break-word;
-    line-height: 1.5;
+    line-height: 1.55;
     scrollbar-width: thin;
-    scrollbar-color: rgba(148, 163, 184, 0.12) transparent;
+    scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
 }
 
 .log-content::-webkit-scrollbar { width: 6px; }
 .log-content::-webkit-scrollbar-track { background: transparent; }
-.log-content::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.12); border-radius: 3px; }
+.log-content::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 3px; }
 
 .log-stats {
-    padding: 0.6rem 1rem;
-    background: rgba(13, 21, 37, 0.6);
-    border-top: 1px solid var(--glass-border);
-    color: var(--text-muted);
+    padding: 0.6rem 1.1rem;
+    background: var(--al-surface-container-low);
+    border: none;
+    color: var(--al-on-surface-variant);
     font-size: 0.75rem;
     text-align: center;
     flex-shrink: 0;
@@ -482,19 +460,20 @@ body::before {
 .empty-state {
     text-align: center;
     padding: 3rem;
-    color: var(--text-muted);
+    color: var(--al-on-surface-variant);
 }
 
 .empty-state i {
     font-size: 2.5rem;
     margin-bottom: 1rem;
-    opacity: 0.35;
+    opacity: 0.3;
+    color: var(--al-outline);
 }
 
 .loading {
     text-align: center;
     padding: 3rem;
-    color: var(--text-muted);
+    color: var(--al-on-surface-variant);
 }
 
 .loading i {
@@ -503,7 +482,7 @@ body::before {
 
 @keyframes spin {
     from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+    to   { transform: rotate(360deg); }
 }
 
 /* Responsive */
@@ -536,205 +515,37 @@ body::before {
     }
     .log-files-grid { grid-template-columns: 1fr; }
     .logs-tabs { gap: 0.4rem; }
-    .log-tab { padding: 0.4rem 0.7rem; font-size: 0.78rem; }
+    .log-tab { padding: 0.4rem 0.75rem; font-size: 0.78rem; }
     .logs-right-panel { height: 300px; }
 }
 
 /* ============================================
-   LIGHT THEME OVERRIDES
+   DARK THEME OVERRIDES
    ============================================ */
-[data-theme="light"] body {
-    background: #f1f5f9;
-}
-
-[data-theme="light"] body::before {
+[data-theme="dark"] body::before {
     background:
-        radial-gradient(ellipse 80% 50% at 50% -15%, rgba(6, 182, 212, 0.08), transparent 70%),
-        radial-gradient(ellipse 50% 60% at -5% 100%, rgba(139, 92, 246, 0.05), transparent 55%);
+        radial-gradient(ellipse 70% 50% at 50% -10%, rgba(107, 216, 203, 0.05), transparent 65%),
+        radial-gradient(ellipse 50% 60% at -5% 100%, rgba(107, 216, 203, 0.03), transparent 55%);
 }
 
-[data-theme="light"] .logs-page-header {
-    background: rgba(255, 255, 255, 0.85);
-    border-bottom-color: rgba(15, 23, 42, 0.08);
+[data-theme="dark"] .logs-page-header {
+    background: rgba(12, 20, 39, 0.85);
 }
 
-[data-theme="light"] .logs-header {
-    background: #ffffff;
-    border-color: rgba(15, 23, 42, 0.08);
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+[data-theme="dark"] .log-file-card {
+    background: var(--al-surface-container-low);
 }
 
-[data-theme="light"] .btn-back {
-    background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
-    color: #ffffff;
-    box-shadow: 0 4px 16px rgba(6, 182, 212, 0.25);
+[data-theme="dark"] .log-file-card:hover {
+    background: var(--al-surface-container);
 }
 
-[data-theme="light"] .btn-back:hover {
-    box-shadow: 0 6px 22px rgba(6, 182, 212, 0.35);
-    color: #ffffff;
+[data-theme="dark"] .log-viewer-header,
+[data-theme="dark"] .log-stats {
+    background: var(--al-surface-container);
 }
 
-[data-theme="light"] .btn-refresh {
-    background: #ffffff;
-    border-color: rgba(6, 182, 212, 0.3);
-    color: var(--primary-color);
-    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
-}
-
-[data-theme="light"] .btn-refresh:hover {
-    background: rgba(6, 182, 212, 0.06);
-    border-color: rgba(6, 182, 212, 0.5);
-    color: var(--primary-hover);
-}
-
-[data-theme="light"] .btn-delete-all {
-    background: #ffffff;
-    border-color: rgba(220, 38, 38, 0.25);
-    color: #dc2626;
-    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
-}
-
-[data-theme="light"] .btn-delete-all:hover {
-    background: rgba(220, 38, 38, 0.06);
-    border-color: rgba(220, 38, 38, 0.45);
-    color: #b91c1c;
-}
-
-[data-theme="light"] .log-tab {
-    background: #ffffff;
-    border-color: rgba(15, 23, 42, 0.08);
-    color: var(--text-secondary);
-    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
-}
-
-[data-theme="light"] .log-tab:hover {
-    background: rgba(6, 182, 212, 0.04);
-    border-color: rgba(6, 182, 212, 0.2);
-    color: var(--text-primary);
-}
-
-[data-theme="light"] .log-tab.active {
-    background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
-    border-color: transparent;
-    color: #ffffff;
-    box-shadow: 0 4px 16px rgba(6, 182, 212, 0.2);
-}
-
-[data-theme="light"] .logs-content {
-    background: #ffffff;
-    border-color: rgba(15, 23, 42, 0.08);
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
-}
-
-[data-theme="light"] .log-files-grid::-webkit-scrollbar-thumb,
-[data-theme="light"] .tab-content::-webkit-scrollbar-thumb {
-    background: rgba(15, 23, 42, 0.14);
-}
-
-[data-theme="light"] .log-file-card {
-    background: #f8fafc;
-    border-color: rgba(15, 23, 42, 0.08);
-    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
-}
-
-[data-theme="light"] .log-file-card:hover {
-    background: #ffffff;
-    border-color: rgba(6, 182, 212, 0.2);
-    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06), 0 0 16px rgba(6, 182, 212, 0.04);
-}
-
-[data-theme="light"] .log-file-card.selected {
-    background: rgba(6, 182, 212, 0.05);
-    border-color: rgba(6, 182, 212, 0.35);
-    box-shadow: 0 0 24px rgba(6, 182, 212, 0.1);
-}
-
-[data-theme="light"] .log-file-name {
-    color: var(--text-primary);
-}
-
-[data-theme="light"] .log-file-info {
-    color: var(--text-secondary);
-}
-
-[data-theme="light"] .btn-view {
-    background: #ffffff;
-    border-color: rgba(6, 182, 212, 0.3);
-    color: var(--primary-color);
-}
-
-[data-theme="light"] .btn-view:hover {
-    background: rgba(6, 182, 212, 0.06);
-    border-color: rgba(6, 182, 212, 0.5);
-    color: var(--primary-hover);
-}
-
-[data-theme="light"] .btn-delete {
-    background: #ffffff;
-    border-color: rgba(220, 38, 38, 0.25);
-    color: #dc2626;
-}
-
-[data-theme="light"] .btn-delete:hover {
-    background: rgba(220, 38, 38, 0.06);
-    border-color: rgba(220, 38, 38, 0.45);
-    color: #b91c1c;
-}
-
-/* Right panel - log viewer */
-[data-theme="light"] .log-viewer {
-    background: #ffffff;
-    border-color: rgba(15, 23, 42, 0.08);
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
-}
-
-[data-theme="light"] .log-viewer-header {
-    background: #f8fafc;
-    border-bottom-color: rgba(15, 23, 42, 0.08);
-}
-
-[data-theme="light"] .log-viewer-title {
-    color: var(--text-primary);
-}
-
-[data-theme="light"] .lines-selector {
-    background: #ffffff;
-    border-color: rgba(15, 23, 42, 0.12);
-    color: var(--text-primary);
-}
-
-[data-theme="light"] .lines-selector:focus {
-    border-color: rgba(6, 182, 212, 0.4);
-    box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.08);
-}
-
-[data-theme="light"] .lines-selector option {
-    background: #ffffff;
-    color: var(--text-primary);
-}
-
-/* Log content stays dark (terminal-like, code readability) */
-/* But we soften it slightly for light theme */
-[data-theme="light"] .log-content {
-    background: #0f172a;
-    color: #cbd5e1;
-}
-
-[data-theme="light"] .log-content::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.15);
-}
-
-[data-theme="light"] .log-stats {
-    background: #f8fafc;
-    border-top-color: rgba(15, 23, 42, 0.08);
-    color: var(--text-muted);
-}
-
-[data-theme="light"] .empty-state {
-    color: var(--text-muted);
-}
-
-[data-theme="light"] .empty-state i {
-    opacity: 0.25;
+[data-theme="dark"] .log-content {
+    background: var(--al-surface-container-lowest);
+    color: #c5c6cd;
 }

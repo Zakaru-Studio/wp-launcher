@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Monitoring Système - WordPress Launcher{% endblock %}
+{% block title %}{{ _('System monitoring') }} - {{ _('WordPress Launcher') }}{% endblock %}
 
 {% block head %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -8,125 +8,196 @@
 {% endblock %}
 
 {% block content %}
-<div style="max-width: 1400px; margin: 0 auto; padding: 2rem;">
-        <!-- Onglets principaux -->
-        <div class="monitoring-tabs">
-            <button class="monitoring-tab active" onclick="switchTab('serveur')">
-                <i class="fas fa-server"></i> Serveur
-            </button>
-            <button class="monitoring-tab" onclick="switchTab('docker')">
-                <i class="fab fa-docker"></i> Docker
-            </button>
-            <button class="monitoring-tab" onclick="switchTab('processus')">
-                <i class="fas fa-tasks"></i> Processus
-            </button>
+<header class="page-header">
+    <div class="page-header-text">
+        <h1 class="page-title">{{ _('Server Telemetry') }}</h1>
+        <p class="page-subtitle">{{ _('Real-time resource utilization across all active instances.') }}</p>
+    </div>
+    <div class="page-header-actions">
+        <div class="refresh-range-pill">
+            <button class="range-btn active" onclick="setRefreshRange(5000, this)">5S</button>
+            <button class="range-btn" onclick="setRefreshRange(10000, this)">10S</button>
+            <button class="range-btn" onclick="setRefreshRange(30000, this)">30S</button>
+            <button class="range-btn" onclick="setRefreshRange(60000, this)">1M</button>
         </div>
+        <select id="refresh-interval" class="form-select form-select-sm refresh-select d-none" onchange="updateRefreshInterval()">
+            <option value="2000">{{ _('2 sec') }}</option>
+            <option value="5000" selected>{{ _('5 sec') }}</option>
+            <option value="10000">{{ _('10 sec') }}</option>
+            <option value="30000">{{ _('30 sec') }}</option>
+            <option value="60000">{{ _('1 min') }}</option>
+        </select>
+        <button class="refresh-btn" onclick="refreshServerStats()">
+            <i class="fas fa-sync-alt"></i> {{ _('Refresh') }}
+        </button>
+    </div>
+</header>
 
-        <!-- Contenu onglet Serveur -->
-        <div id="tab-serveur" class="tab-content-pane active">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h2><i class="fas fa-server"></i> Ressources du Serveur</h2>
-                <div class="d-flex gap-2 align-items-center">
-                    <label for="refresh-interval" style="color: var(--text-secondary); font-size: 0.9rem;">
-                        Actualisation :
-                    </label>
-                    <select id="refresh-interval" class="form-select form-select-sm" style="width: auto; background: var(--glass-bg); border-color: var(--glass-border); color: var(--text-primary);" onchange="updateRefreshInterval()">
-                        <option value="2000">2 sec</option>
-                        <option value="5000" selected>5 sec</option>
-                        <option value="10000">10 sec</option>
-                        <option value="30000">30 sec</option>
-                        <option value="60000">1 min</option>
-                    </select>
-                    <button class="refresh-btn" onclick="refreshServerStats()">
-                        <i class="fas fa-sync-alt"></i> Actualiser
-                    </button>
+<div class="page-content">
+    <!-- Tabs (Server / Docker / Processes) -->
+    <div class="monitoring-tabs">
+        <button class="monitoring-tab active" onclick="switchTab('serveur')">
+            <i class="fas fa-server"></i> {{ _('Server') }}
+        </button>
+        <button class="monitoring-tab" onclick="switchTab('docker')">
+            <i class="fab fa-docker"></i> {{ _('Docker') }}
+        </button>
+        <button class="monitoring-tab" onclick="switchTab('processus')">
+            <i class="fas fa-tasks"></i> {{ _('Processes') }}
+        </button>
+    </div>
+
+    <!-- Server tab (Stitch metrics row) -->
+    <div id="tab-serveur" class="tab-content-pane active">
+        <section class="metrics-row">
+            <!-- CPU -->
+            <article class="metric-card metric-card-primary">
+                <div class="metric-header">
+                    <div class="metric-header-text">
+                        <h3 class="metric-label">{{ _('CPU Usage') }}</h3>
+                        <div class="metric-value">
+                            <span class="metric-value-number" id="cpu-value">—</span>
+                            <span class="metric-trend stable" id="cpu-trend"></span>
+                        </div>
+                    </div>
+                    <div class="metric-icon"><i class="fas fa-microchip"></i></div>
                 </div>
-            </div>
-
-            <div class="monitoring-grid">
-                <!-- CPU -->
-                <div class="monitor-card">
-                    <h3><i class="fas fa-microchip"></i> CPU</h3>
-                    <div class="chart-container">
+                <div class="metric-footer">
+                    <div class="metric-inline-chart">
                         <canvas id="cpuChart"></canvas>
                     </div>
-                    <div class="text-center mt-2">
-                        <div class="stat-value" id="cpu-value">--</div>
-                        <div class="stat-label">Utilisation</div>
+                    <div class="metric-footer-labels">
+                        <span>{{ _('60 min ago') }}</span>
+                        <span>{{ _('Now') }}</span>
                     </div>
                 </div>
+            </article>
 
-                <!-- RAM -->
-                <div class="monitor-card">
-                    <h3><i class="fas fa-memory"></i> Mémoire RAM</h3>
-                    <div class="chart-container">
+            <!-- Memory -->
+            <article class="metric-card metric-card-secondary">
+                <div class="metric-header">
+                    <div class="metric-header-text">
+                        <h3 class="metric-label">{{ _('Memory Allocation') }}</h3>
+                        <div class="metric-value">
+                            <span class="metric-value-number" id="memory-value">—</span>
+                            <span class="metric-value-unit" id="memory-total-display"></span>
+                        </div>
+                        <div class="metric-subline">
+                            <span id="memory-used">—</span> / <span id="memory-total">—</span> GB
+                        </div>
+                    </div>
+                    <div class="metric-icon"><i class="fas fa-memory"></i></div>
+                </div>
+                <div class="metric-footer">
+                    <div class="metric-progress">
+                        <div class="metric-progress-fill" id="memory-progress-fill" style="width: 0%;"></div>
+                    </div>
+                    <div class="metric-progress-label">
+                        <span class="muted"><span id="memory-pct-label">0</span>% {{ _('Utilized') }}</span>
+                        <span class="accent">{{ _('Stable') }}</span>
+                    </div>
+                    <div class="metric-inline-chart" style="display:none;">
                         <canvas id="memoryChart"></canvas>
                     </div>
-                    <div class="text-center mt-2">
-                        <div class="stat-value" id="memory-value">--</div>
-                        <div class="stat-label"><span id="memory-used">--</span> / <span id="memory-total">--</span> GB</div>
-                    </div>
                 </div>
+            </article>
 
-                <!-- Disque -->
-                <div class="monitor-card">
-                    <h3><i class="fas fa-hdd"></i> Disque</h3>
-                    <div class="chart-container">
+            <!-- Disk -->
+            <article class="metric-card metric-card-tertiary">
+                <div class="metric-header">
+                    <div class="metric-header-text">
+                        <h3 class="metric-label">{{ _('Disk Usage') }}</h3>
+                        <div class="metric-value">
+                            <span class="metric-value-number" id="disk-value">—</span>
+                            <span class="metric-trend up" id="disk-trend"></span>
+                        </div>
+                        <div class="metric-subline">
+                            <span id="disk-used">—</span> / <span id="disk-total">—</span> GB
+                        </div>
+                    </div>
+                    <div class="metric-icon"><i class="fas fa-hdd"></i></div>
+                </div>
+                <div class="metric-footer">
+                    <div class="metric-inline-chart">
                         <canvas id="diskChart"></canvas>
                     </div>
-                    <div class="text-center mt-2">
-                        <div class="stat-value" id="disk-value">--</div>
-                        <div class="stat-label"><span id="disk-used">--</span> / <span id="disk-total">--</span> GB</div>
-                    </div>
                 </div>
+            </article>
+        </section>
+
+        <!-- Active Node Topology placeholder -->
+        <section class="topology-card">
+            <div class="topology-card-head">
+                <h3 class="topology-title">{{ _('Active Node Topology') }}</h3>
+                <a class="topology-link" href="#" onclick="return false;">
+                    {{ _('View Full Map') }} <i class="fas fa-arrow-right"></i>
+                </a>
+            </div>
+            <div class="topology-canvas">
+                <div class="topology-node topology-node-primary">
+                    <div class="topology-node-icon"><i class="fas fa-database"></i></div>
+                    <span class="topology-node-label">DB-Primary</span>
+                    <span class="topology-node-dot"></span>
+                </div>
+                <div class="topology-node topology-node-secondary topology-node-top">
+                    <div class="topology-node-icon"><i class="fas fa-globe"></i></div>
+                    <span class="topology-node-label">WEB-01</span>
+                </div>
+                <div class="topology-node topology-node-secondary topology-node-bottom">
+                    <div class="topology-node-icon"><i class="fas fa-globe"></i></div>
+                    <span class="topology-node-label">WEB-02</span>
+                </div>
+                <svg class="topology-lines" preserveAspectRatio="none" viewBox="0 0 100 100" aria-hidden="true">
+                    <path d="M 22 50 C 45 50, 55 20, 75 22" fill="none" stroke="currentColor" stroke-dasharray="1 1.5" stroke-width="0.35"/>
+                    <path d="M 22 50 C 45 50, 55 80, 75 78" fill="none" stroke="currentColor" stroke-dasharray="1 1.5" stroke-width="0.35"/>
+                </svg>
+            </div>
+        </section>
+    </div>
+
+    <!-- Docker tab -->
+    <div id="tab-docker" class="tab-content-pane">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2><i class="fab fa-docker"></i> {{ _('Docker containers') }}</h2>
+            <div class="d-flex gap-2 align-items-center">
+                <span class="badge bg-primary" id="docker-count">0 {{ _('containers') }}</span>
+                <button class="refresh-btn" onclick="refreshDockerStats()">
+                    <i class="fas fa-sync-alt"></i> {{ _('Refresh') }}
+                </button>
             </div>
         </div>
+        <div class="docker-list" id="docker-containers-list">
+            <p class="text-muted text-center">{{ _('Click Refresh to load Docker containers') }}</p>
+        </div>
+    </div>
 
-        <!-- Contenu onglet Docker -->
-        <div id="tab-docker" class="tab-content-pane">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h2><i class="fab fa-docker"></i> Conteneurs Docker</h2>
-                <div class="d-flex gap-2 align-items-center">
-                    <span class="badge bg-primary" id="docker-count">0 conteneurs</span>
-                    <button class="refresh-btn" onclick="refreshDockerStats()">
-                        <i class="fas fa-sync-alt"></i> Actualiser
+    <!-- Processes tab -->
+    <div id="tab-processus" class="tab-content-pane">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2><i class="fas fa-tasks"></i> {{ _('System processes') }}</h2>
+            <div class="d-flex gap-2 align-items-center">
+                <span class="badge bg-info" id="process-count">0 {{ _('processes') }}</span>
+                <div class="d-flex gap-1">
+                    <button class="refresh-btn" style="padding: 0.5rem 0.8rem;" onclick="previousProcessPage()" id="btn-prev-page" disabled>
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <span style="color: var(--text-secondary); padding: 0.5rem 1rem; background: var(--glass-bg); border-radius: 8px; font-size: 0.9rem;">
+                        {{ _('Page') }} <span id="current-page">1</span> / <span id="total-pages">1</span>
+                    </span>
+                    <button class="refresh-btn" style="padding: 0.5rem 0.8rem;" onclick="nextProcessPage()" id="btn-next-page">
+                        <i class="fas fa-chevron-right"></i>
                     </button>
                 </div>
-            </div>
-            <div class="docker-list" id="docker-containers-list">
-                <p class="text-muted text-center">Cliquez sur Actualiser pour charger les conteneurs Docker</p>
-            </div>
-        </div>
-
-        <!-- Contenu onglet Processus -->
-        <div id="tab-processus" class="tab-content-pane">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h2><i class="fas fa-tasks"></i> Processus Système</h2>
-                <div class="d-flex gap-2 align-items-center">
-                    <span class="badge bg-info" id="process-count">0 processus</span>
-                    <div class="d-flex gap-1">
-                        <button class="refresh-btn" style="padding: 0.5rem 0.8rem;" onclick="previousProcessPage()" id="btn-prev-page" disabled>
-                            <i class="fas fa-chevron-left"></i>
-                        </button>
-                        <span style="color: var(--text-secondary); padding: 0.5rem 1rem; background: var(--glass-bg); border-radius: 8px; font-size: 0.9rem;">
-                            Page <span id="current-page">1</span> / <span id="total-pages">1</span>
-                        </span>
-                        <button class="refresh-btn" style="padding: 0.5rem 0.8rem;" onclick="nextProcessPage()" id="btn-next-page">
-                            <i class="fas fa-chevron-right"></i>
-                        </button>
-                    </div>
-                    <button class="refresh-btn" onclick="refreshProcessList()">
-                        <i class="fas fa-sync-alt"></i> Actualiser
-                    </button>
-                </div>
-            </div>
-            <div class="monitor-card">
-                <div class="process-list" id="process-list">
-                    <p class="text-muted text-center">Cliquez sur Actualiser pour charger la liste des processus</p>
-                </div>
+                <button class="refresh-btn" onclick="refreshProcessList()">
+                    <i class="fas fa-sync-alt"></i> {{ _('Refresh') }}
+                </button>
             </div>
         </div>
-
+        <div class="monitor-card">
+            <div class="process-list" id="process-list">
+                <p class="text-muted text-center">{{ _('Click Refresh to load the process list') }}</p>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -134,4 +205,3 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/monitoring.js') }}"></script>
 {% endblock %}
-
