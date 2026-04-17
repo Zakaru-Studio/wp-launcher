@@ -355,9 +355,10 @@ password={db_password}" > /tmp/.mysqldump.cnf && chmod 600 /tmp/.mysqldump.cnf""
                     file_size = os.path.getsize(export_path)
                     print(f"   fichier créé: {file_size} bytes")
                     os.remove(export_path)  # Supprimer le fichier incomplet
+                err_text = result.stderr if result.stderr else "Pas de message d'erreur"
                 return jsonify({
                     'success': False,
-                    'message': f'Erreur mysqldump (code {result.returncode}): {result.stderr if result.stderr else "Pas de message d\'erreur"}'
+                    'message': f'Erreur mysqldump (code {result.returncode}): {err_text}'
                 })
 
         except subprocess.TimeoutExpired:
