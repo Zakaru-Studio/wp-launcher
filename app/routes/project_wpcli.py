@@ -6,6 +6,7 @@ Routes pour WP-CLI - Exécution de commandes WordPress en ligne de commande
 from flask import Blueprint, request, jsonify, current_app
 from app.models.project import Project
 from app.config.docker_config import DockerConfig
+from app.middleware.auth_middleware import login_required, admin_required
 
 project_wpcli_bp = Blueprint('project_wpcli', __name__)
 
@@ -38,6 +39,7 @@ def validate_project_or_instance(project_name):
 
 
 @project_wpcli_bp.route('/wpcli/execute/<project_name>', methods=['POST'])
+@admin_required
 def execute_wpcli(project_name):
     """
     Exécute une commande WP-CLI dans le conteneur WordPress du projet
@@ -89,6 +91,7 @@ def execute_wpcli(project_name):
 
 
 @project_wpcli_bp.route('/wpcli/templates', methods=['GET'])
+@login_required
 def get_command_templates():
     """Retourne les templates de commandes WP-CLI disponibles"""
     try:
@@ -110,6 +113,7 @@ def get_command_templates():
 
 
 @project_wpcli_bp.route('/wpcli/allowed-commands', methods=['GET'])
+@login_required
 def get_allowed_commands():
     """Retourne la liste des commandes autorisées"""
     try:
@@ -134,6 +138,7 @@ def get_allowed_commands():
 
 
 @project_wpcli_bp.route('/wpcli/plugins/<project_name>', methods=['GET'])
+@login_required
 def list_plugins(project_name):
     """Liste tous les plugins installés dans un projet"""
     try:
@@ -159,6 +164,7 @@ def list_plugins(project_name):
 
 
 @project_wpcli_bp.route('/wpcli/plugins/<project_name>/install', methods=['POST'])
+@admin_required
 def install_plugin(project_name):
     """
     Installe un plugin
@@ -200,6 +206,7 @@ def install_plugin(project_name):
 
 
 @project_wpcli_bp.route('/wpcli/plugins/<project_name>/<action>', methods=['POST'])
+@admin_required
 def manage_plugin(project_name, action):
     """
     Gère un plugin (activate, deactivate, delete)
@@ -250,6 +257,7 @@ def manage_plugin(project_name, action):
 
 
 @project_wpcli_bp.route('/wpcli/themes/<project_name>', methods=['GET'])
+@login_required
 def list_themes(project_name):
     """Liste tous les thèmes installés dans un projet"""
     try:
@@ -275,6 +283,7 @@ def list_themes(project_name):
 
 
 @project_wpcli_bp.route('/wpcli/users/<project_name>', methods=['GET'])
+@login_required
 def list_users(project_name):
     """Liste tous les utilisateurs d'un projet"""
     try:
@@ -300,6 +309,7 @@ def list_users(project_name):
 
 
 @project_wpcli_bp.route('/wpcli/users/<project_name>/create', methods=['POST'])
+@admin_required
 def create_user(project_name):
     """
     Crée un utilisateur WordPress
@@ -343,6 +353,7 @@ def create_user(project_name):
 
 
 @project_wpcli_bp.route('/wpcli/search-replace/<project_name>', methods=['POST'])
+@admin_required
 def search_replace(project_name):
     """
     Effectue un search-replace dans la base de données
@@ -386,6 +397,7 @@ def search_replace(project_name):
 
 
 @project_wpcli_bp.route('/wpcli/cache/<project_name>/flush', methods=['POST'])
+@admin_required
 def flush_cache(project_name):
     """Vide le cache WordPress"""
     try:
@@ -411,6 +423,7 @@ def flush_cache(project_name):
 
 
 @project_wpcli_bp.route('/wpcli/maintenance/<project_name>/<action>', methods=['POST'])
+@admin_required
 def maintenance_mode(project_name, action):
     """Active/désactive le mode maintenance (action: on|off)"""
     try:
@@ -443,6 +456,7 @@ def maintenance_mode(project_name, action):
 
 
 @project_wpcli_bp.route('/wpcli/core/<project_name>/version', methods=['GET'])
+@login_required
 def get_core_version(project_name):
     """Récupère la version de WordPress"""
     try:
@@ -468,6 +482,7 @@ def get_core_version(project_name):
 
 
 @project_wpcli_bp.route('/wpcli/rewrite/<project_name>/flush', methods=['POST'])
+@admin_required
 def flush_rewrite(project_name):
     """Régénère les règles de réécriture"""
     try:

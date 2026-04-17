@@ -1,77 +1,44 @@
 #!/usr/bin/env python3
 """
-Logger de debug simple pour les opérations sur les projets
+Shim de compatibilité pour l'ancien ``SimpleDebugLogger``.
+
+Ce module délègue désormais à ``app.utils.logger`` (source unique de vérité)
+afin de supprimer la duplication entre les deux systèmes de logging.
+Les callers historiques qui font ::
+
+    from app.utils.debug_logger import create_debug_logger
+    logger = create_debug_logger("my_project")
+    logger.step("HELLO")
+
+continuent à fonctionner sans modification.
+
+Nouveaux callers : préférer ``from app.utils.logger import get_operation_logger``.
 """
 
-import os
-import datetime
+import warnings
+
+from app.utils.logger import OperationLogger, get_operation_logger
+
+# Ré-export pour les éventuels imports directs de la classe.
+# On garde le nom ``SimpleDebugLogger`` pour ne pas casser d'import legacy.
+SimpleDebugLogger = OperationLogger
 
 
-class SimpleDebugLogger:
-    """Logger de debug simple pour les opérations sur les projets"""
-    
-    def __init__(self, project_name):
-        self.project_name = project_name
-        self.log_dir = "logs"
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        
-        # Créer les dossiers de logs
-        os.makedirs(f"{self.log_dir}/create", exist_ok=True)
-        os.makedirs(f"{self.log_dir}/debug", exist_ok=True)
-        
-        # Fichier de log spécifique au projet
-        self.log_file = f"{self.log_dir}/create/{project_name}_{timestamp}.log"
-        self.debug_file = f"{self.log_dir}/debug/debug_{timestamp}.log"
-    
-    def _write_log(self, level, step_name, details=""):
-        """Écrire dans le fichier de log"""
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        message = f"[{timestamp}] [{level}] {step_name}"
-        if details:
-            message += f": {details}"
-        
-        try:
-            with open(self.log_file, 'a', encoding='utf-8') as f:
-                f.write(message + "\n")
-        except Exception as e:
-            print(f"Erreur écriture log: {e}")
-    
-    def step(self, step_name, details=""):
-        """Étape normale"""
-        self._write_log("INFO", step_name, details)
-    
-    def success(self, step_name, details=""):
-        """Succès"""
-        self._write_log("SUCCESS", step_name, details)
-    
-    def error(self, step_name, error, exception=None):
-        """Erreur"""
-        details = str(error)
-        if exception:
-            details += f" | Exception: {exception}"
-        self._write_log("ERROR", step_name, details)
-    
-    def warning(self, step_name, warning):
-        """Avertissement"""
-        self._write_log("WARNING", step_name, warning)
-    
-    def debug(self, step_name, debug_info):
-        """Debug"""
-        self._write_log("DEBUG", step_name, debug_info)
-    
-    def log_file_operation(self, operation, file_path, success, details=""):
-        """Log d'opération sur fichier"""
-        status = "SUCCESS" if success else "ERROR"
-        message = f"{operation}: {file_path}"
-        if details:
-            message += f" | {details}"
-        self._write_log(status, "FILE_OP", message)
-    
-    def close(self):
-        """Fermer le logger"""
-        self._write_log("INFO", "LOGGER_CLOSED", "Fin du logging")
+def create_debug_logger(project_name, operation_name="create"):
+    """
+    Factory legacy. Retourne un ``OperationLogger`` configuré pour l'opération
+    demandée (par défaut ``create``, ce qui préserve le chemin de log
+    historique ``logs/create/<project>_<timestamp>.log``).
+
+    Accepte aussi ``create_debug_logger(operation, project)`` pour compat future.
+    """
+    warnings.warn(
+        "app.utils.debug_logger.create_debug_logger est déprécié ; "
+        "utilisez app.utils.logger.get_operation_logger à la place.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return get_operation_logger(operation_name=operation_name, project_name=project_name)
 
 
-def create_debug_logger(project_name):
-    """Factory pour créer un logger de debug"""
-    return SimpleDebugLogger(project_name) 
+__all__ = ["create_debug_logger", "SimpleDebugLogger"]

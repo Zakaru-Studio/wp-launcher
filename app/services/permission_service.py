@@ -29,14 +29,15 @@ class PermissionService:
             print(f"🔧 [ROBUST] Correction permissions: {wp_content_path}")
             
             # Utiliser www-data comme groupe pour la compatibilité Docker WordPress
-            subprocess.run(['sudo', 'chown', '-R', f'{self.current_user}:www-data', wp_content_path], 
-                          check=True, capture_output=True)
-            
-            # Définir les permissions appropriées pour permettre l'écriture par le groupe
-            subprocess.run(['find', wp_content_path, '-type', 'd', '-exec', 'chmod', '775', '{}', '+'], 
-                          check=True, capture_output=True)
-            subprocess.run(['find', wp_content_path, '-type', 'f', '-exec', 'chmod', '664', '{}', '+'], 
-                          check=True, capture_output=True)
+            subprocess.run(['sudo', 'chown', '-R', f'{self.current_user}:www-data', wp_content_path],
+                          check=True, capture_output=True, timeout=120)
+
+            # sudo requis : chown vers www-data en groupe, certains fichiers
+            # peuvent être owned par www-data (Docker) → chmod sans sudo échoue.
+            subprocess.run(['sudo', 'find', wp_content_path, '-type', 'd', '-exec', 'chmod', '775', '{}', '+'],
+                          check=True, capture_output=True, timeout=120)
+            subprocess.run(['sudo', 'find', wp_content_path, '-type', 'f', '-exec', 'chmod', '664', '{}', '+'],
+                          check=True, capture_output=True, timeout=120)
             
             # S'assurer que uploads existe et a les bonnes permissions
             uploads_dir = os.path.join(wp_content_path, 'uploads')
@@ -302,9 +303,11 @@ class PermissionService:
                 return False
 
             # Permissions des dossiers (775 - www-data peut écrire)
+            # sudo requis : le chown précédent vise current_user:www-data, les fichiers
+            # antérieurement owned par www-data ne sont pas chmod-ables sans privilèges.
             result = subprocess.run([
-                'find', path, '-type', 'd', '-exec', 'chmod', '775', '{}', '+'
-            ], capture_output=True, text=True, timeout=30)
+                'sudo', 'find', path, '-type', 'd', '-exec', 'chmod', '775', '{}', '+'
+            ], capture_output=True, text=True, timeout=120)
 
             if result.returncode == 0:
                 print(f"✅ [FIX_PERMISSIONS] Permissions dossiers 775 pour {description}")
@@ -313,8 +316,8 @@ class PermissionService:
 
             # Permissions des fichiers (664 - www-data peut écrire)
             result = subprocess.run([
-                'find', path, '-type', 'f', '-exec', 'chmod', '664', '{}', '+'
-            ], capture_output=True, text=True, timeout=30)
+                'sudo', 'find', path, '-type', 'f', '-exec', 'chmod', '664', '{}', '+'
+            ], capture_output=True, text=True, timeout=120)
 
             if result.returncode == 0:
                 print(f"✅ [FIX_PERMISSIONS] Permissions fichiers 664 pour {description}")
@@ -369,15 +372,19 @@ class PermissionService:
             return False
     
     def set_file_permissions_recursive(self, path, dir_mode, file_mode):
-        """Définit les permissions des fichiers et dossiers récursivement"""
+        """Définit les permissions des fichiers et dossiers récursivement.
+
+        Utilise sudo car cette helper est appelée après des chown vers www-data
+        ou sur des arbres mixtes contenant des fichiers owned par Docker.
+        """
         try:
             # Permissions des dossiers
-            subprocess.run(['find', path, '-type', 'd', '-exec', 'chmod', dir_mode, '{}', '+'], 
-                          check=True, capture_output=True, timeout=30)
-            
+            subprocess.run(['sudo', 'find', path, '-type', 'd', '-exec', 'chmod', dir_mode, '{}', '+'],
+                          check=True, capture_output=True, timeout=120)
+
             # Permissions des fichiers
-            subprocess.run(['find', path, '-type', 'f', '-exec', 'chmod', file_mode, '{}', '+'], 
-                          check=True, capture_output=True, timeout=30)
+            subprocess.run(['sudo', 'find', path, '-type', 'f', '-exec', 'chmod', file_mode, '{}', '+'],
+                          check=True, capture_output=True, timeout=120)
             
             return True
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:

@@ -601,15 +601,18 @@ class CloneService:
             import subprocess
             subprocess.run([
                 'sudo', 'chown', '-R', f'{current_user}:www-data', project_path
-            ], capture_output=True)
-            
+            ], capture_output=True, timeout=120)
+
+            # sudo requis : le chown précédent a changé le groupe vers www-data,
+            # les fichiers antérieurement owned par www-data ne sont pas writable
+            # sans privilèges.
             subprocess.run([
-                'find', project_path, '-type', 'd', '-exec', 'chmod', '775', '{}', '+'
-            ], capture_output=True)
-            
+                'sudo', 'find', project_path, '-type', 'd', '-exec', 'chmod', '775', '{}', '+'
+            ], capture_output=True, timeout=120)
+
             subprocess.run([
-                'find', project_path, '-type', 'f', '-exec', 'chmod', '664', '{}', '+'
-            ], capture_output=True)
+                'sudo', 'find', project_path, '-type', 'f', '-exec', 'chmod', '664', '{}', '+'
+            ], capture_output=True, timeout=120)
             
         except Exception as e:
             print(f"⚠️ [CLONE] Erreur permissions: {e}")

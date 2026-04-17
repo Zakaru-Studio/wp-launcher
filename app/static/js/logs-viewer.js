@@ -135,15 +135,21 @@ function loadLogContent() {
         .then(response => response.json())
         .then(data => {
             if (data.error) {
-                contentDiv.innerHTML = `<div style="color: #ff6b6b;">Erreur: ${data.error}</div>`;
+                const errDiv = document.createElement('div');
+                errDiv.style.color = '#ff6b6b';
+                errDiv.textContent = 'Erreur: ' + data.error;
+                contentDiv.replaceChildren(errDiv);
                 return;
             }
-            
+
             contentDiv.textContent = data.content || 'Fichier vide';
-            statsDiv.innerHTML = `Affichage des ${data.displayed_lines} dernières lignes sur ${data.total_lines} au total`;
+            statsDiv.textContent = `Affichage des ${data.displayed_lines} dernières lignes sur ${data.total_lines} au total`;
         })
         .catch(error => {
-            contentDiv.innerHTML = `<div style="color: #ff6b6b;">Erreur de chargement: ${error.message}</div>`;
+            const errDiv = document.createElement('div');
+            errDiv.style.color = '#ff6b6b';
+            errDiv.textContent = 'Erreur de chargement: ' + error.message;
+            contentDiv.replaceChildren(errDiv);
         });
 }
 

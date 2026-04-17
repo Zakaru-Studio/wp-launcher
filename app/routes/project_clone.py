@@ -6,6 +6,7 @@ Routes pour le clonage de projets
 from flask import Blueprint, request, jsonify, current_app
 from app.models.project import Project
 from app.config.docker_config import DockerConfig
+from app.middleware.auth_middleware import login_required, admin_required
 
 project_clone_bp = Blueprint('project_clone', __name__)
 
@@ -15,6 +16,7 @@ CONTAINERS_FOLDER = 'containers'
 
 
 @project_clone_bp.route('/clone/<source_name>', methods=['POST'])
+@admin_required
 def clone_project(source_name):
     """
     Clone un projet existant
@@ -75,6 +77,7 @@ def clone_project(source_name):
 
 
 @project_clone_bp.route('/validate-name/<name>', methods=['GET'])
+@login_required
 def validate_clone_name(name):
     """Valide qu'un nom de projet est disponible"""
     try:

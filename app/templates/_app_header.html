@@ -5,13 +5,14 @@
         <div class="d-flex justify-content-between align-items-center">
             <!-- Logo et version -->
             <div class="header-left d-flex align-items-center">
-                <h1 class="header-title mb-0 me-3"><a href="/" class="text-light text-decoration-none"><i class="fas fa-rocket me-2"></i>WP Launcher</a></h1>
-                <span class="app-version badge bg-secondary">{{ app_version }}</span>
+                <h1 class="header-title mb-0 me-3"><a href="/" class="text-light text-decoration-none"><i
+                            class="fas fa-rocket me-2"></i>WP Launcher</a></h1>
+                <span class="app-version badge">{{ app_version }}</span>
                 <button class="btn-restart-app ms-2" onclick="restartApp()" title="Redémarrer l'application">
                     <i class="fas fa-sync-alt"></i>
                 </button>
             </div>
-            
+
             <!-- Navigation (admin seulement) -->
             {% if g.current_user.role == 'admin' %}
             <nav class="header-nav d-flex gap-2">
@@ -33,46 +34,53 @@
                 </a>
             </nav>
             {% endif %}
-            
-            <div class="header-actions d-flex align-items-center gap-2">
-            <!-- Theme toggle -->
-            <button id="theme-toggle" class="theme-toggle" onclick="toggleTheme(event)" title="Changer de thème" aria-label="Basculer entre thème clair et sombre">
-                <i class="fas fa-sun" aria-hidden="true"></i>
-                <i class="fas fa-moon" aria-hidden="true"></i>
-            </button>
 
-            <!-- User dropdown -->
-            <div class="user-dropdown">
-                <button class="user-dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                    <img src="{{ g.current_user.get_avatar_url() }}" alt="Avatar" class="user-avatar">
-                    <span class="user-name">{{ g.current_user.get_display_name() }}</span>
-                    {% if g.current_user.role == 'admin' %}
-                        <span class="badge ms-2">Admin</span>
-                    {% endif %}
-                    <i class="fas fa-chevron-down ms-2"></i>
+            <div class="header-actions d-flex align-items-center gap-2">
+                <!-- Theme toggle -->
+                <button id="theme-toggle" class="theme-toggle" onclick="toggleTheme(event)" title="Changer de thème"
+                    aria-label="Basculer entre thème clair et sombre">
+                    <i class="fas fa-sun" aria-hidden="true"></i>
+                    <i class="fas fa-moon" aria-hidden="true"></i>
                 </button>
-                <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end">
-                    <li class="dropdown-header">
-                        <div class="dropdown-user-info">
-                            <img src="{{ g.current_user.get_avatar_url() }}" alt="Avatar" class="dropdown-avatar">
-                            <div>
-                                <strong>{{ g.current_user.get_display_name() }}</strong>
-                                <small class="text-muted d-block">{{ g.current_user.email }}</small>
+
+                <!-- User dropdown -->
+                <div class="user-dropdown">
+                    <button class="user-dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                        <img src="{{ g.current_user.get_avatar_url() }}" alt="Avatar" class="user-avatar">
+                        <span class="user-name">{{ g.current_user.get_display_name() }}</span>
+                        {% if g.current_user.role == 'admin' %}
+                        <span class="badge ms-2">Admin</span>
+                        {% endif %}
+                        <i class="fas fa-chevron-down ms-2"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end">
+                        <li class="dropdown-header">
+                            <div class="dropdown-user-info">
+                                <img src="{{ g.current_user.get_avatar_url() }}" alt="Avatar" class="dropdown-avatar">
+                                <div>
+                                    <strong>{{ g.current_user.get_display_name() }}</strong>
+                                    <small class="text-muted d-block">{{ g.current_user.email }}</small>
+                                </div>
                             </div>
-                        </div>
-                    </li>
-                    <li><hr class="dropdown-divider"></li>
-                    <li><a class="dropdown-item" href="{{ url_for('auth.profile') }}"><i class="fas fa-user me-2"></i>Mon profil</a></li>
-                    {% if g.current_user.role == 'admin' %}
-                    <li><a class="dropdown-item" href="{{ url_for('admin.users_page') }}"><i class="fas fa-users-cog me-2"></i>Gestion utilisateurs</a></li>
-                    {% endif %}
-                    <li><hr class="dropdown-divider"></li>
-                    <li><a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}"><i class="fas fa-sign-out-alt me-2"></i>Déconnexion</a></li>
-                </ul>
-            </div>
+                        </li>
+                        <li>
+                            <hr class="dropdown-divider">
+                        </li>
+                        <li><a class="dropdown-item" href="{{ url_for('auth.profile') }}"><i
+                                    class="fas fa-user me-2"></i>Mon profil</a></li>
+                        {% if g.current_user.role == 'admin' %}
+                        <li><a class="dropdown-item" href="{{ url_for('admin.users_page') }}"><i
+                                    class="fas fa-users-cog me-2"></i>Gestion utilisateurs</a></li>
+                        {% endif %}
+                        <li>
+                            <hr class="dropdown-divider">
+                        </li>
+                        <li><a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}"><i
+                                    class="fas fa-sign-out-alt me-2"></i>Déconnexion</a></li>
+                    </ul>
+                </div>
             </div>
         </div>
     </div>
 </header>
 {% endif %}
-

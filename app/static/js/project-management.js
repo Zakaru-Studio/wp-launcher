@@ -38,17 +38,19 @@ const IMPORT_TIMEOUT_MS = 5 * 60 * 1000;
  */
 function initProgressTracking() {
 
-    if (typeof io === 'undefined') {
+    // Utiliser le singleton pour partager UNE SEULE instance Socket.IO entre
+    // main.js, task-manager.js et project-management.js (évite les events doublés).
+    if (typeof window.getSocketIO !== 'function') {
+        console.error('getSocketIO non disponible');
+        return;
+    }
+    const sharedSocket = window.getSocketIO();
+    if (!sharedSocket) {
         console.error('Socket.IO non disponible');
         return;
     }
+    socket = sharedSocket;
 
-    // Initialiser socket seulement s'il n'existe pas déjà
-    if (!socket) {
-        socket = io();
-    } else {
-    }
-    
     // IMPORTANT: Attacher les listeners au socket existant (même s'il a été créé ailleurs)
     // Écouter les événements de création de projet
     socket.on('project_creation', function (data) {

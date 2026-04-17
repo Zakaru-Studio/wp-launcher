@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{% block title %}WordPress Launcher{% endblock %}</title>
     
     <!-- Favicon -->
@@ -80,7 +81,52 @@
 
     <!-- JavaScript externe -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" defer></script>
-    
+
+    <!-- CSRF token global — doit être défini avant les autres scripts -->
+    <script>
+        window.CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+        // Patch fetch pour ajouter automatiquement X-CSRFToken sur les requêtes mutantes
+        // même-origine. Évite d'avoir à modifier chaque appel fetch() dispersé dans le code.
+        (function() {
+            if (window.__fetchCSRFPatched) return;
+            const originalFetch = window.fetch.bind(window);
+            const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+            function isSameOrigin(url) {
+                try {
+                    if (typeof url === 'string') {
+                        if (url.startsWith('/')) return true;
+                        const u = new URL(url, window.location.href);
+                        return u.origin === window.location.origin;
+                    }
+                    if (url && typeof url.url === 'string') {
+                        const u = new URL(url.url, window.location.href);
+                        return u.origin === window.location.origin;
+                    }
+                } catch (e) { return false; }
+                return false;
+            }
+
+            window.fetch = function(input, init) {
+                init = init || {};
+                const method = ((init.method || (input && input.method) || 'GET') + '').toUpperCase();
+                if (MUTATING.has(method) && isSameOrigin(input)) {
+                    const headers = new Headers(init.headers || (input && input.headers) || {});
+                    if (!headers.has('X-CSRFToken')) {
+                        headers.set('X-CSRFToken', window.CSRF_TOKEN || '');
+                    }
+                    if (!headers.has('X-Requested-With')) {
+                        headers.set('X-Requested-With', 'XMLHttpRequest');
+                    }
+                    init.headers = headers;
+                }
+                return originalFetch(input, init);
+            };
+            window.__fetchCSRFPatched = true;
+        })();
+    </script>
+
     <!-- Scripts de l'application (ordre important) -->
     <script src="{{ url_for('static', filename='js/toast-notifications.js') }}"></script>
     <script src="{{ url_for('static', filename='js/app-config.js') }}"></script>

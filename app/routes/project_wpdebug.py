@@ -9,6 +9,7 @@ from flask import Blueprint, request, jsonify
 from app.models.project import Project
 from app.config.docker_config import DockerConfig
 from app.utils.logger import wp_logger
+from app.middleware.auth_middleware import login_required, admin_required
 
 project_wpdebug_bp = Blueprint('project_wpdebug', __name__)
 
@@ -119,6 +120,7 @@ def set_wp_config_constant(content: str, constant: str, value: bool) -> str:
 
 
 @project_wpdebug_bp.route('/wp-debug/get/<project_name>', methods=['GET'])
+@login_required
 def get_wp_debug_config(project_name):
     """
     Récupère la configuration WP Debug actuelle
@@ -173,6 +175,7 @@ def get_wp_debug_config(project_name):
 
 
 @project_wpdebug_bp.route('/wp-debug/set/<project_name>', methods=['POST'])
+@admin_required
 def set_wp_debug_config(project_name):
     """
     Modifie une constante WP Debug

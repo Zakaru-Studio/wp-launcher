@@ -26,6 +26,7 @@ from app.utils.port_conflict_resolver import PortConflictResolver
 from app.services.fast_import_service import FastImportService
 from app.utils.debug_logger import create_debug_logger
 from app.config.docker_config import DockerConfig
+from app.middleware.auth_middleware import login_required, admin_required
 
 project_lifecycle_bp = Blueprint('project_lifecycle', __name__)
 
@@ -35,6 +36,7 @@ CONTAINERS_FOLDER = 'containers'
 
 
 @project_lifecycle_bp.route('/create_project', methods=['POST'])
+@admin_required
 def create_project():
     """Crée un nouveau projet WordPress ou Next.js"""
     project_name = "unknown"
@@ -637,35 +639,6 @@ def _create_nextjs_project(project_name, editable_path, container_path, database
     })
 
 
-#!/usr/bin/env python3
-"""
-Routes pour le cycle de vie des projets (create, start, stop, restart, delete)
-"""
-
-import os
-import json
-import time
-import tempfile
-import subprocess
-from flask import Blueprint, request, jsonify, current_app
-from werkzeug.utils import secure_filename
-from app.utils.file_utils import allowed_file, extract_zip, is_sql_file, is_zip_file
-from app.utils.port_utils import find_free_port_for_project, get_used_ports, get_comprehensive_used_ports
-from app.utils.project_utils import (
-    secure_project_name, copy_docker_template, copy_docker_template_nextjs_mongo,
-    copy_docker_template_nextjs_mysql, create_default_wp_content, create_wordpress_base_files,
-    create_nextjs_app_structure, project_exists, create_project_marker, update_project_wordpress_urls_in_files
-)
-from app.utils.database_utils import (
-    create_clean_wordpress_database, intelligent_mysql_wait
-)
-from app.utils.logger import wp_logger
-from app.models.project import Project
-from app.utils.port_conflict_resolver import PortConflictResolver
-from app.services.fast_import_service import FastImportService
-from app.utils.debug_logger import create_debug_logger
-from app.config.docker_config import DockerConfig
-
 def _configure_wordpress_ports(project_name, enable_nextjs):
     """Configure les ports pour un projet WordPress avec sauvegarde automatique"""
     # Obtenir tous les ports utilisés
@@ -904,6 +877,7 @@ def _save_project_ports(project_name, ports):
 
 
 @project_lifecycle_bp.route('/start_project/<project_name>', methods=['POST'])
+@admin_required
 def start_project(project_name):
     """Démarre un projet"""
     # Log du début de l'opération
@@ -976,6 +950,7 @@ def start_project(project_name):
 
 
 @project_lifecycle_bp.route('/stop_project/<project_name>', methods=['POST'])
+@admin_required
 def stop_project(project_name):
     """Arrête un projet"""
     # Log du début de l'opération
@@ -1041,6 +1016,7 @@ def stop_project(project_name):
 
 
 @project_lifecycle_bp.route('/restart_project/<project_name>', methods=['POST'])
+@admin_required
 def restart_project(project_name):
     """Redémarre un projet (stop puis start)"""
     # Log du début de l'opération
@@ -1144,6 +1120,7 @@ def restart_project(project_name):
 
 
 @project_lifecycle_bp.route('/rebuild_project/<project_name>', methods=['POST'])
+@admin_required
 def rebuild_project(project_name):
     """Rebuild les conteneurs d'un projet en préservant les volumes"""
     # Log du début de l'opération
@@ -1231,6 +1208,7 @@ def rebuild_project(project_name):
 
 
 @project_lifecycle_bp.route('/delete_project/<project_name>', methods=['DELETE'])
+@admin_required
 def delete_project(project_name):
     """Supprime un projet"""
     try:

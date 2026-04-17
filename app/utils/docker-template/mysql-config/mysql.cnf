@@ -2,12 +2,29 @@
 default-character-set = utf8mb4
 
 [mysqld]
-# Configuration optimisée pour Docker - Compatible avec 2-4GB RAM
+# ============================================
+# ACID SAFETY — protection contre corruption InnoDB
+# ============================================
+# Flush log à chaque commit (défaut MySQL). Safe en cas de crash.
+innodb_flush_log_at_trx_commit = 1
+# Double write buffer (défaut): protège contre les torn pages
+innodb_doublewrite = ON
+# Sync binlog à chaque transaction
+sync_binlog = 1
+# Shutdown propre : flush avant extinction (0=brutal, 1=normal, 2=skip)
+innodb_fast_shutdown = 1
+# Flush method : évite double-buffering OS + InnoDB
+innodb_flush_method = O_DIRECT
+# Checksums pour détecter corruption tôt
+innodb_checksum_algorithm = crc32
+
+# ============================================
+# Performance — équilibré pour Docker 2-4GB
+# ============================================
 max_allowed_packet = 1G
 innodb_buffer_pool_size = 512M
 innodb_log_file_size = 256M
 innodb_log_buffer_size = 32M
-innodb_flush_log_at_trx_commit = 2
 innodb_file_per_table = 1
 innodb_buffer_pool_instances = 4
 innodb_io_capacity = 2000
@@ -17,7 +34,7 @@ innodb_write_io_threads = 4
 innodb_purge_threads = 4
 innodb_page_cleaners = 4
 
-# Optimisations pour imports moyens
+# Imports moyens
 bulk_insert_buffer_size = 32M
 myisam_sort_buffer_size = 32M
 key_buffer_size = 64M
@@ -26,21 +43,21 @@ read_buffer_size = 2M
 read_rnd_buffer_size = 4M
 join_buffer_size = 16M
 
-# Timeouts standards
+# Timeouts
 interactive_timeout = 3600
 wait_timeout = 3600
 net_read_timeout = 120
 net_write_timeout = 120
 lock_wait_timeout = 120
 
-# Limites de connexions raisonnables
+# Connexions
 max_connections = 200
 max_user_connections = 100
 thread_cache_size = 16
 table_open_cache = 1024
 table_definition_cache = 512
 
-# Logs réduits pour Docker
+# Logs
 general_log = 0
 slow_query_log = 1
 slow_query_log_file = /var/log/mysql/slow.log
@@ -50,14 +67,13 @@ long_query_time = 5
 character-set-server = utf8mb4
 collation-server = utf8mb4_unicode_ci
 
-# Optimisations modestes
+# Mémoire
 tmp_table_size = 32M
 max_heap_table_size = 32M
-thread_cache_size = 8
 
 # Sécurité
 sql_mode = STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO
 
-# Réduction de l'empreinte mémoire
+# Pas de résolution DNS
 skip-host-cache
-skip-name-resolve 
+skip-name-resolve

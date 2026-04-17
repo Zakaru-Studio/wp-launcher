@@ -8,11 +8,13 @@ from app.utils.logger import wp_logger
 import os
 import subprocess
 import threading
+from app.middleware.auth_middleware import login_required, admin_required
 
 system_bp = Blueprint('system', __name__)
 
 
 @system_bp.route('/api/system/restart', methods=['POST'])
+@admin_required
 def restart_app():
     """Redémarre l'application en utilisant le script restart_app.sh"""
     try:

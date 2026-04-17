@@ -167,6 +167,20 @@ body.sidebar-open .container-fluid {
     margin-bottom: 0;
     border-bottom: 1px solid var(--glass-border);
     position: relative;
+    z-index: 1100;
+}
+
+.app-header-unified .dropdown-menu {
+    z-index: 9999;
+}
+
+.user-dropdown {
+    position: relative;
+    z-index: 1100;
+}
+
+.user-dropdown .dropdown-menu {
+    z-index: 9999 !important;
 }
 
 /* Gradient accent line under header */
@@ -4321,5 +4335,94 @@ a:focus-visible {
 [data-theme="light"] .bg-dark {
     background: #ffffff !important;
     color: var(--text-primary) !important;
+}
+
+/* Bootstrap text-light → readable in light mode (except header title with gradient) */
+[data-theme="light"] .text-light:not(.header-title):not(.header-title *) {
+    color: var(--text-primary) !important;
+}
+
+/* Bootstrap card on light theme */
+[data-theme="light"] .card {
+    background: #ffffff;
+    border-color: rgba(15, 23, 42, 0.08);
+    color: var(--text-primary);
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+[data-theme="light"] .card.bg-dark {
+    background: #ffffff !important;
+    color: var(--text-primary) !important;
+    border-color: rgba(15, 23, 42, 0.08);
+}
+
+[data-theme="light"] .card-title,
+[data-theme="light"] .card-body {
+    color: var(--text-primary);
+}
+
+[data-theme="light"] .card .text-muted {
+    color: var(--text-muted) !important;
+}
+
+/* Bootstrap table-dark on light theme */
+[data-theme="light"] .table-dark {
+    --bs-table-bg: #ffffff;
+    --bs-table-color: var(--text-primary);
+    --bs-table-border-color: rgba(15, 23, 42, 0.08);
+    --bs-table-striped-bg: #f8fafc;
+    --bs-table-striped-color: var(--text-primary);
+    --bs-table-hover-bg: rgba(6, 182, 212, 0.05);
+    --bs-table-hover-color: var(--text-primary);
+    background: #ffffff;
+    color: var(--text-primary);
+    border-color: rgba(15, 23, 42, 0.08);
+}
+
+[data-theme="light"] .table-dark > :not(caption) > * > * {
+    background-color: var(--bs-table-bg);
+    color: var(--bs-table-color);
+    border-bottom-color: rgba(15, 23, 42, 0.06);
+}
+
+[data-theme="light"] .table-dark thead th {
+    background: #f1f5f9;
+    color: var(--text-secondary);
+    border-bottom: 2px solid rgba(6, 182, 212, 0.25);
+}
+
+/* Ensure section titles (h1-h6) are readable in light mode */
+[data-theme="light"] .container h1,
+[data-theme="light"] .container h2,
+[data-theme="light"] .container h3,
+[data-theme="light"] .container h4,
+[data-theme="light"] .container h5,
+[data-theme="light"] .container h6 {
+    color: var(--text-primary);
+}
+
+/* Bootstrap dropdown-menu-dark in light mode */
+[data-theme="light"] .dropdown-menu-dark {
+    background: #ffffff;
+    color: var(--text-primary);
+    border-color: rgba(15, 23, 42, 0.1);
+}
+
+[data-theme="light"] .dropdown-menu-dark .dropdown-item {
+    color: var(--text-secondary);
+}
+
+[data-theme="light"] .dropdown-menu-dark .dropdown-item:hover,
+[data-theme="light"] .dropdown-menu-dark .dropdown-item:focus {
+    background: rgba(6, 182, 212, 0.06);
+    color: var(--text-primary);
+}
+
+[data-theme="light"] .dropdown-menu-dark .dropdown-divider {
+    border-color: rgba(15, 23, 42, 0.08);
+}
+
+[data-theme="light"] .dropdown-menu-dark .dropdown-header {
+    color: var(--text-secondary);
 }
 

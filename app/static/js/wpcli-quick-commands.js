@@ -68,12 +68,15 @@ async function executeQuickWPCLI(projectName, command) {
                 showToast(successMessage, 'success');
                 
                 if (result.parsed_output && Array.isArray(result.parsed_output)) {
-                    // Afficher un tableau formaté
-                    const tableHtml = formatWPCLITable(result.parsed_output, command);
-                    showWPCLIResultModal(command, tableHtml);
+                    // Afficher un tableau formaté (retourne un Node construit côté client avec textContent)
+                    const tableNode = formatWPCLITable(result.parsed_output, command);
+                    showWPCLIResultModal(command, tableNode);
                 } else if (result.output) {
-                    // Afficher le texte brut
-                    showWPCLIResultModal(command, `<pre class="text-light">${result.output}</pre>`);
+                    // Afficher le texte brut en toute sûreté (textContent empêche toute injection HTML)
+                    const pre = document.createElement('pre');
+                    pre.className = 'text-light';
+                    pre.textContent = result.output;
+                    showWPCLIResultModal(command, pre);
                 }
             } else {
                 // Pour les commandes d'action (cache, rewrite, etc.), afficher un toast de succès
@@ -93,15 +96,20 @@ async function executeQuickWPCLI(projectName, command) {
 }
 
 /**
- * Formate un tableau JSON en HTML avec un style amélioré
+ * Formate un tableau JSON en Node DOM (sans innerHTML) avec un style amélioré.
+ * Toutes les valeurs provenant du serveur sont insérées via textContent afin
+ * d'empêcher toute injection HTML/XSS.
  */
 function formatWPCLITable(data, command = '') {
     if (!data || data.length === 0) {
-        return '<p class="text-muted text-center p-4">Aucun résultat</p>';
+        const p = document.createElement('p');
+        p.className = 'text-muted text-center p-4';
+        p.textContent = 'Aucun résultat';
+        return p;
     }
-    
+
     const keys = Object.keys(data[0]);
-    
+
     // Définir les colonnes prioritaires selon le type de commande
     let priorityColumns = [];
     if (command.includes('plugin')) {
@@ -111,60 +119,101 @@ function formatWPCLITable(data, command = '') {
     } else if (command.includes('user')) {
         priorityColumns = ['ID', 'user_login', 'display_name', 'user_email', 'roles'];
     }
-    
+
     // Réorganiser les colonnes
     const sortedKeys = [...new Set([...priorityColumns.filter(k => keys.includes(k)), ...keys])];
-    
-    let html = `
-        <div class="wpcli-table-wrapper">
-            <div class="wpcli-table-info mb-2">
-                <span class="badge bg-info">${data.length} élément${data.length > 1 ? 's' : ''}</span>
-            </div>
-            <div class="table-responsive wpcli-table-container">
-                <table class="table table-hover table-dark wpcli-results-table mb-0">
-    `;
-    
+
+    // Wrapper
+    const wrapper = document.createElement('div');
+    wrapper.className = 'wpcli-table-wrapper';
+
+    const infoDiv = document.createElement('div');
+    infoDiv.className = 'wpcli-table-info mb-2';
+    const countBadge = document.createElement('span');
+    countBadge.className = 'badge bg-info';
+    countBadge.textContent = `${data.length} élément${data.length > 1 ? 's' : ''}`;
+    infoDiv.appendChild(countBadge);
+    wrapper.appendChild(infoDiv);
+
+    const tableContainer = document.createElement('div');
+    tableContainer.className = 'table-responsive wpcli-table-container';
+    const table = document.createElement('table');
+    table.className = 'table table-hover table-dark wpcli-results-table mb-0';
+
     // Header
-    html += '<thead><tr>';
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
     sortedKeys.forEach(key => {
-        // Capitaliser et formatter le nom de colonne
-        const formattedKey = formatColumnName(key);
-        html += `<th class="wpcli-th">${formattedKey}</th>`;
+        const th = document.createElement('th');
+        th.className = 'wpcli-th';
+        th.textContent = formatColumnName(key);
+        headerRow.appendChild(th);
     });
-    html += '</tr></thead>';
-    
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
     // Body
-    html += '<tbody>';
-    data.forEach((row, index) => {
-        html += '<tr>';
+    const tbody = document.createElement('tbody');
+    data.forEach(row => {
+        const tr = document.createElement('tr');
         sortedKeys.forEach(key => {
-            let value = row[key] !== null && row[key] !== undefined ? row[key] : '-';
-            
-            // Formater les valeurs spéciales
-            let cellClass = 'wpcli-td';
-            let cellContent = value;
-            
+            const td = document.createElement('td');
+            td.className = 'wpcli-td';
+            const rawValue = row[key] !== null && row[key] !== undefined ? row[key] : '-';
+
             if (key === 'status') {
-                cellContent = formatStatusBadge(value);
-            } else if (key === 'update' && value !== '-') {
-                cellContent = value === 'available' ? '<span class="badge bg-warning">Disponible</span>' : 
-                              value === 'none' ? '<span class="badge bg-secondary">À jour</span>' : value;
+                td.appendChild(formatStatusBadge(rawValue));
+            } else if (key === 'update' && rawValue !== '-') {
+                if (rawValue === 'available') {
+                    const b = document.createElement('span');
+                    b.className = 'badge bg-warning';
+                    b.textContent = 'Disponible';
+                    td.appendChild(b);
+                } else if (rawValue === 'none') {
+                    const b = document.createElement('span');
+                    b.className = 'badge bg-secondary';
+                    b.textContent = 'À jour';
+                    td.appendChild(b);
+                } else {
+                    td.textContent = String(rawValue);
+                }
             } else if (key === 'auto_update') {
-                cellContent = value === 'on' ? '<i class="fas fa-check text-success"></i>' : 
-                              value === 'off' ? '<i class="fas fa-times text-muted"></i>' : value;
-            } else if (key === 'roles' && typeof value === 'string') {
-                cellContent = value.split(',').map(r => `<span class="badge bg-primary me-1">${r.trim()}</span>`).join('');
+                if (rawValue === 'on') {
+                    const i = document.createElement('i');
+                    i.className = 'fas fa-check text-success';
+                    td.appendChild(i);
+                } else if (rawValue === 'off') {
+                    const i = document.createElement('i');
+                    i.className = 'fas fa-times text-muted';
+                    td.appendChild(i);
+                } else {
+                    td.textContent = String(rawValue);
+                }
+            } else if (key === 'roles' && typeof rawValue === 'string') {
+                rawValue.split(',').forEach(r => {
+                    const badge = document.createElement('span');
+                    badge.className = 'badge bg-primary me-1';
+                    badge.textContent = r.trim();
+                    td.appendChild(badge);
+                });
             } else if (key === 'user_email') {
-                cellContent = `<a href="mailto:${value}" class="text-info">${value}</a>`;
+                const a = document.createElement('a');
+                a.className = 'text-info';
+                a.href = 'mailto:' + String(rawValue);
+                a.textContent = String(rawValue);
+                td.appendChild(a);
+            } else {
+                td.textContent = String(rawValue);
             }
-            
-            html += `<td class="${cellClass}">${cellContent}</td>`;
+            tr.appendChild(td);
         });
-        html += '</tr>';
+        tbody.appendChild(tr);
     });
-    html += '</tbody></table></div></div>';
-    
-    return html;
+    table.appendChild(tbody);
+
+    tableContainer.appendChild(table);
+    wrapper.appendChild(tableContainer);
+    return wrapper;
 }
 
 /**
@@ -193,7 +242,7 @@ function formatColumnName(key) {
 }
 
 /**
- * Formate le badge de statut
+ * Formate le badge de statut (retourne un élément DOM, pas une string HTML)
  */
 function formatStatusBadge(status) {
     const statusMap = {
@@ -204,9 +253,12 @@ function formatStatusBadge(status) {
         'parent': { class: 'bg-primary', label: 'Parent' },
         'update-available': { class: 'bg-warning', label: 'MAJ dispo' }
     };
-    
-    const config = statusMap[status] || { class: 'bg-secondary', label: status };
-    return `<span class="badge ${config.class}">${config.label}</span>`;
+
+    const config = statusMap[status] || { class: 'bg-secondary', label: String(status) };
+    const span = document.createElement('span');
+    span.className = 'badge ' + config.class;
+    span.textContent = config.label;
+    return span;
 }
 
 /**
@@ -258,10 +310,28 @@ function showWPCLIResultModal(command, content) {
         icon = 'fas fa-users';
     }
     
-    // Mettre à jour le contenu
-    document.getElementById('wpcliResultModalTitle').innerHTML = `<i class="${icon} me-2"></i>${title}`;
+    // Mettre à jour le contenu — title/icon sont choisis parmi des constantes ci-dessus
+    const titleEl = document.getElementById('wpcliResultModalTitle');
+    titleEl.replaceChildren();
+    const iconEl = document.createElement('i');
+    iconEl.className = icon + ' me-2';
+    titleEl.appendChild(iconEl);
+    titleEl.appendChild(document.createTextNode(title));
     document.getElementById('wpcliResultModalSubtitle').textContent = `wp ${command}`;
-    document.getElementById('wpcliResultModalBody').innerHTML = content;
+
+    // content peut être un Node (construit côté client sans innerHTML) ou, par
+    // rétro-compatibilité, une string. On préfère toujours les Nodes.
+    const body = document.getElementById('wpcliResultModalBody');
+    body.replaceChildren();
+    if (content instanceof Node) {
+        body.appendChild(content);
+    } else if (typeof content === 'string') {
+        // Fallback safe: on affiche la string brute comme texte pour éviter l'injection
+        const pre = document.createElement('pre');
+        pre.className = 'text-light';
+        pre.textContent = content;
+        body.appendChild(pre);
+    }
     
     // Afficher la modale
     const bsModal = new bootstrap.Modal(modal);

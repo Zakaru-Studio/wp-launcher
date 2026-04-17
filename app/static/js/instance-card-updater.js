@@ -23,7 +23,12 @@ window.updateProjectCardForInstance = function(projectName, instance, status) {
         const portLink = projectHeader.querySelector('.project-ip-port a');
         if (portLink) {
             portLink.href = getProjectUrl(instance.port);
-            portLink.innerHTML = `<i class="fas fa-external-link-alt me-1"></i>${window.APP_CONFIG.host}:${instance.port}`;
+            const iconEl = document.createElement('i');
+            iconEl.className = 'fas fa-external-link-alt me-1';
+            portLink.replaceChildren(
+                iconEl,
+                document.createTextNode(' ' + window.APP_CONFIG.host + ':' + instance.port)
+            );
             console.log(`Port mis à jour dans le header: ${instance.port}`);
         }
     }
@@ -125,7 +130,12 @@ window.restoreMainInstanceCard = function(projectName) {
     const portLink = projectCard.querySelector('.project-ip-port a');
     if (portLink) {
         portLink.href = getProjectUrl(originalPorts.wordpress);
-        portLink.innerHTML = `<i class="fas fa-external-link-alt me-1"></i>${window.APP_CONFIG.host}:${originalPorts.wordpress}`;
+        const iconEl = document.createElement('i');
+        iconEl.className = 'fas fa-external-link-alt me-1';
+        portLink.replaceChildren(
+            iconEl,
+            document.createTextNode(' ' + window.APP_CONFIG.host + ':' + originalPorts.wordpress)
+        );
     }
 
     // Restaurer le lien WordPress

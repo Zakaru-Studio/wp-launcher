@@ -6,6 +6,7 @@ Routes pour la gestion des snapshots de projets
 from flask import Blueprint, request, jsonify, current_app
 from app.models.project import Project
 from app.config.docker_config import DockerConfig
+from app.middleware.auth_middleware import login_required, admin_required
 
 project_snapshots_bp = Blueprint('project_snapshots', __name__)
 
@@ -15,6 +16,7 @@ CONTAINERS_FOLDER = 'containers'
 
 
 @project_snapshots_bp.route('/snapshots/create/<project_name>', methods=['POST'])
+@admin_required
 def create_snapshot(project_name):
     """
     Crée un snapshot d'un projet
@@ -67,6 +69,7 @@ def create_snapshot(project_name):
 
 
 @project_snapshots_bp.route('/snapshots/list/<project_name>', methods=['GET'])
+@login_required
 def list_snapshots(project_name):
     """Liste tous les snapshots d'un projet"""
     try:
@@ -96,6 +99,7 @@ def list_snapshots(project_name):
 
 
 @project_snapshots_bp.route('/snapshots/info/<snapshot_id>', methods=['GET'])
+@login_required
 def get_snapshot_info(snapshot_id):
     """Récupère les informations détaillées d'un snapshot"""
     try:
@@ -118,6 +122,7 @@ def get_snapshot_info(snapshot_id):
 
 
 @project_snapshots_bp.route('/snapshots/rollback/<snapshot_id>', methods=['POST'])
+@admin_required
 def rollback_snapshot(snapshot_id):
     """Restaure un snapshot"""
     try:
@@ -145,6 +150,7 @@ def rollback_snapshot(snapshot_id):
 
 
 @project_snapshots_bp.route('/snapshots/preview/<project_name>', methods=['GET'])
+@login_required
 def preview_snapshot(project_name):
     """Prévisualise les fichiers qui seront inclus dans un snapshot"""
     try:
@@ -242,6 +248,7 @@ def preview_snapshot(project_name):
 
 
 @project_snapshots_bp.route('/snapshots/delete/<snapshot_id>', methods=['DELETE'])
+@admin_required
 def delete_snapshot(snapshot_id):
     """Supprime un snapshot"""
     try:

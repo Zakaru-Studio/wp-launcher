@@ -6,6 +6,9 @@ import secrets
 import os
 from werkzeug.utils import secure_filename
 
+from app import csrf
+from app.middleware.auth_middleware import login_required
+
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -45,6 +48,7 @@ def login_github():
 
 
 @auth_bp.route('/login/github/callback')
+@csrf.exempt
 def github_callback():
     """GitHub OAuth callback"""
     # Verify state token
@@ -95,6 +99,7 @@ def github_callback():
 
 
 @auth_bp.route('/logout')
+@login_required
 def logout():
     """Logout user"""
     session.pop('user_id', None)
@@ -102,6 +107,7 @@ def logout():
 
 
 @auth_bp.route('/profile')
+@login_required
 def profile():
     """User profile page"""
     if 'user_id' not in session:
@@ -118,6 +124,7 @@ def profile():
 
 
 @auth_bp.route('/api/profile/update', methods=['POST'])
+@login_required
 def update_profile():
     """Update user profile"""
     if 'user_id' not in session:
@@ -147,6 +154,7 @@ def update_profile():
 
 
 @auth_bp.route('/api/profile/avatar', methods=['POST'])
+@login_required
 def upload_avatar():
     """Upload user avatar"""
     if 'user_id' not in session:
@@ -175,6 +183,7 @@ def upload_avatar():
 
 
 @auth_bp.route('/api/profile/ssh-key', methods=['POST'])
+@login_required
 def update_ssh_key():
     """Update SSH public key"""
     if 'user_id' not in session:

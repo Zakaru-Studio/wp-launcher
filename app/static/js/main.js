@@ -29,36 +29,23 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 /**
- * Initialisation principale avec gestion du chargement asynchrone
+ * Initialisation principale — utilise le singleton Socket.IO (getSocketIO).
+ * Si io n'est pas encore chargé, on réessaie une seule fois après 100ms.
  */
 function initializeApp() {
-    // Vérifier si setupSocketIO est disponible
-    if (typeof setupSocketIO === 'function') {
-        socket = setupSocketIO();
-        setupProjectSocketEvents();
-    } else {
-        // Attendre que utils.js soit chargé
-        const checkUtils = setInterval(() => {
-            if (typeof setupSocketIO === 'function') {
-                clearInterval(checkUtils);
-                socket = setupSocketIO();
-                setupProjectSocketEvents();
-            }
-        }, 50);
-        
-        // Timeout après 5 secondes
-        setTimeout(() => {
-            clearInterval(checkUtils);
-            if (typeof setupSocketIO !== 'function') {
-                // Fallback: initialiser Socket.IO manuellement
-                if (typeof io !== 'undefined') {
-                    socket = io();
-                    socket.on('connect', function() {
-                    });
-                    setupProjectSocketEvents();
-                }
-            }
-        }, 5000);
+    function attach() {
+        if (typeof window.getSocketIO === 'function') {
+            socket = window.getSocketIO();
+        }
+        if (socket) {
+            setupProjectSocketEvents();
+            return true;
+        }
+        return false;
+    }
+
+    if (!attach()) {
+        setTimeout(attach, 100);
     }
 }
 
@@ -149,26 +136,30 @@ async function executeProjectOperation(operation, projectName, showLoaderGlobal 
 /**
  * Gestion des événements Socket.IO spécifiques
  */
+let _reloadPending = null;
+function debouncedRefreshProjects() {
+    if (_reloadPending) clearTimeout(_reloadPending);
+    _reloadPending = setTimeout(() => {
+        _reloadPending = null;
+        refreshProjects();
+    }, 500);
+}
+
 function setupProjectSocketEvents() {
     if (!socket) return;
-    
+
     // Événements de progression de tâches
     socket.on('task_progress', function(data) {
-        
+
         // Mettre à jour l'interface si nécessaire
         if (typeof updateTaskProgress === 'function') {
             updateTaskProgress(data);
         }
     });
-    
-    // Événements de statut de projet
-    socket.on('project_status_changed', function(data) {
-        
-        // Recharger la liste des projets
-        setTimeout(() => {
-            refreshProjects();
-        }, 500);
-    });
+
+    // Événements de statut de projet — debounce pour éviter les rechargements
+    // en rafale (3+ requêtes/seconde) lorsque plusieurs events arrivent ensemble.
+    socket.on('project_status_changed', debouncedRefreshProjects);
 }
 
 /**

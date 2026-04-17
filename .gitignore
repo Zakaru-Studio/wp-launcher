@@ -26,6 +26,16 @@ app/utils/containers
 # Sensitive configuration
 .env
 
+# Recovery dumps (MySQL rescue snapshots)
+.recovery-backup/
+
+# Local pytest cache
+.pytest_cache/
+
+# IDE
+.vscode/
+.idea/
+
 # History and cache
 .claude/
 .history/

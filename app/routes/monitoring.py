@@ -5,23 +5,27 @@ Routes pour le monitoring système et la gestion des backups
 
 from flask import Blueprint, render_template, jsonify, request, current_app
 from app.utils.logger import wp_logger
+from app.middleware.auth_middleware import login_required, admin_required
 
 monitoring_bp = Blueprint('monitoring', __name__)
 
 
 @monitoring_bp.route('/monitoring')
+@login_required
 def monitoring_page():
     """Page principale du monitoring"""
     return render_template('monitoring.html')
 
 
 @monitoring_bp.route('/backups')
+@login_required
 def backups_page():
     """Page de gestion des backups"""
     return render_template('backups.html')
 
 
 @monitoring_bp.route('/api/monitoring/system', methods=['GET'])
+@login_required
 def get_system_stats():
     """Récupère les statistiques système"""
     try:
@@ -34,6 +38,7 @@ def get_system_stats():
 
 
 @monitoring_bp.route('/api/monitoring/docker', methods=['GET'])
+@login_required
 def get_docker_stats():
     """Récupère les statistiques Docker"""
     try:
@@ -46,6 +51,7 @@ def get_docker_stats():
 
 
 @monitoring_bp.route('/api/monitoring/processes', methods=['GET'])
+@login_required
 def get_processes():
     """Récupère la liste des processus"""
     try:
@@ -59,6 +65,7 @@ def get_processes():
 
 
 @monitoring_bp.route('/api/monitoring/kill-process', methods=['POST'])
+@admin_required
 def kill_process():
     """Termine un processus"""
     try:
@@ -95,6 +102,7 @@ def kill_process():
 
 
 @monitoring_bp.route('/api/backups', methods=['GET'])
+@login_required
 def list_backups():
     """Liste tous les backups disponibles"""
     try:
@@ -107,6 +115,7 @@ def list_backups():
 
 
 @monitoring_bp.route('/api/backups/run', methods=['POST'])
+@admin_required
 def run_backup():
     """Lance un backup manuel"""
     try:
@@ -126,6 +135,7 @@ def run_backup():
 
 
 @monitoring_bp.route('/api/backups/<path:backup_id>', methods=['DELETE'])
+@admin_required
 def delete_backup(backup_id):
     """Supprime un backup"""
     try:
