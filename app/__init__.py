@@ -140,7 +140,9 @@ def init_app_services(app, socketio):
     from app.services.clone_service import CloneService
     from app.services.git_service import GitService
     from app.services.snapshot_service import SnapshotService
-    
+    from app.services.server_service import ServerService
+    from app.services.deployment_service import DeploymentService
+
     permission_service = PermissionService()
     wpcli_service = WPCLIService(timeout=60)
     git_service = GitService()
@@ -157,7 +159,14 @@ def init_app_services(app, socketio):
     # Récupérer socketio depuis les extensions
     socketio = app.extensions.get('socketio')
     snapshot_service = SnapshotService(socketio=socketio)
-    
+
+    # Deployments stack (servers inventory + ssh-based deployer)
+    server_service = ServerService()
+    deployment_service = DeploymentService(
+        server_service=server_service,
+        socketio=socketio,
+    )
+
     # Ajouter les nouveaux services aux extensions Flask
     app.extensions['permission_service'] = permission_service
     app.extensions['project_service'] = project_service
@@ -165,6 +174,8 @@ def init_app_services(app, socketio):
     app.extensions['clone_service'] = clone_service
     app.extensions['git_service'] = git_service
     app.extensions['snapshot_service'] = snapshot_service
+    app.extensions['server_service'] = server_service
+    app.extensions['deployment_service'] = deployment_service
     
     # Enregistrer les blueprints (modules de routes)
     from app.routes.main import main_bp
@@ -180,6 +191,7 @@ def init_app_services(app, socketio):
     from app.routes.logs import logs_bp
     from app.routes.monitoring import monitoring_bp
     from app.routes.system import system_bp
+    from app.routes.deployments import deployments_bp
     
     app.register_blueprint(main_bp)
     app.register_blueprint(projects_bp)
@@ -198,6 +210,7 @@ def init_app_services(app, socketio):
     app.register_blueprint(logs_bp)
     app.register_blueprint(monitoring_bp)
     app.register_blueprint(system_bp)
+    app.register_blueprint(deployments_bp)
     
     # ==================== MULTI-DEV SYSTEM ====================
     # Système multi-dev avec mode compatibilité (fonctionne même sans auth)

@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Deployments') }} - WP Launcher{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/deployments.css') }}">
+{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <div class="page-header-text">
+        <h1 class="page-title">{{ _('Deployments') }}</h1>
+        <p class="page-subtitle">{{ _('Register servers, pin SSH fingerprints, and ship projects to staging or production.') }}</p>
+    </div>
+    <div class="page-header-actions">
+        {% if g.current_user and g.current_user.role == 'admin' %}
+        <button class="btn-primary-dark" data-bs-toggle="modal" data-bs-target="#serverModal" onclick="openServerModal()">
+            <span class="material-symbols-outlined">add</span>
+            <span>{{ _('Add server') }}</span>
+        </button>
+        {% endif %}
+        <button class="btn-primary-teal" data-bs-toggle="modal" data-bs-target="#deployModal">
+            <span class="material-symbols-outlined">rocket_launch</span>
+            <span>{{ _('Deploy') }}</span>
+        </button>
+    </div>
+</header>
+
+<!-- Servers card (admin view shows CRUD, dev view shows read-only list) -->
+<section class="users-card deploy-section">
+    <header class="deploy-section-header">
+        <h2 class="deploy-section-title">{{ _('Servers') }}</h2>
+        <p class="deploy-section-subtitle">{{ _('Targets where deployments can land.') }}</p>
+    </header>
+    <div class="users-table-wrap">
+        <table class="users-table deploy-servers-table">
+            <thead>
+                <tr>
+                    <th>{{ _('Label') }}</th>
+                    <th>{{ _('Environment') }}</th>
+                    <th>{{ _('Host') }}</th>
+                    <th>{{ _('User') }}</th>
+                    <th>{{ _('Fingerprint') }}</th>
+                    <th class="text-end">{{ _('Actions') }}</th>
+                </tr>
+            </thead>
+            <tbody id="servers-tbody">
+                <tr class="deploy-empty-row"><td colspan="6">{{ _('Loading...') }}</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<!-- Deployment history -->
+<section class="users-card deploy-section">
+    <header class="deploy-section-header">
+        <h2 class="deploy-section-title">{{ _('Recent deployments') }}</h2>
+        <p class="deploy-section-subtitle">{{ _('Live view of the last runs across all servers.') }}</p>
+    </header>
+    <div class="users-table-wrap">
+        <table class="users-table deploy-history-table">
+            <thead>
+                <tr>
+                    <th>{{ _('Project') }}</th>
+                    <th>{{ _('Server') }}</th>
+                    <th>{{ _('Branch') }}</th>
+                    <th>{{ _('Commit') }}</th>
+                    <th>{{ _('Status') }}</th>
+                    <th>{{ _('Started') }}</th>
+                    <th class="text-end">{{ _('Actions') }}</th>
+                </tr>
+            </thead>
+            <tbody id="deployments-tbody">
+                <tr class="deploy-empty-row"><td colspan="7">{{ _('Loading...') }}</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+{% include '_server_modal.html' %}
+{% include '_deploy_modal.html' %}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/deployments.js') }}" defer></script>
+{% endblock %}

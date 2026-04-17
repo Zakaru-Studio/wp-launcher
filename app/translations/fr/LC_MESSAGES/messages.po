@@ -217,3 +217,117 @@ msgstr "Type de projet"
 
 msgid "Database type"
 msgstr "Type de base de données"
+
+msgid "Deployments"
+msgstr "Déploiements"
+
+msgid "Deploy"
+msgstr "Déployer"
+
+msgid "Register servers, pin SSH fingerprints, and ship projects to staging or production."
+msgstr "Enregistrez vos serveurs, épinglez leur empreinte SSH et déployez vos projets en staging ou production."
+
+msgid "Add server"
+msgstr "Ajouter un serveur"
+
+msgid "Edit server"
+msgstr "Modifier le serveur"
+
+msgid "Delete server"
+msgstr "Supprimer le serveur"
+
+msgid "Servers"
+msgstr "Serveurs"
+
+msgid "Targets where deployments can land."
+msgstr "Cibles sur lesquelles les déploiements peuvent arriver."
+
+msgid "Recent deployments"
+msgstr "Derniers déploiements"
+
+msgid "Live view of the last runs across all servers."
+msgstr "Vue en direct des derniers runs sur tous les serveurs."
+
+msgid "Staging"
+msgstr "Staging"
+
+msgid "Production"
+msgstr "Production"
+
+msgid "Label"
+msgstr "Nom"
+
+msgid "Environment"
+msgstr "Environnement"
+
+msgid "Host"
+msgstr "Hôte"
+
+msgid "Hostname"
+msgstr "Nom d'hôte"
+
+msgid "User"
+msgstr "Utilisateur"
+
+msgid "SSH user"
+msgstr "Utilisateur SSH"
+
+msgid "SSH port"
+msgstr "Port SSH"
+
+msgid "Private key"
+msgstr "Clé privée"
+
+msgid "Paste an OpenSSH private key. Leave empty to keep the current one."
+msgstr "Collez une clé privée OpenSSH. Laissez vide pour conserver l'actuelle."
+
+msgid "Deploy base path"
+msgstr "Répertoire de déploiement"
+
+msgid "Test connection"
+msgstr "Tester la connexion"
+
+msgid "Pinned host fingerprint"
+msgstr "Empreinte hôte épinglée"
+
+msgid "Fingerprint"
+msgstr "Empreinte"
+
+msgid "Branch"
+msgstr "Branche"
+
+msgid "Project"
+msgstr "Projet"
+
+msgid "Server"
+msgstr "Serveur"
+
+msgid "Commit"
+msgstr "Commit"
+
+msgid "Started"
+msgstr "Démarré"
+
+msgid "Git remote URL"
+msgstr "URL du dépôt Git distant"
+
+msgid "optional, stored per project"
+msgstr "optionnel, stocké par projet"
+
+msgid "Save git config"
+msgstr "Sauvegarder la config Git"
+
+msgid "Remote will run: git fetch && git reset --hard origin/<branch>"
+msgstr "Le serveur exécutera : git fetch && git reset --hard origin/<branche>"
+
+msgid "Deployment started"
+msgstr "Déploiement démarré"
+
+msgid "Running"
+msgstr "En cours"
+
+msgid "Close"
+msgstr "Fermer"
+
+msgid "Launch a new site"
+msgstr "Lancer un nouveau site"

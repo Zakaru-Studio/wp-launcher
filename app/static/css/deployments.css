@@ -1,0 +1,171 @@
+/* ============================================
+   DEPLOYMENTS PAGE
+   ============================================ */
+
+.deploy-section { padding: 18px 0 22px; margin-bottom: 20px; }
+.deploy-section-header { padding: 6px 22px 14px; }
+.deploy-section-title {
+    font-family: 'Manrope', sans-serif;
+    font-weight: 700;
+    font-size: 1.1rem;
+    letter-spacing: -0.02em;
+    color: var(--al-on-surface);
+    margin: 0;
+}
+.deploy-section-subtitle {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.82rem;
+    color: var(--al-on-surface-variant);
+    margin: 4px 0 0;
+}
+
+.deploy-empty-row td {
+    text-align: center;
+    padding: 24px;
+    color: var(--al-on-surface-variant);
+    font-style: italic;
+}
+
+.deploy-servers-table td,
+.deploy-history-table td { vertical-align: middle; }
+
+/* Env pills — reuse role-pill but add staging / production colour variants */
+.env-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.env-pill .env-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+}
+.env-pill.env-production {
+    background: var(--al-secondary-container);
+    color: var(--al-on-secondary-container);
+}
+.env-pill.env-staging {
+    background: var(--al-surface-container-high);
+    color: var(--al-on-surface-variant);
+}
+
+/* Status pill (shared with Sites but narrowed here) */
+.deploy-history-table .status-pill { font-size: 0.72rem; padding: 3px 9px; }
+.status-pill.status-running { background: var(--al-surface-container-high); color: var(--al-on-surface-variant); }
+.status-pill.status-success { background: var(--al-secondary-container); color: var(--al-on-secondary-container); }
+.status-pill.status-failed  { background: var(--al-error-container); color: var(--al-on-error-container); }
+.status-pill.status-timeout { background: var(--al-error-container); color: var(--al-on-error-container); }
+
+.status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    display: inline-block;
+}
+.status-dot.is-pulse { animation: deploy-pulse 1.2s ease-in-out infinite; }
+@keyframes deploy-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: 0.35; transform: scale(0.6); }
+}
+
+/* Fingerprint inline */
+.deploy-fingerprint-box {
+    background: var(--al-surface-container);
+    border-radius: 10px;
+    padding: 10px 12px;
+}
+.deploy-fingerprint-label {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--al-on-surface-variant);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.deploy-fingerprint-value {
+    display: block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82rem;
+    color: var(--al-on-surface);
+    margin-top: 4px;
+    word-break: break-all;
+}
+
+.deploy-alert {
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 0.85rem;
+    margin-top: 10px;
+}
+.deploy-alert.is-ok    { background: var(--al-secondary-container); color: var(--al-on-secondary-container); }
+.deploy-alert.is-error { background: var(--al-error-container); color: var(--al-on-error-container); }
+
+/* Deploy modal — live log */
+.deploy-log-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 2px 12px;
+}
+.deploy-log-title {
+    font-family: 'Manrope', sans-serif;
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--al-on-surface);
+}
+.deploy-terminal {
+    min-height: 360px;
+    max-height: 480px;
+    overflow: auto;
+    background: #0c1427;
+    color: #dbe2fd;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    padding: 14px 16px;
+    border-radius: 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.deploy-terminal .line-stdout { color: #dbe2fd; }
+.deploy-terminal .line-stderr { color: #ff9d8f; }
+.deploy-terminal .line-system { color: #76d6d5; font-style: italic; }
+
+.deploy-git-config { margin-top: 18px; padding-top: 16px; border-top: 1px dashed var(--al-outline-variant); }
+.deploy-git-row { display: flex; justify-content: flex-end; margin-top: 8px; }
+
+.deploy-server-action-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: transparent;
+    border: none;
+    color: var(--al-on-surface-variant);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.18s, color 0.18s;
+}
+.deploy-server-action-btn:hover {
+    background: var(--al-surface-container-high);
+    color: var(--al-on-surface);
+}
+.deploy-server-action-btn.is-danger:hover {
+    background: var(--al-error-container);
+    color: var(--al-on-error-container);
+}
+
+/* Dark theme tweaks */
+[data-theme="dark"] .deploy-terminal {
+    background: #060a18;
+}

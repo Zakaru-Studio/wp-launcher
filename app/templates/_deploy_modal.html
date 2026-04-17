@@ -1,0 +1,70 @@
+<!-- Launch a deployment + live log stream -->
+<div class="modal fade" id="deployModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <span class="material-symbols-outlined">rocket_launch</span>
+          <span id="deploy-modal-title">{{ _('Deploy') }}</span>
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <!-- Step 1 — configure -->
+        <div id="deploy-step-configure">
+          <div class="profile-form-row two-cols">
+            <div class="profile-field">
+              <label for="deploy-project">{{ _('Project') }} *</label>
+              <select class="form-control" id="deploy-project" required>
+                <option value="">{{ _('Loading...') }}</option>
+              </select>
+            </div>
+            <div class="profile-field">
+              <label for="deploy-server">{{ _('Server') }} *</label>
+              <select class="form-control" id="deploy-server" required>
+                <option value="">{{ _('Loading...') }}</option>
+              </select>
+            </div>
+          </div>
+          <div class="profile-field">
+            <label for="deploy-branch">{{ _('Branch') }}</label>
+            <input type="text" class="form-control" id="deploy-branch" placeholder="main">
+            <small class="profile-field-hint">{{ _("Remote will run: git fetch && git reset --hard origin/<branch>") }}</small>
+          </div>
+
+          <div class="profile-field deploy-git-config">
+            <label>{{ _('Git remote URL') }} <small class="profile-field-hint">({{ _('optional, stored per project') }})</small></label>
+            <input type="text" class="form-control" id="deploy-git-remote" placeholder="git@github.com:org/repo.git">
+            <div class="deploy-git-row">
+              <button type="button" class="ghost-btn" onclick="saveProjectGitConfig()">
+                <span class="material-symbols-outlined">save</span>
+                <span>{{ _('Save git config') }}</span>
+              </button>
+            </div>
+          </div>
+
+          <div id="deploy-error" class="deploy-alert" hidden></div>
+        </div>
+
+        <!-- Step 2 — live log -->
+        <div id="deploy-step-log" hidden>
+          <div class="deploy-log-header">
+            <span class="deploy-log-title" id="deploy-log-title">{{ _('Deployment started') }}</span>
+            <span class="status-pill" id="deploy-status-pill">
+              <span class="status-dot is-pulse"></span>
+              <span id="deploy-status-label">{{ _('Running') }}</span>
+            </span>
+          </div>
+          <pre class="wpcli-terminal deploy-terminal" id="deploy-log-pane"></pre>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="ghost-btn" id="deploy-close-btn" data-bs-dismiss="modal">{{ _('Close') }}</button>
+        <button type="button" class="btn-primary-teal" id="deploy-run-btn" onclick="runDeployment()">
+          <span class="material-symbols-outlined">rocket_launch</span>
+          <span>{{ _('Deploy') }}</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

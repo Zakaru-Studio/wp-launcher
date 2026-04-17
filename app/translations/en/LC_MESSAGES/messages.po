@@ -217,3 +217,108 @@ msgstr "Project type"
 
 msgid "Database type"
 msgstr "Database type"
+
+msgid "Deployments"
+msgstr "Deployments"
+
+msgid "Register servers, pin SSH fingerprints, and ship projects to staging or production."
+msgstr "Register servers, pin SSH fingerprints, and ship projects to staging or production."
+
+msgid "Add server"
+msgstr "Add server"
+
+msgid "Edit server"
+msgstr "Edit server"
+
+msgid "Delete server"
+msgstr "Delete server"
+
+msgid "Servers"
+msgstr "Servers"
+
+msgid "Targets where deployments can land."
+msgstr "Targets where deployments can land."
+
+msgid "Recent deployments"
+msgstr "Recent deployments"
+
+msgid "Live view of the last runs across all servers."
+msgstr "Live view of the last runs across all servers."
+
+msgid "Label"
+msgstr "Label"
+
+msgid "Environment"
+msgstr "Environment"
+
+msgid "Host"
+msgstr "Host"
+
+msgid "Hostname"
+msgstr "Hostname"
+
+msgid "User"
+msgstr "User"
+
+msgid "SSH user"
+msgstr "SSH user"
+
+msgid "SSH port"
+msgstr "SSH port"
+
+msgid "Private key"
+msgstr "Private key"
+
+msgid "Paste an OpenSSH private key. Leave empty to keep the current one."
+msgstr "Paste an OpenSSH private key. Leave empty to keep the current one."
+
+msgid "Deploy base path"
+msgstr "Deploy base path"
+
+msgid "Test connection"
+msgstr "Test connection"
+
+msgid "Pinned host fingerprint"
+msgstr "Pinned host fingerprint"
+
+msgid "Fingerprint"
+msgstr "Fingerprint"
+
+msgid "Branch"
+msgstr "Branch"
+
+msgid "Project"
+msgstr "Project"
+
+msgid "Server"
+msgstr "Server"
+
+msgid "Commit"
+msgstr "Commit"
+
+msgid "Started"
+msgstr "Started"
+
+msgid "Git remote URL"
+msgstr "Git remote URL"
+
+msgid "optional, stored per project"
+msgstr "optional, stored per project"
+
+msgid "Save git config"
+msgstr "Save git config"
+
+msgid "Remote will run: git fetch && git reset --hard origin/<branch>"
+msgstr "Remote will run: git fetch && git reset --hard origin/<branch>"
+
+msgid "Deployment started"
+msgstr "Deployment started"
+
+msgid "Running"
+msgstr "Running"
+
+msgid "Close"
+msgstr "Close"
+
+msgid "Launch a new site"
+msgstr "Launch a new site"

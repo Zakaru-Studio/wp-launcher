@@ -32,6 +32,10 @@
             <span class="material-symbols-outlined">backup</span>
             <span>{{ _('Backups') }}</span>
         </a>
+        <a href="/deployments" class="sidebar-nav-item {{ 'active' if 'deployment' in request.endpoint else '' }}">
+            <span class="material-symbols-outlined">rocket_launch</span>
+            <span>{{ _('Deployments') }}</span>
+        </a>
         {% endif %}
     </nav>
 </aside>
@@ -162,6 +166,10 @@
     <a href="/backups" class="bottom-nav-item {{ 'active' if 'backups' in request.endpoint else '' }}">
         <span class="material-symbols-outlined">backup</span>
         <span>{{ _('Backups') }}</span>
+    </a>
+    <a href="/deployments" class="bottom-nav-item {{ 'active' if 'deployment' in request.endpoint else '' }}">
+        <span class="material-symbols-outlined">rocket_launch</span>
+        <span>{{ _('Deploy') }}</span>
     </a>
     {% endif %}
 </nav>

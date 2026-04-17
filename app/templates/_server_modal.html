@@ -1,0 +1,83 @@
+<!-- Add / edit a deployment target server -->
+<div class="modal fade" id="serverModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <span class="material-symbols-outlined">dns</span>
+          <span id="server-modal-title">{{ _('Add server') }}</span>
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form id="serverForm" onsubmit="saveServer(event)">
+        <input type="hidden" id="server-id">
+        <div class="modal-body">
+          <div class="profile-form-row two-cols">
+            <div class="profile-field">
+              <label for="server-label">{{ _('Label') }} *</label>
+              <input type="text" class="form-control" id="server-label" required placeholder="acme-prod">
+            </div>
+            <div class="profile-field">
+              <label for="server-env">{{ _('Environment') }} *</label>
+              <select class="form-control" id="server-env" required>
+                <option value="staging">{{ _('Staging') }}</option>
+                <option value="production">{{ _('Production') }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="profile-form-row two-cols">
+            <div class="profile-field">
+              <label for="server-hostname">{{ _('Hostname') }} *</label>
+              <input type="text" class="form-control" id="server-hostname" required placeholder="deploy.example.com">
+            </div>
+            <div class="profile-field">
+              <label for="server-ssh-port">{{ _('SSH port') }}</label>
+              <input type="number" class="form-control" id="server-ssh-port" value="22" min="1" max="65535">
+            </div>
+          </div>
+
+          <div class="profile-form-row two-cols">
+            <div class="profile-field">
+              <label for="server-ssh-user">{{ _('SSH user') }} *</label>
+              <input type="text" class="form-control" id="server-ssh-user" required placeholder="deploy">
+            </div>
+            <div class="profile-field">
+              <label for="server-deploy-path">{{ _('Deploy base path') }} *</label>
+              <input type="text" class="form-control" id="server-deploy-path" required placeholder="/var/www">
+            </div>
+          </div>
+
+          <div class="profile-field">
+            <label for="server-private-key">
+              {{ _('Private key') }}
+              <span id="server-key-hint" class="profile-field-hint" style="display:inline;">
+                {{ _('Paste an OpenSSH private key. Leave empty to keep the current one.') }}
+              </span>
+            </label>
+            <textarea class="form-control profile-textarea" id="server-private-key" rows="6"
+                      placeholder="-----BEGIN OPENSSH PRIVATE KEY-----..."></textarea>
+          </div>
+
+          <div class="profile-field deploy-fingerprint-box" id="server-fingerprint-box" hidden>
+            <div class="deploy-fingerprint-label">{{ _('Pinned host fingerprint') }}</div>
+            <code class="deploy-fingerprint-value" id="server-fingerprint-value">—</code>
+          </div>
+
+          <div id="server-test-result" class="deploy-alert" hidden></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="ghost-btn" data-bs-dismiss="modal">{{ _('Cancel') }}</button>
+          <button type="button" class="btn-primary-dark" onclick="testServerConnection()">
+            <span class="material-symbols-outlined">wifi_tethering</span>
+            <span>{{ _('Test connection') }}</span>
+          </button>
+          <button type="submit" class="btn-primary-teal">
+            <span class="material-symbols-outlined">save</span>
+            <span>{{ _('Save') }}</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
