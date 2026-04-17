@@ -415,3 +415,54 @@
     background-image: radial-gradient(circle at 2px 2px, rgba(100,101,108,0.35) 1px, transparent 0);
 }
 
+
+/* ============================================
+   SKELETON LOADERS — Docker / Processes tab
+   Shown while the API response is in-flight.
+   ============================================ */
+
+.skeleton-bar,
+.skeleton-pill {
+    display: inline-block;
+    background: linear-gradient(
+        90deg,
+        var(--al-surface-container-high) 0%,
+        var(--al-surface-container-highest) 50%,
+        var(--al-surface-container-high) 100%
+    );
+    background-size: 200% 100%;
+    border-radius: 6px;
+    animation: skeleton-shimmer 1.4s ease-in-out infinite;
+    vertical-align: middle;
+}
+
+.skeleton-pill {
+    height: 18px;
+    border-radius: 999px;
+}
+
+@keyframes skeleton-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* Slightly muted opacity on whole loading items */
+.docker-container-item.is-loading,
+.process-item.is-loading {
+    opacity: 0.95;
+    pointer-events: none;
+}
+
+/* Ensure skeleton bars inside .container-stat are centered */
+.container-stat .skeleton-bar { display: block; }
+
+/* Dark theme uses the dark surfaces for the gradient */
+[data-theme="dark"] .skeleton-bar,
+[data-theme="dark"] .skeleton-pill {
+    background: linear-gradient(
+        90deg,
+        var(--al-surface-container-high) 0%,
+        var(--al-surface-container-highest) 50%,
+        var(--al-surface-container-high) 100%
+    );
+}

@@ -90,30 +90,95 @@ window.addEventListener('beforeunload', function() {
  */
 function switchTab(tabName) {
     currentTab = tabName;
-    
+
     // Désactiver tous les onglets
     document.querySelectorAll('.monitoring-tab').forEach(tab => {
         tab.classList.remove('active');
     });
-    
+
     // Masquer tout le contenu
     document.querySelectorAll('.tab-content-pane').forEach(pane => {
         pane.classList.remove('active');
     });
-    
+
     // Activer l'onglet et le contenu sélectionnés
     event.target.classList.add('active');
     document.getElementById(`tab-${tabName}`).classList.add('active');
-    
+
     // Charger les données si ce n'est pas déjà fait
     if (!tabsLoaded[tabName]) {
         if (tabName === 'docker') {
+            renderDockerSkeleton();
             loadDockerStats();
         } else if (tabName === 'processus') {
+            renderProcessSkeleton();
             loadProcesses();
         }
         tabsLoaded[tabName] = true;
     }
+}
+
+/**
+ * Render placeholder skeleton cards while Docker stats are fetched.
+ * Keeps the UI feeling responsive — the user sees structure immediately
+ * even when the API call takes a few seconds.
+ */
+function renderDockerSkeleton(count = 4) {
+    const containersList = document.getElementById('docker-containers-list');
+    if (!containersList) return;
+
+    const countEl = document.getElementById('docker-count');
+    if (countEl) countEl.innerHTML = '<span class="skeleton-bar" style="width:80px;height:14px"></span>';
+
+    let cards = '';
+    for (let i = 0; i < count; i++) {
+        cards += `
+            <div class="docker-container-item is-loading" aria-busy="true">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="skeleton-bar" style="width:160px;height:16px"></span>
+                        <span class="skeleton-pill" style="width:70px"></span>
+                    </div>
+                </div>
+                <div class="container-stats">
+                    <div class="container-stat">
+                        <span class="skeleton-bar" style="width:30px;height:9px;margin:0 auto 6px"></span>
+                        <span class="skeleton-bar" style="width:50px;height:18px;margin:0 auto"></span>
+                    </div>
+                    <div class="container-stat">
+                        <span class="skeleton-bar" style="width:50px;height:9px;margin:0 auto 6px"></span>
+                        <span class="skeleton-bar" style="width:80px;height:18px;margin:0 auto"></span>
+                    </div>
+                    <div class="container-stat">
+                        <span class="skeleton-bar" style="width:45px;height:9px;margin:0 auto 6px"></span>
+                        <span class="skeleton-bar" style="width:90px;height:14px;margin:0 auto"></span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    containersList.innerHTML = cards;
+}
+
+/**
+ * Render placeholder rows while the process list is fetched.
+ */
+function renderProcessSkeleton(count = 8) {
+    const list = document.getElementById('process-list');
+    if (!list) return;
+    let rows = '';
+    for (let i = 0; i < count; i++) {
+        rows += `
+            <div class="process-item is-loading" aria-busy="true">
+                <div class="process-info">
+                    <span class="skeleton-bar" style="width:${100 + (i % 3) * 40}px;height:14px"></span>
+                    <span class="skeleton-bar" style="width:60px;height:10px;margin-top:6px"></span>
+                </div>
+                <span class="skeleton-bar" style="width:80px;height:18px"></span>
+            </div>
+        `;
+    }
+    list.innerHTML = rows;
 }
 
 /**
@@ -127,6 +192,7 @@ function refreshServerStats() {
  * Rafraîchit les stats Docker
  */
 function refreshDockerStats() {
+    renderDockerSkeleton();
     loadDockerStats();
 }
 
