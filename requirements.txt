@@ -25,4 +25,4 @@ paramiko==3.5.0
 cryptography==46.0.7
 
 # WSGI / production
-gunicorn==21.2.0
+gunicorn==22.0.0
