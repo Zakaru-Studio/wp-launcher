@@ -21,7 +21,7 @@ psutil==5.9.8
 requests==2.33.0  # GitHub OAuth service, HTTP calls
 
 # Deployments: SSH client + at-rest encryption for stored private keys
-paramiko==3.5.0
+paramiko==4.0.0
 cryptography==46.0.7
 
 # WSGI / production
