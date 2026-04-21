@@ -9,6 +9,7 @@ import subprocess
 import configparser
 from typing import Dict, Any, Optional
 from app.config.docker_config import DockerConfig
+from app.config.php_versions import DEFAULT_PHP_VERSION, SUPPORTED_PHP_VERSIONS, is_supported
 from app.utils.logger import wp_logger
 
 class ConfigService:
@@ -396,8 +397,21 @@ collation-server = utf8mb4_unicode_ci
         
         return '\n'.join(updated_lines)
     
-    def get_php_config_schema(self) -> Dict[str, Any]:
-        """Retourne le schéma des configurations PHP disponibles"""
+    def get_php_config_schema(self, project_name: Optional[str] = None) -> Dict[str, Any]:
+        """Retourne le schéma des configurations PHP disponibles.
+
+        Si ``project_name`` est fourni et que le projet tourne sur une
+        version PHP legacy (retirée de ``SUPPORTED_PHP_VERSIONS``), on
+        l'ajoute au dropdown avec un suffixe ``(legacy)`` pour qu'elle
+        reste sélectionnable le temps d'une migration — au lieu de
+        casser le formulaire en affichant une version inconnue ou en
+        remplaçant silencieusement par la default.
+        """
+        php_options = list(SUPPORTED_PHP_VERSIONS)
+        if project_name:
+            current = self.get_php_version(project_name)
+            if current and current not in php_options:
+                php_options.append(current)
         return {
             'wp_debug': {
                 'label': 'WP_DEBUG',
@@ -420,8 +434,8 @@ collation-server = utf8mb4_unicode_ci
             'php_version': {
                 'label': 'Version PHP',
                 'type': 'select',
-                'options': ['7.4', '8.0', '8.1', '8.2', '8.3', '8.4'],
-                'default': '8.2',
+                'options': php_options,
+                'default': DEFAULT_PHP_VERSION,
                 'description': 'Version PHP du conteneur (redémarrage requis)'
             },
             'memory_limit': {
@@ -463,17 +477,26 @@ collation-server = utf8mb4_unicode_ci
         }
     
     def get_php_version(self, project_name: str) -> str:
-        """Récupère la version PHP actuelle d'un projet"""
+        """Récupère la version PHP actuelle d'un projet.
+
+        Si le fichier ``.php_version`` est absent/illisible, on tombe
+        sur ``DEFAULT_PHP_VERSION``. Le fichier peut contenir une
+        version legacy (ex: ``8.2`` retirée des options) — on la
+        retourne telle quelle pour ne pas casser les sites existants ;
+        le dropdown UI ajoutera simplement cette valeur en plus des
+        options supportées (voir ``get_php_config_schema``).
+        """
         try:
-            # Lire depuis le fichier .php_version dans containers/
             version_file = os.path.join(self.containers_folder, project_name, '.php_version')
             if os.path.exists(version_file):
                 with open(version_file, 'r') as f:
-                    return f.read().strip()
-            return '8.2'  # Version par défaut
+                    stored = f.read().strip()
+                if stored:
+                    return stored
+            return DEFAULT_PHP_VERSION
         except Exception as e:
             wp_logger.log_system_info(f"Erreur récupération version PHP pour {project_name}: {e}")
-            return '8.2'
+            return DEFAULT_PHP_VERSION
     
     def set_php_version(self, project_name: str, version: str) -> bool:
         """Définit la version PHP d'un projet"""

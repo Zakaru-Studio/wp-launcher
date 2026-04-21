@@ -1510,22 +1510,75 @@ class DockerService:
             return False, str(e)
     
     def rebuild_wordpress_container(self, project_name, timeout=300):
-        """Rebuild le conteneur WordPress avec une nouvelle version PHP"""
+        """Rebuild le conteneur WordPress avec une nouvelle version PHP.
+
+        Garde-fous :
+          * Lock ``.rebuild.lock`` par projet → pas de double rebuild
+            concurrent (deux admins qui cliquent en même temps).
+          * Pre-flight ``docker image inspect`` sur l'image cible →
+            un projet avec ``.php_version = 8.0`` (jamais buildée)
+            ne tue plus ses containers en les poussant vers un tag
+            inexistant.
+        """
+        from app.config.php_versions import (
+            DEFAULT_PHP_VERSION, docker_image_exists, image_tag,
+        )
         try:
             print(f"🔄 [DOCKER_SERVICE] Rebuild conteneur WordPress pour {project_name}")
-            
+
             container_path = os.path.join(self.containers_folder, project_name)
-            
+
             if not os.path.exists(container_path):
                 return False, f"Dossier conteneur non trouvé: {container_path}"
-            
+
+            # Concurrency lock. Stale locks (> 1h) are ignored — a
+            # crashed rebuild should not block future runs forever.
+            lock_path = os.path.join(container_path, '.rebuild.lock')
+            if os.path.exists(lock_path):
+                try:
+                    age = time.time() - os.path.getmtime(lock_path)
+                except OSError:
+                    age = 0
+                if age < 3600:
+                    return False, (
+                        "Un rebuild est déjà en cours pour ce projet "
+                        f"(lock depuis {int(age)}s). Réessaye dans quelques minutes."
+                    )
+                # Stale — remove and proceed.
+                try:
+                    os.remove(lock_path)
+                except OSError:
+                    pass
+
+            try:
+                with open(lock_path, 'w') as f:
+                    f.write(str(int(time.time())))
+            except OSError:
+                pass  # locking best-effort; don't block the rebuild
+
             # Lire la version PHP depuis le fichier .php_version
             version_file = os.path.join(container_path, '.php_version')
-            php_version = '8.2'  # Version par défaut
+            php_version = DEFAULT_PHP_VERSION
             if os.path.exists(version_file):
                 with open(version_file, 'r') as f:
-                    php_version = f.read().strip()
-            
+                    candidate = f.read().strip()
+                if candidate:
+                    php_version = candidate
+
+            # Pre-flight: refuse to touch docker-compose if the target
+            # image isn't present. Docker would happily create the
+            # container and then loop forever trying to pull it.
+            img_check = docker_image_exists(php_version)
+            if img_check is False:
+                try:
+                    os.remove(lock_path)
+                except OSError:
+                    pass
+                return False, (
+                    f"Image Docker manquante: {image_tag(php_version)}. "
+                    "Exécute scripts/build_wordpress_images.sh puis réessaie."
+                )
+
             print(f"📦 [DOCKER_SERVICE] Version PHP: {php_version}")
             
             # Modifier le docker-compose.yml pour utiliser la bonne image
@@ -1620,13 +1673,20 @@ class DockerService:
                     
             finally:
                 os.chdir(original_cwd)
-                
+
         except subprocess.TimeoutExpired:
             print(f"❌ [DOCKER_SERVICE] Timeout lors du rebuild")
             return False, "Timeout lors du rebuild du conteneur"
         except Exception as e:
             print(f"❌ [DOCKER_SERVICE] Erreur rebuild conteneur: {e}")
             return False, str(e)
+        finally:
+            # Release the rebuild lock regardless of success / failure.
+            try:
+                if 'lock_path' in locals() and os.path.exists(lock_path):
+                    os.remove(lock_path)
+            except OSError:
+                pass
 
     def start_containers_with_auto_install(self, container_path, project_name, timeout=300):
         """Démarre les conteneurs et attend l'auto-installation complète"""

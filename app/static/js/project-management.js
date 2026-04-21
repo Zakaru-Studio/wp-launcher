@@ -816,9 +816,12 @@ function createProjectHTML(project) {
         ? `${host}:${project.port}`
         : (project.domain || projectTypeLabel);
     const metaServer = project.server || (isNextjsApp ? 'Next.js Runtime' : 'Docker Compose');
+    // Default PHP label falls back to generic "PHP" when the backend
+    // hasn't yet returned the version — better than a hard-coded 8.2
+    // that silently lies if the default changes server-side.
     const metaTech = isNextjsApp
         ? (project.node_version ? `Node ${project.node_version}` : 'Node.js')
-        : (project.php_version ? `PHP ${project.php_version}` : 'PHP 8.2');
+        : (project.php_version ? `PHP ${project.php_version}` : 'PHP');
 
     // Status pill (running / stopped / error-like)
     let statusPillClass = 'status-pill-stopped';

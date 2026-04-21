@@ -1,57 +1,66 @@
 #!/bin/bash
+# Build Docker images for every PHP version listed in
+# app/config/php_versions.py::SUPPORTED_PHP_VERSIONS.
+#
+# Derives the version list at runtime so this script never drifts
+# from the backend's view of what's supported.
+#
+# Usage:
+#   ./scripts/build_wordpress_images.sh             # every supported version
+#   ./scripts/build_wordpress_images.sh 8.4 8.5     # only those
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+WP_DIR="$REPO_ROOT/docker-template/wordpress"
 
 echo "╔════════════════════════════════════════════════════════════════╗"
-echo "║   Construction des images WordPress multi-versions PHP        ║"
+echo "║   Construction des images WordPress multi-versions PHP         ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
-echo ""
 
-cd /home/dev-server/Sites/wp-launcher/docker-template/wordpress
-
-# PHP 7.4
-echo "📦 Construction de l'image PHP 7.4..."
-docker build -t wp-launcher-wordpress:php7.4 -f Dockerfile.php7.4 . || {
-    echo "❌ Erreur construction PHP 7.4"
+if [ ! -d "$WP_DIR" ]; then
+    echo "❌ Répertoire $WP_DIR introuvable."
     exit 1
-}
-echo "✅ PHP 7.4 construit avec succès"
+fi
+
+# Pull supported versions + default from the Python source of truth.
+cd "$REPO_ROOT"
+mapfile -t PY_OUT < <(python3 -c 'import sys; sys.path.insert(0, "."); from app.config.php_versions import SUPPORTED_PHP_VERSIONS, DEFAULT_PHP_VERSION; print(" ".join(SUPPORTED_PHP_VERSIONS)); print(DEFAULT_PHP_VERSION)')
+read -ra SUPPORTED_VERSIONS <<< "${PY_OUT[0]}"
+DEFAULT_VERSION="${PY_OUT[1]}"
+
+if [ $# -gt 0 ]; then
+    SUPPORTED_VERSIONS=("$@")
+fi
+
+echo "→ Versions à construire : ${SUPPORTED_VERSIONS[*]}"
+echo "→ Default (taggée aussi :latest) : $DEFAULT_VERSION"
 echo ""
 
-# PHP 8.2 (latest - existant)
-echo "📦 Construction de l'image PHP 8.2 (latest)..."
-docker build -t wp-launcher-wordpress:php8.2 -t wp-launcher-wordpress:latest -f Dockerfile . || {
-    echo "❌ Erreur construction PHP 8.2"
-    exit 1
-}
-echo "✅ PHP 8.2 construit avec succès"
-echo ""
+cd "$WP_DIR"
 
-# PHP 8.3
-echo "📦 Construction de l'image PHP 8.3..."
-docker build -t wp-launcher-wordpress:php8.3 -f Dockerfile.php8.3 . || {
-    echo "❌ Erreur construction PHP 8.3"
-    exit 1
-}
-echo "✅ PHP 8.3 construit avec succès"
-echo ""
-
-# PHP 8.4
-echo "📦 Construction de l'image PHP 8.4..."
-docker build -t wp-launcher-wordpress:php8.4 -f Dockerfile.php8.4 . || {
-    echo "❌ Erreur construction PHP 8.4"
-    exit 1
-}
-echo "✅ PHP 8.4 construit avec succès"
-echo ""
+for version in "${SUPPORTED_VERSIONS[@]}"; do
+    dockerfile="Dockerfile.php${version}"
+    if [ ! -f "$dockerfile" ]; then
+        echo "⚠️  $dockerfile manquant — skip PHP $version"
+        continue
+    fi
+    echo "📦 PHP $version…"
+    tags=(-t "wp-launcher-wordpress:php${version}")
+    if [ "$version" = "$DEFAULT_VERSION" ]; then
+        tags+=(-t "wp-launcher-wordpress:latest")
+    fi
+    docker build "${tags[@]}" -f "$dockerfile" . || {
+        echo "❌ Erreur construction PHP $version"
+        exit 1
+    }
+    echo "✅ PHP $version construit avec succès"
+    echo ""
+done
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "📊 Images WordPress disponibles :"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-docker images | grep wp-launcher-wordpress | awk '{printf "%-40s %10s\n", $1":"$2, $7" "$8}'
+docker images --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}' | grep wp-launcher-wordpress || true
 echo ""
 echo "✅ Toutes les images sont construites et prêtes à l'emploi !"
-
-
-
-
-
-

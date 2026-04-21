@@ -6,6 +6,7 @@ Routes pour la gestion des configurations PHP et MySQL
 from flask import Blueprint, request, jsonify, current_app, Response
 from app.utils.logger import wp_logger
 from app.middleware.auth_middleware import login_required, admin_required
+from app.config.php_versions import SUPPORTED_PHP_VERSIONS, docker_image_exists
 import json
 
 config_bp = Blueprint('config', __name__, url_prefix='/api/config')
@@ -35,8 +36,10 @@ def get_php_config(project_name):
         # Récupérer la configuration actuelle
         config = config_service.get_php_config(project_name)
         
-        # Récupérer le schéma pour l'interface
-        schema = config_service.get_php_config_schema()
+        # Récupérer le schéma pour l'interface — project-aware pour
+        # que les versions legacy (ex: 8.2 retirée des options) restent
+        # sélectionnables sur les sites qui l'utilisent encore.
+        schema = config_service.get_php_config_schema(project_name=project_name)
         
         wp_logger.log_system_info(f"Configuration PHP récupérée via API pour {project_name}", 
                                  config_keys=list(config.keys()))
@@ -233,9 +236,23 @@ def _validate_php_config(config_data):
         # Validation de la version PHP
         if 'php_version' in config_data:
             version = str(config_data['php_version']).strip()
-            valid_versions = ['7.4', '8.0', '8.1', '8.2', '8.3', '8.4']
-            if version not in valid_versions:
-                return {'valid': False, 'error': f'Version PHP invalide. Versions supportées: {", ".join(valid_versions)}'}
+            if version not in SUPPORTED_PHP_VERSIONS:
+                supported = ", ".join(SUPPORTED_PHP_VERSIONS)
+                return {
+                    'valid': False,
+                    'error': f'Version PHP invalide. Versions supportées: {supported}',
+                }
+            # Pre-flight: refuse any version whose Docker image isn't
+            # available. Prevents a follow-up rebuild from leaving the
+            # container in a restart loop.
+            if docker_image_exists(version) is False:
+                return {
+                    'valid': False,
+                    'error': (
+                        f"Image Docker manquante pour PHP {version}. "
+                        f"Exécute scripts/build_wordpress_images.sh."
+                    ),
+                }
             validated['php_version'] = version
         
         # Validation des champs numériques
