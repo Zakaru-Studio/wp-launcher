@@ -22,15 +22,24 @@ Accessible through a real-time web interface on port 5000 with WebSocket support
 ## Features
 
 - **One-click WordPress project creation** with Docker
-- **Database import/export** (SQL) with progress tracking
+- **Multi-PHP support** — per-project PHP 7.4 / 8.3 / 8.4 / 8.5, swappable
+  from the UI (auto-rebuilds the container)
+- **Database import/export** (SQL, .sql.gz, .zip) streamed via stdin with
+  byte-level progress, auto memory-bump to avoid OOM on large dumps, and
+  a pre-import backup rotated in `logs/db-backups/`
+- **Remote deployments** (`/deployments`) — register staging/production
+  servers, pin SSH host fingerprints, ship via `git fetch && git reset
+  --hard`, live log stream in the UI
 - **Project cloning** and snapshots/restore
 - **WordPress permissions management** (Docker-compatible)
 - **WP-CLI integration** from the web UI
 - **Container monitoring** and resource usage
 - **Next.js support** with MongoDB or MySQL
 - **WordPress debug mode** toggle (wp-config.php)
-- **Real-time updates** via WebSocket
+- **Real-time updates** via WebSocket — notifications popover, live
+  deployment / import progress
 - **Multi-developer instances** with Git integration
+- **i18n** — English and French (browser locale auto-detected)
 
 ## Prerequisites
 
@@ -91,6 +100,59 @@ sudo journalctl -u wp-launcher -f
 
 The web interface is available at `http://<YOUR_IP>:5000`.
 
+## PHP versions
+
+Each WordPress project picks its PHP version from the `Configuration PHP`
+panel. Supported versions are defined in a single source of truth:
+[`app/config/php_versions.py`](app/config/php_versions.py).
+
+| Version | Ships as Docker image | Notes |
+|---|---|---|
+| 7.4 | `wp-launcher-wordpress:php7.4` | Legacy sites only |
+| 8.3 | `wp-launcher-wordpress:php8.3` | |
+| 8.4 | `wp-launcher-wordpress:php8.4` | **Default** for new sites |
+| 8.5 | `wp-launcher-wordpress:php8.5` | Latest |
+
+Build all images at install time (takes ~15 minutes on first run):
+
+```bash
+./scripts/build_wordpress_images.sh
+# Or just one version:
+./scripts/build_wordpress_images.sh 8.5
+```
+
+To add a new version, drop a `docker-template/wordpress/Dockerfile.phpX.Y`
+file, append `'X.Y'` to `SUPPORTED_PHP_VERSIONS`, and re-run the build
+script. The dropdown, validator and rebuild path all derive from the same
+list — no other edits needed.
+
+Sites already pinned on a retired version (e.g. 8.2) keep that option
+visible in their dropdown until migrated, so an upgrade is never forced.
+
+## Remote deployments
+
+The `/deployments` page lets admins ship a project to a staging or
+production server over SSH:
+
+1. Register a server — label, hostname, SSH user, private key (stored
+   Fernet-encrypted at rest, derived from `SECRET_KEY` via HKDF). Click
+   **Test connection** to pin the host fingerprint.
+2. Optional: set a custom deploy path per (project × server) pair; the
+   default is `<server.deploy_base_path>/<project_name>`.
+3. Click **Deploy**, pick project + server + branch. The remote runs
+   `git fetch --prune origin && git reset --hard origin/<branch> &&
+   git rev-parse HEAD`. Stdout/stderr stream live into the modal via
+   Socket.IO.
+
+Permission model: admins can deploy anything; a developer can deploy a
+project only if they own an active dev-instance on it. Every `git`,
+`deploy-path`, and `run` endpoint gates on this check.
+
+Repos are expected to be cloned on the target server already (v1
+deliberately does not bootstrap clones). If the project needs
+composer/npm/wp-cli steps, add a `deploy.sh` at the repo root — it is
+picked up automatically after the `git reset`.
+
 ## Configuration
 
 All settings are in the `.env` file (not tracked by git):
@@ -121,21 +183,36 @@ wp-launcher/
 │
 ├── app/                       # Main package
 │   ├── __init__.py            # Flask factory
-│   ├── config/                # Configuration (Docker, DB, ports)
-│   ├── models/                # Models (Project, User, DevInstance)
+│   ├── config/                # Configuration
+│   │   ├── docker_config.py   # Docker / paths / network
+│   │   └── php_versions.py    # Single source of truth for PHP support
+│   ├── models/                # Models (Project, User, DevInstance, Server)
 │   ├── routes/                # Flask routes (API + pages)
+│   │   ├── deployments.py     # /deployments — servers CRUD, run, log
+│   │   ├── database.py        # DB import / export
+│   │   └── ...
 │   ├── services/              # Business logic
+│   │   ├── deployment_service.py  # SSH-based deploy worker
+│   │   ├── fast_import_service.py # Streaming SQL import
+│   │   ├── server_service.py      # Remote server inventory
+│   │   ├── ssh_service.py         # paramiko + Fernet-encrypted keys
+│   │   └── ...
 │   ├── middleware/            # Auth middleware
 │   ├── utils/                 # Utilities
 │   ├── static/                # CSS, JS, images
+│   ├── translations/          # Flask-Babel catalogs (en, fr)
 │   └── templates/             # Jinja2 templates
 │
 ├── scripts/                   # Maintenance scripts
+│   └── build_wordpress_images.sh  # Build all PHP-versioned images
 │
 ├── projets/                   # WordPress project files (git-ignored)
 ├── containers/                # Docker configs per project (git-ignored)
 ├── data/                      # SQLite databases (git-ignored)
+│   └── deployments.db         # Servers inventory + deployment history
 ├── logs/                      # Application logs (git-ignored)
+│   ├── db-backups/            # Pre-import DB backups (rotation 5)
+│   └── deployments/           # Per-deployment log files (rotation 500)
 └── snapshots/                 # Project snapshots (git-ignored)
 ```
 
