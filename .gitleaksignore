@@ -1,0 +1,5 @@
+# Fake Ed25519 OPENSSH key used only for unit-testing the Fernet round-trip
+# in tests/test_deployments.py. Not a real secret. The file has since been
+# rewritten to build the PEM markers via concatenation so new commits don't
+# match this rule, but the historical commit still contains the inline form.
+729defab11ec913cb0501f1d83c9243ac3efb371:tests/test_deployments.py:private-key:28

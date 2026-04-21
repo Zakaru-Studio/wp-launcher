@@ -3,6 +3,10 @@
 Follows the same shape as ``user_service.py`` (raw sqlite3, no ORM).
 Lives in ``data/deployments.db`` so the deployments feature stays
 self-contained and doesn't drift into ``projects.db`` migrations.
+
+Schema is defined in ``app.services.deployments_schema``; both
+``ServerService`` and ``DeploymentService`` share that single source of
+truth so their FK definitions can never drift apart.
 """
 from __future__ import annotations
 
@@ -13,6 +17,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 from app.models.server import Server
+from app.services import deployments_schema
 
 log = logging.getLogger(__name__)
 
@@ -24,58 +29,9 @@ class ServerService:
     """Small wrapper around the ``servers`` table."""
 
     def __init__(self, db_path: str = _DEFAULT_DB_PATH):
-        self.db_path = db_path
+        self.db_path = os.path.abspath(db_path)
         os.makedirs(os.path.dirname(self.db_path) or ".", exist_ok=True)
-        self._init_db()
-
-    # ─── schema ──────────────────────────────────────────────────────
-
-    def _init_db(self) -> None:
-        conn = sqlite3.connect(self.db_path)
-        try:
-            cur = conn.cursor()
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS servers (
-                    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
-                    label                 TEXT NOT NULL UNIQUE,
-                    env                   TEXT NOT NULL CHECK(env IN ('staging','production')),
-                    hostname              TEXT NOT NULL,
-                    ssh_port              INTEGER NOT NULL DEFAULT 22,
-                    ssh_user              TEXT NOT NULL,
-                    ssh_private_key_enc   BLOB NOT NULL,
-                    host_fingerprint      TEXT,
-                    deploy_base_path      TEXT NOT NULL,
-                    created_by            INTEGER,
-                    created_at            TEXT NOT NULL
-                )
-                """
-            )
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS deployments (
-                    id             INTEGER PRIMARY KEY AUTOINCREMENT,
-                    project_name   TEXT NOT NULL,
-                    server_id      INTEGER NOT NULL,
-                    branch         TEXT NOT NULL,
-                    commit_sha     TEXT,
-                    status         TEXT NOT NULL
-                                   CHECK(status IN ('running','success','failed','timeout')),
-                    triggered_by   INTEGER,
-                    started_at     TEXT NOT NULL,
-                    finished_at    TEXT,
-                    log_file       TEXT,
-                    FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE
-                )
-                """
-            )
-            cur.execute(
-                "CREATE INDEX IF NOT EXISTS idx_deploy_project "
-                "ON deployments(project_name, started_at DESC)"
-            )
-            conn.commit()
-        finally:
-            conn.close()
+        deployments_schema.init(self.db_path)
 
     # ─── helpers ─────────────────────────────────────────────────────
 
@@ -96,9 +52,9 @@ class ServerService:
         )
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+        """Delegates to the shared schema connector so FK enforcement
+        and row_factory are set identically everywhere."""
+        return deployments_schema.connect(self.db_path)
 
     @staticmethod
     def _now() -> str:
@@ -202,6 +158,8 @@ class ServerService:
         return self.get_by_id(server_id)
 
     def delete(self, server_id: int) -> bool:
+        """Delete a server. FK cascade removes deployment rows and
+        per-(project, server) deploy-path overrides automatically."""
         with self._connect() as conn:
             cur = conn.cursor()
             cur.execute("DELETE FROM servers WHERE id = ?", (server_id,))

@@ -20,23 +20,30 @@ from __future__ import annotations
 import logging
 import os
 import re
-import select
+import socket
 import sqlite3
 import threading
 import time
 from datetime import datetime, timezone
 from typing import Callable, List, Optional, Tuple
 
+import paramiko
 from flask import Flask, current_app
 
-from app.services import ssh_service
+from app.services import deployments_schema, ssh_service
 
 log = logging.getLogger(__name__)
 
 _DEFAULT_DB_PATH = "data/deployments.db"
 _LOG_DIR = "logs/deployments"
 _DEPLOY_TIMEOUT_SECONDS = 600  # 10 minutes
+# Branch names: git refs minus the dangerous bits. `..` is explicitly
+# banned even though the regex wouldn't match a pure `..` alone, since
+# we interpolate `origin/<branch>` into a shell pipeline.
 _BRANCH_RE = re.compile(r"^[A-Za-z0-9._/-]{1,100}$")
+# Keep at most this many log files on disk. Older ones are pruned on
+# each _finalize call so an unattended worker can't fill the volume.
+_MAX_LOG_FILES = 500
 
 
 class DeploymentService:
@@ -49,98 +56,40 @@ class DeploymentService:
         server_service=None,
         socketio=None,
     ):
-        self.db_path = db_path
-        self.log_dir = log_dir
+        self.db_path = os.path.abspath(db_path)
+        self.log_dir = os.path.abspath(log_dir)
         self.server_service = server_service
         self.socketio = socketio
         os.makedirs(self.log_dir, exist_ok=True)
-        self._init_db()
-
-    # ─── schema ──────────────────────────────────────────────────────
-
-    def _init_db(self) -> None:
-        """Tables are also created by ServerService._init_db; running
-        the same CREATE IF NOT EXISTS here keeps the service usable
-        standalone (e.g. in tests)."""
-        conn = sqlite3.connect(self.db_path)
-        try:
-            cur = conn.cursor()
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS servers (
-                    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
-                    label                 TEXT NOT NULL UNIQUE,
-                    env                   TEXT NOT NULL CHECK(env IN ('staging','production')),
-                    hostname              TEXT NOT NULL,
-                    ssh_port              INTEGER NOT NULL DEFAULT 22,
-                    ssh_user              TEXT NOT NULL,
-                    ssh_private_key_enc   BLOB NOT NULL,
-                    host_fingerprint      TEXT,
-                    deploy_base_path      TEXT NOT NULL,
-                    created_by            INTEGER,
-                    created_at            TEXT NOT NULL
-                )
-                """
-            )
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS deployments (
-                    id             INTEGER PRIMARY KEY AUTOINCREMENT,
-                    project_name   TEXT NOT NULL,
-                    server_id      INTEGER NOT NULL,
-                    branch         TEXT NOT NULL,
-                    commit_sha     TEXT,
-                    status         TEXT NOT NULL
-                                   CHECK(status IN ('running','success','failed','timeout')),
-                    triggered_by   INTEGER,
-                    started_at     TEXT NOT NULL,
-                    finished_at    TEXT,
-                    log_file       TEXT
-                )
-                """
-            )
-            cur.execute(
-                "CREATE INDEX IF NOT EXISTS idx_deploy_project "
-                "ON deployments(project_name, started_at DESC)"
-            )
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS project_deployment_config (
-                    project_name         TEXT PRIMARY KEY,
-                    git_remote_url       TEXT,
-                    git_default_branch   TEXT DEFAULT 'main',
-                    updated_at           TEXT NOT NULL
-                )
-                """
-            )
-            # Per (project × server) deploy path override. When a row
-            # exists for (project, server), the deployer uses that path
-            # instead of `<server.deploy_base_path>/<project_name>`.
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS project_server_deploy_paths (
-                    project_name   TEXT NOT NULL,
-                    server_id      INTEGER NOT NULL,
-                    deploy_path    TEXT NOT NULL,
-                    updated_at     TEXT NOT NULL,
-                    PRIMARY KEY (project_name, server_id)
-                )
-                """
-            )
-            conn.commit()
-        finally:
-            conn.close()
+        deployments_schema.init(self.db_path)
+        self._reap_stale_running_rows()
 
     # ─── helpers ─────────────────────────────────────────────────────
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+        return deployments_schema.connect(self.db_path)
 
     @staticmethod
     def _now() -> str:
         return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    def _reap_stale_running_rows(self) -> None:
+        """Fail any row that was left `running` by a previous process
+        crash. Without this, UI spinners would hang forever after an
+        SIGKILL/OOM because the worker thread can't update the DB
+        during an abrupt interpreter shutdown."""
+        now = self._now()
+        try:
+            with self._connect() as conn:
+                conn.execute(
+                    "UPDATE deployments "
+                    "SET status = 'failed', finished_at = ? "
+                    "WHERE status = 'running'",
+                    (now,),
+                )
+                conn.commit()
+        except sqlite3.Error as exc:
+            log.warning("Could not reap stale deployments: %s", exc)
 
     # ─── project git config ─────────────────────────────────────────
 
@@ -240,30 +189,52 @@ class DeploymentService:
 
     def can_user_deploy(self, user, project_name: str) -> bool:
         """Admin can deploy anything; developers can deploy only projects
-        where they own an active dev-instance."""
+        where they own an active dev-instance.
+
+        The dev-instance service is expected to expose
+        ``list_instances_by_user(username) -> Iterable`` (or dicts with
+        ``parent_project``/``owner_username`` keys). We fail loud if the
+        method is missing rather than silently locking every developer
+        out — which was the pre-refactor behaviour and masked a broken
+        DI wiring in staging.
+        """
         if user is None:
             return False
         if getattr(user, "role", None) == "admin":
             return True
+
         try:
             svc = current_app.extensions.get("dev_instance_service")
         except RuntimeError:
             svc = None
         if svc is None:
             return False
-        instances = []
-        for method in ("list_instances_by_user", "list_for_user", "list_instances"):
-            fn = getattr(svc, method, None)
-            if callable(fn):
-                try:
-                    instances = fn(user.username) if method != "list_instances" else fn()
-                except TypeError:
-                    instances = fn()
-                break
+
+        lister = getattr(svc, "list_instances_by_user", None)
+        if not callable(lister):
+            # Legacy shapes kept for backwards compat, explicitly named.
+            lister = getattr(svc, "list_for_user", None)
+        if not callable(lister):
+            log.warning(
+                "dev_instance_service has neither list_instances_by_user "
+                "nor list_for_user — denying deploy by default."
+            )
+            return False
+
+        try:
+            instances = lister(user.username) or []
+        except Exception:  # noqa: BLE001
+            log.exception("list_instances_by_user crashed for user %s", user.username)
+            return False
+
         username = user.username
-        for inst in instances or []:
-            parent = getattr(inst, "parent_project", None) or (inst.get("parent_project") if isinstance(inst, dict) else None)
-            owner = getattr(inst, "owner_username", None) or (inst.get("owner_username") if isinstance(inst, dict) else None)
+        for inst in instances:
+            parent = getattr(inst, "parent_project", None) or (
+                inst.get("parent_project") if isinstance(inst, dict) else None
+            )
+            owner = getattr(inst, "owner_username", None) or (
+                inst.get("owner_username") if isinstance(inst, dict) else None
+            )
             if parent == project_name and owner == username:
                 return True
         return False
@@ -276,6 +247,7 @@ class DeploymentService:
         project_name: Optional[str] = None,
         limit: int = 50,
     ) -> List[dict]:
+        limit = max(1, min(int(limit), 500))
         q = (
             "SELECT d.*, s.label AS server_label, s.env AS server_env "
             "FROM deployments d LEFT JOIN servers s ON s.id = d.server_id "
@@ -285,7 +257,7 @@ class DeploymentService:
             q += "WHERE d.project_name = ? "
             args = (project_name,)
         q += "ORDER BY d.started_at DESC LIMIT ?"
-        args = args + (int(limit),)
+        args = args + (limit,)
 
         with self._connect() as conn:
             rows = conn.execute(q, args).fetchall()
@@ -327,8 +299,7 @@ class DeploymentService:
         app: Flask,
     ) -> int:
         """Insert the deployment row and fire off the worker thread."""
-        if not _BRANCH_RE.match(branch or ""):
-            raise ValueError("Invalid branch name.")
+        self._validate_branch(branch)
 
         if self.server_service is None:
             raise RuntimeError("DeploymentService is missing its ServerService dependency.")
@@ -342,6 +313,9 @@ class DeploymentService:
                 "Run Test connection and save the fingerprint first."
             )
 
+        # Single transaction: insert row, capture the rowid, and patch
+        # the log_file path using the known id — without ever leaving
+        # the row in the `log_file=''` state visible to readers.
         now = self._now()
         with self._connect() as conn:
             cur = conn.cursor()
@@ -352,14 +326,11 @@ class DeploymentService:
                      triggered_by, started_at, log_file)
                 VALUES (?, ?, ?, 'running', ?, ?, ?)
                 """,
-                (project_name, server_id, branch, triggered_by, now, ""),
+                (project_name, int(server_id), branch, triggered_by, now, ""),
             )
-            conn.commit()
             deployment_id = cur.lastrowid
-
-        log_path = os.path.join(self.log_dir, f"{deployment_id}.log")
-        with self._connect() as conn:
-            conn.execute(
+            log_path = os.path.join(self.log_dir, f"{deployment_id}.log")
+            cur.execute(
                 "UPDATE deployments SET log_file = ? WHERE id = ?",
                 (log_path, deployment_id),
             )
@@ -374,6 +345,22 @@ class DeploymentService:
         thread.start()
         return deployment_id
 
+    @staticmethod
+    def _validate_branch(branch: str) -> None:
+        """Reject obviously-dangerous branch names before shell interpolation.
+
+        The regex already whitelists the charset, but we additionally
+        forbid `..` path segments and leading `-` to avoid anyone
+        sneaking a path-traversal component or an ``--upload-pack=…``
+        style option into ``git reset --hard origin/<branch>``.
+        """
+        if not branch or not _BRANCH_RE.match(branch):
+            raise ValueError("Invalid branch name.")
+        if ".." in branch.split("/") or ".." in branch:
+            raise ValueError("Invalid branch name (path traversal).")
+        if branch.startswith("-"):
+            raise ValueError("Invalid branch name (leading dash).")
+
     # ─── internals ───────────────────────────────────────────────────
 
     def _execute_wrapped(self, app, deployment_id, server, project_name, branch, log_path):
@@ -383,7 +370,7 @@ class DeploymentService:
                 self._execute(deployment_id, server, project_name, branch, log_path)
             except Exception as exc:  # noqa: BLE001
                 log.exception("Deployment %s crashed", deployment_id)
-                self._emit(deployment_id, f"[deployment crashed: {exc}]", stream="stderr")
+                self._emit(deployment_id, log_path, f"[deployment crashed: {exc}]", stream="stderr")
                 self._finalize(deployment_id, status="failed", commit_sha=None)
 
     def _execute(self, deployment_id, server, project_name, branch, log_path):
@@ -393,12 +380,13 @@ class DeploymentService:
         try:
             pem = ssh_service.decrypt_private_key(secret_key, bytes(server.ssh_private_key_enc))
         except Exception as exc:  # noqa: BLE001
-            self._emit(deployment_id, f"[cannot decrypt server key: {exc}]", stream="stderr")
+            self._emit(deployment_id, log_path, f"[cannot decrypt server key: {exc}]", stream="stderr")
             self._finalize(deployment_id, status="failed", commit_sha=None)
             return
 
         self._emit(
             deployment_id,
+            log_path,
             f"$ connect {server.ssh_user}@{server.hostname}:{server.ssh_port}",
             stream="stdout",
         )
@@ -413,13 +401,14 @@ class DeploymentService:
                 timeout=20,
             )
         except Exception as exc:  # noqa: BLE001
-            self._emit(deployment_id, f"[SSH connect failed: {exc}]", stream="stderr")
+            self._emit(deployment_id, log_path, f"[SSH connect failed: {exc}]", stream="stderr")
             self._finalize(deployment_id, status="failed", commit_sha=None)
             return
 
         # Custom (project, server) path wins over <base_path>/<project_name>.
         deploy_path = self.resolve_deploy_path(project_name, server)
-        # Safe: branch was validated by regex; deploy_path is server-controlled, project_name is a slug.
+        # Safe: branch was validated by regex above; deploy_path is
+        # server-controlled (admin-supplied); project_name is a slug.
         script = (
             "set -e\n"
             f"cd {_shell_quote(deploy_path)}\n"
@@ -427,43 +416,70 @@ class DeploymentService:
             f"git reset --hard origin/{_shell_quote(branch)}\n"
             "git rev-parse HEAD\n"
         )
-        self._emit(deployment_id, f"$ cd {deploy_path}", stream="stdout")
-        self._emit(deployment_id, f"$ git fetch --prune origin", stream="stdout")
-        self._emit(deployment_id, f"$ git reset --hard origin/{branch}", stream="stdout")
+        self._emit(deployment_id, log_path, f"$ cd {deploy_path}", stream="stdout")
+        self._emit(deployment_id, log_path, "$ git fetch --prune origin", stream="stdout")
+        self._emit(deployment_id, log_path, f"$ git reset --hard origin/{branch}", stream="stdout")
 
         commit_sha: Optional[str] = None
         status = "failed"
         try:
-            stdin, stdout, stderr = client.exec_command(script, timeout=_DEPLOY_TIMEOUT_SECONDS, get_pty=False)
+            # paramiko's `timeout=` is a per-recv inactivity timeout;
+            # the real wall-clock guard lives in _stream_channel.
+            stdin, stdout, stderr = client.exec_command(script, get_pty=False)
             channel = stdout.channel
             stdin.close()
 
-            captured_stdout_lines: List[str] = []
+            # Keep a ring buffer of stdout lines so we can recover the
+            # commit sha from `git rev-parse HEAD` without holding the
+            # full log in memory for noisy deploys.
+            tail_stdout: List[str] = []
+            tail_max = 50
 
             def on_line(line: str, stream: str):
-                captured_stdout_lines.append(line) if stream == "stdout" else None
-                self._emit(deployment_id, line, stream=stream)
+                if stream == "stdout":
+                    tail_stdout.append(line)
+                    if len(tail_stdout) > tail_max:
+                        del tail_stdout[0]
+                self._emit(deployment_id, log_path, line, stream=stream)
 
             self._stream_channel(channel, on_line, start, deployment_id)
 
             exit_code = channel.recv_exit_status()
             if exit_code == 0:
                 status = "success"
-                # `git rev-parse HEAD` was the last command; the last non-empty
-                # stdout line is the commit sha.
-                for line in reversed(captured_stdout_lines):
+                # `git rev-parse HEAD` was the last command; the last
+                # non-empty stdout line is the commit sha.
+                for line in reversed(tail_stdout):
                     candidate = line.strip()
                     if re.fullmatch(r"[0-9a-f]{40}", candidate):
                         commit_sha = candidate
                         break
             else:
-                self._emit(deployment_id, f"[remote exited with code {exit_code}]", stream="stderr")
+                self._emit(
+                    deployment_id,
+                    log_path,
+                    f"[remote exited with code {exit_code}]",
+                    stream="stderr",
+                )
                 status = "failed"
-        except (TimeoutError, socket_timeout_exc()):
-            self._emit(deployment_id, "[deployment timed out]", stream="stderr")
+        except TimeoutError:
+            self._emit(deployment_id, log_path, "[deployment timed out]", stream="stderr")
             status = "timeout"
+        except socket.timeout:
+            self._emit(deployment_id, log_path, "[deployment timed out]", stream="stderr")
+            status = "timeout"
+        except paramiko.SSHException as exc:
+            # Paramiko surfaces channel-level timeouts as SSHException
+            # with "Timeout" in the message — treat them as timeouts so
+            # the UI shows the correct pill.
+            if "timeout" in str(exc).lower():
+                self._emit(deployment_id, log_path, "[deployment timed out]", stream="stderr")
+                status = "timeout"
+            else:
+                self._emit(deployment_id, log_path, f"[SSH error: {exc}]", stream="stderr")
+                status = "failed"
         except Exception as exc:  # noqa: BLE001
-            self._emit(deployment_id, f"[exec error: {exc}]", stream="stderr")
+            self._emit(deployment_id, log_path, f"[exec error: {exc}]", stream="stderr")
             status = "failed"
         finally:
             try:
@@ -518,19 +534,22 @@ class DeploymentService:
         if stderr_buf.strip():
             on_line(stderr_buf.strip(), "stderr")
 
-    def _emit(self, deployment_id: int, line: str, *, stream: str) -> None:
-        safe = ssh_service.redact_private_keys(line)
-        # Append to log file
-        try:
-            dep = self.get_deployment(deployment_id)
-            path = dep.get("log_file") if dep else None
-            if path:
-                with open(path, "a", encoding="utf-8") as fh:
-                    fh.write(f"[{stream}] {safe}\n")
-        except OSError:
-            pass
+    def _emit(self, deployment_id: int, log_path: Optional[str], line: str, *, stream: str) -> None:
+        """Append a redacted line to the deployment's log file and broadcast it.
 
-        # Emit to Socket.IO room
+        ``log_path`` is passed in from the caller so we avoid a DB
+        round-trip per log line — a noisy deploy could otherwise open
+        hundreds of SQLite connections per second and starve other
+        writers.
+        """
+        safe = ssh_service.redact_private_keys(line)
+        if log_path:
+            try:
+                with open(log_path, "a", encoding="utf-8") as fh:
+                    fh.write(f"[{stream}] {safe}\n")
+            except OSError:
+                pass
+
         if self.socketio is not None:
             try:
                 self.socketio.emit(
@@ -549,6 +568,7 @@ class DeploymentService:
                 (status, finished, commit_sha, deployment_id),
             )
             conn.commit()
+        self._prune_old_logs()
         if self.socketio is not None:
             try:
                 self.socketio.emit(
@@ -557,6 +577,26 @@ class DeploymentService:
                     room=f"deploy_{deployment_id}",
                 )
             except Exception:  # noqa: BLE001
+                pass
+
+    def _prune_old_logs(self) -> None:
+        """Cap the number of on-disk log files at _MAX_LOG_FILES."""
+        try:
+            entries = [
+                (os.path.getmtime(os.path.join(self.log_dir, f)), f)
+                for f in os.listdir(self.log_dir)
+                if f.endswith(".log")
+            ]
+        except OSError:
+            return
+        if len(entries) <= _MAX_LOG_FILES:
+            return
+        entries.sort()  # oldest first
+        excess = len(entries) - _MAX_LOG_FILES
+        for _, name in entries[:excess]:
+            try:
+                os.remove(os.path.join(self.log_dir, name))
+            except OSError:
                 pass
 
 
@@ -575,9 +615,3 @@ def _drain_lines(buffer: str) -> Tuple[str, List[str]]:
 def _shell_quote(value: str) -> str:
     """Single-quote a string for safe shell interpolation."""
     return "'" + value.replace("'", "'\\''") + "'"
-
-
-def socket_timeout_exc():
-    """Lazy import of socket.timeout for the except clause."""
-    import socket
-    return socket.timeout

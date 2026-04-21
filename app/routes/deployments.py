@@ -3,23 +3,30 @@ Deployments blueprint — servers CRUD + git config + run deploy.
 
 Routes:
   GET    /deployments
-  GET    /api/servers                   (admin)
-  POST   /api/servers                   (admin)
-  PATCH  /api/servers/<id>              (admin)
-  DELETE /api/servers/<id>              (admin)
-  POST   /api/servers/test              (admin)
+  GET    /api/servers                                (admin)
+  POST   /api/servers                                (admin)
+  PATCH  /api/servers/<id>                           (admin)
+  DELETE /api/servers/<id>                           (admin)
+  POST   /api/servers/test                           (admin)
 
-  GET    /api/deployments?project=...   (login)
-  GET    /api/deployments/<id>          (login)
-  GET    /api/deployments/<id>/log      (login)
-  POST   /api/deployments/run           (login + can_user_deploy)
+  GET    /api/deployments?project=...                (login)
+  GET    /api/deployments/<id>                       (login + owner/admin)
+  GET    /api/deployments/<id>/log                   (login + owner/admin)
+  POST   /api/deployments/run                        (login + can_user_deploy)
+  GET    /api/deployments/deployable-projects        (login)
 
-  GET    /api/projects/<name>/git       (login)
-  PATCH  /api/projects/<name>/git       (login + can_user_deploy)
+  GET    /api/projects/<name>/git                    (login + can_user_deploy)
+  PATCH  /api/projects/<name>/git                    (login + can_user_deploy)
+
+  GET    /api/projects/<name>/deploy-paths           (login + can_user_deploy)
+  GET    /api/projects/<name>/deploy-paths/<sid>     (login + can_user_deploy)
+  PUT    /api/projects/<name>/deploy-paths/<sid>     (login + can_user_deploy)
 """
 from __future__ import annotations
 
+import logging
 import os
+import re
 
 from flask import (
     Blueprint,
@@ -33,9 +40,14 @@ from flask import (
 from app.middleware.auth_middleware import admin_required, login_required
 from app.services import ssh_service
 
+log = logging.getLogger(__name__)
+
 deployments_bp = Blueprint("deployments", __name__)
 
 PROJECTS_FOLDER = os.environ.get("WP_PROJECTS_FOLDER", "projets")
+
+# Project name regex — same charset as git-safe identifiers.
+_PROJECT_RE = re.compile(r"^[A-Za-z0-9._-]{1,100}$")
 
 
 # ─── helpers ─────────────────────────────────────────────────────────
@@ -60,7 +72,7 @@ def _list_all_projects() -> list[str]:
             if isinstance(data, list):
                 return [p["name"] if isinstance(p, dict) and "name" in p else str(p) for p in data]
         except Exception:  # noqa: BLE001
-            pass
+            log.exception("project_service.get_project_list failed; falling back to filesystem")
     if not os.path.isdir(PROJECTS_FOLDER):
         return []
     names = []
@@ -79,6 +91,57 @@ def _user_can_deploy(project_name: str) -> bool:
     if dep is None:
         return False
     return dep.can_user_deploy(g.current_user, project_name)
+
+
+def _is_admin() -> bool:
+    return getattr(g.current_user, "role", None) == "admin"
+
+
+def _coerce_int(value, default=None):
+    """Best-effort int coercion for query args / JSON bodies."""
+    if value is None or value == "":
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _validate_project_name(project_name: str) -> bool:
+    """Reject slugs that contain slashes, path segments, or wild chars.
+
+    Project names are interpolated into filesystem paths and used as
+    SQLite keys — stick to the narrow charset that the rest of the app
+    already uses.
+    """
+    return bool(project_name) and bool(_PROJECT_RE.match(project_name))
+
+
+def _validate_deploy_path(deploy_path: str) -> tuple[bool, str]:
+    """Reject unsafe deploy paths before we hand them to SSH.
+
+    Rules:
+      - must be an absolute POSIX-style path (starts with ``/``)
+      - no ``..`` path segments (traversal)
+      - no NUL bytes (argument-smuggling)
+      - no ``~`` expansion (shell surprise)
+      - must normalize to itself (no redundant ``./`` or ``//``)
+    """
+    if not deploy_path:
+        return False, "Deploy path is empty."
+    if "\x00" in deploy_path:
+        return False, "Deploy path contains a NUL byte."
+    if not deploy_path.startswith("/"):
+        return False, "Deploy path must be absolute (start with '/')."
+    if deploy_path.startswith("~"):
+        return False, "Deploy path cannot start with '~'."
+    segments = deploy_path.split("/")
+    if ".." in segments:
+        return False, "Deploy path contains '..'."
+    normalized = os.path.normpath(deploy_path)
+    if normalized != deploy_path.rstrip("/") or not normalized.startswith("/"):
+        return False, "Deploy path must be normalized (no './' or '//')."
+    return True, ""
 
 
 # ─── page ────────────────────────────────────────────────────────────
@@ -122,11 +185,20 @@ def api_create_server():
     if missing:
         return jsonify(error=f"Missing fields: {', '.join(missing)}"), 400
 
+    # Validate deploy_base_path with the same rules as per-project paths.
+    base_path = str(data["deploy_base_path"]).strip()
+    ok, reason = _validate_deploy_path(base_path)
+    if not ok:
+        return jsonify(error=reason), 400
+
     secret_key = current_app.config.get("SECRET_KEY") or ""
     try:
         enc = ssh_service.encrypt_private_key(secret_key, data["private_key"])
-    except Exception as exc:  # noqa: BLE001
+    except ValueError as exc:
         return jsonify(error=str(exc)), 400
+    except Exception:  # noqa: BLE001
+        log.exception("encrypt_private_key failed on create_server")
+        return jsonify(error="Invalid private key."), 400
 
     try:
         server = svc.create(
@@ -135,8 +207,8 @@ def api_create_server():
             hostname=data["hostname"].strip(),
             ssh_user=data["ssh_user"].strip(),
             ssh_private_key_enc=enc,
-            deploy_base_path=data["deploy_base_path"].strip(),
-            ssh_port=int(data.get("ssh_port") or 22),
+            deploy_base_path=base_path,
+            ssh_port=_coerce_int(data.get("ssh_port"), 22),
             host_fingerprint=(data.get("host_fingerprint") or None),
             created_by=getattr(g.current_user, "id", None),
         )
@@ -154,19 +226,31 @@ def api_update_server(server_id: int):
     data = request.get_json(silent=True) or {}
 
     payload: dict = {}
-    for k in ("label", "env", "hostname", "ssh_user", "deploy_base_path", "host_fingerprint"):
+    for k in ("label", "env", "hostname", "ssh_user", "host_fingerprint"):
         if k in data and data[k] is not None:
             payload[k] = data[k]
+    if "deploy_base_path" in data and data["deploy_base_path"]:
+        base_path = str(data["deploy_base_path"]).strip()
+        ok, reason = _validate_deploy_path(base_path)
+        if not ok:
+            return jsonify(error=reason), 400
+        payload["deploy_base_path"] = base_path
     if "ssh_port" in data and data["ssh_port"] is not None:
-        payload["ssh_port"] = int(data["ssh_port"])
+        port = _coerce_int(data["ssh_port"])
+        if port is None:
+            return jsonify(error="ssh_port must be an integer."), 400
+        payload["ssh_port"] = port
     if data.get("private_key"):
         secret_key = current_app.config.get("SECRET_KEY") or ""
         try:
             payload["ssh_private_key_enc"] = ssh_service.encrypt_private_key(
                 secret_key, data["private_key"]
             )
-        except Exception as exc:  # noqa: BLE001
+        except ValueError as exc:
             return jsonify(error=str(exc)), 400
+        except Exception:  # noqa: BLE001
+            log.exception("encrypt_private_key failed on update_server")
+            return jsonify(error="Invalid private key."), 400
 
     try:
         server = svc.update(server_id, **payload)
@@ -196,23 +280,26 @@ def api_test_server_connection():
 
     Accepts either a raw private key (for a brand-new server that
     isn't in the DB yet) or a server_id (to re-test an existing one).
+
+    Returns HTTP 400 (not 200) when the connection test fails, so the
+    frontend can branch on status instead of parsing the body.
     """
     data = request.get_json(silent=True) or {}
     svc_server = _service("server_service")
 
     hostname = data.get("hostname")
-    ssh_port = int(data.get("ssh_port") or 22)
+    ssh_port = _coerce_int(data.get("ssh_port"), 22)
     ssh_user = data.get("ssh_user")
     pem = data.get("private_key")
-    server_id = data.get("server_id")
+    server_id = _coerce_int(data.get("server_id"))
     expected_fp = data.get("host_fingerprint") or None
 
     if server_id and svc_server:
-        server = svc_server.get_by_id(int(server_id))
+        server = svc_server.get_by_id(server_id)
         if not server:
             return jsonify(error="Server not found"), 404
         hostname = hostname or server.hostname
-        ssh_port = int(ssh_port) or server.ssh_port
+        ssh_port = ssh_port or server.ssh_port
         ssh_user = ssh_user or server.ssh_user
         expected_fp = expected_fp or server.host_fingerprint
         if not pem and server.ssh_private_key_enc:
@@ -221,8 +308,9 @@ def api_test_server_connection():
                 pem = ssh_service.decrypt_private_key(
                     secret_key, bytes(server.ssh_private_key_enc)
                 )
-            except Exception as exc:  # noqa: BLE001
-                return jsonify(error=str(exc)), 400
+            except Exception:  # noqa: BLE001
+                log.exception("decrypt_private_key failed for server_id=%s", server_id)
+                return jsonify(error="Could not decrypt the stored key."), 400
 
     if not (hostname and ssh_user and pem):
         return jsonify(error="hostname, ssh_user and private_key are required"), 400
@@ -234,7 +322,9 @@ def api_test_server_connection():
         ssh_user=ssh_user,
         expected_fingerprint=expected_fp,
     )
-    return jsonify(ok=result.ok, fingerprint=result.fingerprint, error=result.error)
+    if result.ok:
+        return jsonify(ok=True, fingerprint=result.fingerprint, error=None)
+    return jsonify(ok=False, fingerprint=None, error=result.error), 400
 
 
 # ─── project git config ─────────────────────────────────────────────
@@ -243,6 +333,10 @@ def api_test_server_connection():
 @deployments_bp.route("/api/projects/<project_name>/git", methods=["GET"])
 @login_required
 def api_get_project_git(project_name: str):
+    if not _validate_project_name(project_name):
+        return jsonify(error="Invalid project name."), 400
+    if not (_is_admin() or _user_can_deploy(project_name)):
+        return jsonify(error="Forbidden."), 403
     svc, err = _require("deployment_service")
     if err:
         return err
@@ -253,6 +347,8 @@ def api_get_project_git(project_name: str):
 @deployments_bp.route("/api/projects/<project_name>/git", methods=["PATCH"])
 @login_required
 def api_set_project_git(project_name: str):
+    if not _validate_project_name(project_name):
+        return jsonify(error="Invalid project name."), 400
     if not _user_can_deploy(project_name):
         return jsonify(error="You don't have permission to configure this project."), 403
     svc, err = _require("deployment_service")
@@ -273,6 +369,10 @@ def api_set_project_git(project_name: str):
 @deployments_bp.route("/api/projects/<project_name>/deploy-paths", methods=["GET"])
 @login_required
 def api_list_deploy_paths(project_name: str):
+    if not _validate_project_name(project_name):
+        return jsonify(error="Invalid project name."), 400
+    if not (_is_admin() or _user_can_deploy(project_name)):
+        return jsonify(error="Forbidden."), 403
     svc, err = _require("deployment_service")
     if err:
         return err
@@ -285,6 +385,10 @@ def api_list_deploy_paths(project_name: str):
 )
 @login_required
 def api_get_deploy_path(project_name: str, server_id: int):
+    if not _validate_project_name(project_name):
+        return jsonify(error="Invalid project name."), 400
+    if not (_is_admin() or _user_can_deploy(project_name)):
+        return jsonify(error="Forbidden."), 403
     svc, err = _require("deployment_service")
     if err:
         return err
@@ -307,6 +411,8 @@ def api_get_deploy_path(project_name: str, server_id: int):
 )
 @login_required
 def api_set_deploy_path(project_name: str, server_id: int):
+    if not _validate_project_name(project_name):
+        return jsonify(error="Invalid project name."), 400
     if not _user_can_deploy(project_name):
         return jsonify(error="You don't have permission to configure this project."), 403
     svc, err = _require("deployment_service")
@@ -314,8 +420,10 @@ def api_set_deploy_path(project_name: str, server_id: int):
         return err
     data = request.get_json(silent=True) or {}
     deploy_path = (data.get("deploy_path") or "").strip() or None
-    if deploy_path and ".." in deploy_path:
-        return jsonify(error="Deploy path must not contain '..'"), 400
+    if deploy_path:
+        ok, reason = _validate_deploy_path(deploy_path)
+        if not ok:
+            return jsonify(error=reason), 400
     saved = svc.set_deploy_path(project_name, server_id, deploy_path)
     return jsonify(
         project_name=project_name,
@@ -334,11 +442,9 @@ def api_list_deployments():
     if err:
         return err
     project = request.args.get("project") or None
-    limit = min(int(request.args.get("limit", 50)), 500)
+    limit = max(1, min(_coerce_int(request.args.get("limit"), 50), 500))
 
-    user = g.current_user
-    if getattr(user, "role", None) != "admin":
-        # Developers only see deployments on projects they can deploy.
+    if not _is_admin():
         if project and not _user_can_deploy(project):
             return jsonify(deployments=[])
         if not project:
@@ -361,7 +467,7 @@ def api_get_deployment(deployment_id: int):
     dep = svc.get_deployment(deployment_id)
     if not dep:
         return jsonify(error="Deployment not found"), 404
-    if getattr(g.current_user, "role", None) != "admin" and not _user_can_deploy(dep["project_name"]):
+    if not _is_admin() and not _user_can_deploy(dep["project_name"]):
         return jsonify(error="Forbidden"), 403
     return jsonify(deployment=dep)
 
@@ -375,7 +481,7 @@ def api_get_deployment_log(deployment_id: int):
     dep = svc.get_deployment(deployment_id)
     if not dep:
         return jsonify(error="Deployment not found"), 404
-    if getattr(g.current_user, "role", None) != "admin" and not _user_can_deploy(dep["project_name"]):
+    if not _is_admin() and not _user_can_deploy(dep["project_name"]):
         return jsonify(error="Forbidden"), 403
     content = svc.read_log(deployment_id) or ""
     return jsonify(deployment_id=deployment_id, status=dep["status"], log=content)
@@ -388,14 +494,20 @@ def api_run_deployment():
     if err:
         return err
     data = request.get_json(silent=True) or {}
-    project_name = (data.get("project") or "").strip()
-    server_id = data.get("server_id")
-    branch = (data.get("branch") or "").strip()
+
+    project_name = (data.get("project") or "").strip() if isinstance(data.get("project"), str) else ""
+    server_id = _coerce_int(data.get("server_id"))
+    branch_raw = data.get("branch")
+    branch = branch_raw.strip() if isinstance(branch_raw, str) else ""
 
     if not project_name:
         return jsonify(error="project is required"), 400
-    if not server_id:
-        return jsonify(error="server_id is required"), 400
+    if not _validate_project_name(project_name):
+        return jsonify(error="Invalid project name."), 400
+    if server_id is None:
+        return jsonify(error="server_id must be an integer"), 400
+    if project_name not in _list_all_projects():
+        return jsonify(error="Unknown project."), 404
     if not branch:
         cfg = svc.get_project_git_config(project_name)
         branch = (cfg.get("git_default_branch") or "main").strip()
@@ -406,7 +518,7 @@ def api_run_deployment():
     try:
         deployment_id = svc.run(
             project_name=project_name,
-            server_id=int(server_id),
+            server_id=server_id,
             branch=branch,
             triggered_by=getattr(g.current_user, "id", None),
             app=current_app._get_current_object(),
@@ -427,6 +539,6 @@ def api_run_deployment():
 def api_deployable_projects():
     """Return the list of projects the current user can deploy."""
     all_projects = _list_all_projects()
-    if getattr(g.current_user, "role", None) == "admin":
+    if _is_admin():
         return jsonify(projects=all_projects)
     return jsonify(projects=[p for p in all_projects if _user_can_deploy(p)])

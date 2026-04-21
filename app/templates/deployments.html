@@ -81,5 +81,48 @@
 {% endblock %}
 
 {% block scripts %}
+{#- i18n strings emitted from deployments.js.
+    Ordered by the key; anything added here MUST stay stable with the
+    t(key, fallback) lookups inside deployments.js. -#}
+<script type="application/json" id="deploy-i18n">
+{
+  "add_server": "{{ _('Add server') }}",
+  "admins_only": "{{ _('Admins only — contact an administrator to see servers.') }}",
+  "confirm_delete_server": "{{ _('Delete this server? Existing deployment history is kept.') }}",
+  "connection_failed": "{{ _('Connection failed.') }}",
+  "connection_ok": "{{ _('Connection OK. Fingerprint pinned:') }}",
+  "default": "{{ _('Default') }}",
+  "delete": "{{ _('Delete') }}",
+  "delete_failed": "{{ _('Delete failed') }}",
+  "deployment_refused": "{{ _('Deployment refused.') }}",
+  "edit": "{{ _('Edit') }}",
+  "edit_server": "{{ _('Edit server') }}",
+  "failed_load_deployments": "{{ _('Failed to load deployments.') }}",
+  "failed_load_servers": "{{ _('Failed to load servers') }}",
+  "failed_save_git": "{{ _('Failed to save git config') }}",
+  "failed_save_path": "{{ _('Failed to save deploy path') }}",
+  "git_config_saved": "{{ _('Git config saved') }}",
+  "no_deployment_yet": "{{ _('No deployment yet.') }}",
+  "no_log_output": "{{ _('(no log output)') }}",
+  "no_server_available": "{{ _('No server available') }}",
+  "no_server_yet": "{{ _('No server registered yet. Click \"Add server\".') }}",
+  "path_cleared": "{{ _('Override cleared — will use server default') }}",
+  "path_saved": "{{ _('Custom deploy path saved') }}",
+  "pick_project": "{{ _('Pick a project first.') }}",
+  "pick_project_and_server": "{{ _('Pick a project and a server first.') }}",
+  "private_key_required": "{{ _('A private key is required when creating a server.') }}",
+  "project_and_server_required": "{{ _('Project and server are required.') }}",
+  "request_failed": "{{ _('Request failed') }}",
+  "save_failed": "{{ _('Save failed') }}",
+  "select_project": "{{ _('— Select a project —') }}",
+  "select_server": "{{ _('— Select a server —') }}",
+  "server_created": "{{ _('Server created') }}",
+  "server_deleted": "{{ _('Server deleted') }}",
+  "server_updated": "{{ _('Server updated') }}",
+  "test": "{{ _('Test') }}",
+  "testing": "{{ _('Testing…') }}",
+  "view_logs": "{{ _('View logs') }}"
+}
+</script>
 <script src="{{ url_for('static', filename='js/deployments.js') }}" defer></script>
 {% endblock %}
