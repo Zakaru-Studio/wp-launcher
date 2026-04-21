@@ -623,7 +623,7 @@ class TaskManager {
         // Ajouter un bouton pour voir les logs si c'est un import de base de données
         if (task.type === 'import_db' && typeof showImportLogsModal === 'function') {
             task.actionButton = {
-                text: 'Voir les logs',
+                text: (window.I18N && window.I18N.view_logs) || 'Voir les logs',
                 icon: 'fas fa-terminal',
                 action: 'showImportLogsModal()',
                 class: 'btn-info'
@@ -1026,14 +1026,21 @@ class TaskManager {
                         </div>
                     ` : ''}
                     
-                    ${task.actionButton && task.status === 'completed' ? `
-                        <div class="task-action-button">
-                            <a href="${task.actionButton.url}" target="_blank" class="btn-task-action">
-                                <i class="${task.actionButton.icon}"></i>
-                                ${task.actionButton.text}
-                            </a>
-                        </div>
-                    ` : ''}
+                    ${task.actionButton && task.status === 'completed' ? (
+                        task.actionButton.url
+                            ? `<div class="task-action-button">
+                                <a href="${task.actionButton.url}" target="_blank" rel="noopener" class="btn-task-action">
+                                    <i class="${task.actionButton.icon}"></i>
+                                    ${task.actionButton.text}
+                                </a>
+                            </div>`
+                            : `<div class="task-action-button">
+                                <button type="button" class="btn-task-action" onclick="${task.actionButton.action}">
+                                    <i class="${task.actionButton.icon}"></i>
+                                    ${task.actionButton.text}
+                                </button>
+                            </div>`
+                    ) : ''}
                 </div>
                 
                 <div class="task-item-footer">

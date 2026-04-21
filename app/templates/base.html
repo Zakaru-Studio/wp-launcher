@@ -90,6 +90,18 @@
     <script>
         window.CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 
+        // Global i18n bridge. JS strings that must follow the active
+        // locale (toasts, dynamically-built buttons) read from here
+        // instead of hard-coding. Pages with more strings should
+        // embed a page-scoped `script#<page>-i18n` JSON block.
+        window.I18N = {
+            view_logs: "{{ _('View logs') }}",
+            clear_all: "{{ _('Clear all') }}",
+            notifications: "{{ _('Notifications') }}",
+            no_notifications_yet: "{{ _('No notifications yet') }}",
+            close: "{{ _('Close') }}"
+        };
+
         // Patch fetch pour ajouter automatiquement X-CSRFToken sur les requêtes mutantes
         // même-origine. Évite d'avoir à modifier chaque appel fetch() dispersé dans le code.
         (function() {

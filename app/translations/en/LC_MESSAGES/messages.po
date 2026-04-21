@@ -322,3 +322,15 @@ msgstr "Close"
 
 msgid "Launch a new site"
 msgstr "Launch a new site"
+
+msgid "Clear all"
+msgstr "Clear all"
+
+msgid "Notifications"
+msgstr "Notifications"
+
+msgid "No notifications yet"
+msgstr "No notifications yet"
+
+msgid "View logs"
+msgstr "View logs"

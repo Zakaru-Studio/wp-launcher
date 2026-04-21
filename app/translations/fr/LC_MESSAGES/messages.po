@@ -331,3 +331,15 @@ msgstr "Fermer"
 
 msgid "Launch a new site"
 msgstr "Lancer un nouveau site"
+
+msgid "Clear all"
+msgstr "Tout effacer"
+
+msgid "Notifications"
+msgstr "Notifications"
+
+msgid "No notifications yet"
+msgstr "Aucune notification"
+
+msgid "View logs"
+msgstr "Voir les logs"
