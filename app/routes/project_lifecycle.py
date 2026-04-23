@@ -36,9 +36,15 @@ CONTAINERS_FOLDER = 'containers'
 
 
 @project_lifecycle_bp.route('/create_project', methods=['POST'])
-@admin_required
+@login_required
 def create_project():
-    """Crée un nouveau projet WordPress ou Next.js"""
+    """Crée un nouveau projet WordPress ou Next.js.
+
+    Ouvert aux développeurs (pas seulement admins) : chaque membre
+    authentifié peut créer ses propres sites. Les actions destructives
+    (start/stop/rebuild/delete) restent réservées aux admins tant que
+    l'ownership par projet n'est pas généralisé dans metadata_service.
+    """
     project_name = "unknown"
     debug_logger = None
     try:

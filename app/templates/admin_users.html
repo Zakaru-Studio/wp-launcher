@@ -46,10 +46,22 @@
                     </td>
                     <td class="users-email">{{ user.email }}</td>
                     <td>
-                        <span class="role-pill role-{{ user.role }}">
-                            <span class="role-dot"></span>
-                            {% if user.role == 'admin' %}{{ _('Admin') }}{% else %}{{ _('Developer') }}{% endif %}
-                        </span>
+                        {% if user.username == g.current_user.username %}
+                            {# Self — role is locked to prevent self-demotion lockout. #}
+                            <span class="role-pill role-{{ user.role }}" title="{{ _('You cannot change your own role') }}">
+                                <span class="role-dot"></span>
+                                {% if user.role == 'admin' %}{{ _('Admin') }}{% else %}{{ _('Developer') }}{% endif %}
+                            </span>
+                        {% else %}
+                            <select class="role-select role-pill role-{{ user.role }}"
+                                    data-username="{{ user.username }}"
+                                    data-current-role="{{ user.role }}"
+                                    onchange="updateUserRole(this)"
+                                    aria-label="{{ _('Change role') }}">
+                                <option value="developer" {% if user.role == 'developer' %}selected{% endif %}>{{ _('Developer') }}</option>
+                                <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>{{ _('Admin') }}</option>
+                            </select>
+                        {% endif %}
                     </td>
                     <td class="users-github">
                         {% if user.github_username %}
@@ -171,5 +183,62 @@ async function deleteUser(username) {
         else alert('Error');
     }
 }
+
+async function updateUserRole(selectEl) {
+    const username = selectEl.dataset.username;
+    const previous = selectEl.dataset.currentRole;
+    const newRole = selectEl.value;
+    if (!username || newRole === previous) return;
+
+    // Explicit confirmation on promotion to admin — that's a privilege
+    // escalation, not a preference tweak.
+    if (newRole === 'admin'
+        && !confirm(`{{ _("Promote") }} ${username} {{ _("to admin?") }}`)) {
+        selectEl.value = previous;
+        return;
+    }
+
+    try {
+        const response = await fetch(`/admin/api/users/${encodeURIComponent(username)}/role`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({role: newRole}),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.success) {
+            selectEl.value = previous;
+            if (window.showError) showError(data.error || '{{ _("Role update failed") }}');
+            return;
+        }
+        // Refresh pill colour + cached role for subsequent changes.
+        selectEl.classList.remove(`role-${previous}`);
+        selectEl.classList.add(`role-${newRole}`);
+        selectEl.dataset.currentRole = newRole;
+        if (window.showSuccess) showSuccess(`{{ _("Role updated for") }} ${username}`);
+    } catch (error) {
+        selectEl.value = previous;
+        if (window.showError) showError(error.message);
+    }
+}
 </script>
+
+<style>
+/* The <select> role-changer keeps the pill aesthetic: inline size,
+   no native chrome, same background palette as the static role-pill. */
+.role-select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    border: none;
+    cursor: pointer;
+    font: inherit;
+    padding-right: 1.5rem;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path fill='currentColor' d='M6 8L2 4h8z'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 0.4rem center;
+    background-size: 0.7rem;
+}
+.role-select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.role-select option { background: var(--surface); color: var(--text-primary); }
+</style>
 {% endblock %}
