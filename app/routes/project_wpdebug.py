@@ -175,7 +175,7 @@ def get_wp_debug_config(project_name):
 
 
 @project_wpdebug_bp.route('/wp-debug/set/<project_name>', methods=['POST'])
-@admin_required
+@login_required
 def set_wp_debug_config(project_name):
     """
     Modifie une constante WP Debug

@@ -18,7 +18,7 @@ from flask import Blueprint, current_app, jsonify, request, send_file
 from werkzeug.utils import secure_filename
 
 from app.config.app_config import CONTAINERS_FOLDER, PROJECTS_FOLDER
-from app.middleware.auth_middleware import admin_required
+from app.middleware.auth_middleware import admin_required, login_required
 from app.utils.file_utils import allowed_file
 
 database_bp = Blueprint('database', __name__)
@@ -51,7 +51,7 @@ def _save_upload_to_tmp(db_file, project_name: str, prefix: str = "import") -> s
 
 
 @database_bp.route('/fast_import_database/<project_name>', methods=['POST'])
-@admin_required
+@login_required
 def fast_import_database(project_name):
     """Launch an async ultra-fast DB import for the target WordPress project.
 
@@ -111,14 +111,14 @@ def fast_import_database(project_name):
 
 
 @database_bp.route('/update_database/<project_name>', methods=['POST'])
-@admin_required
+@login_required
 def update_database(project_name):
     """Legacy alias — delegates to the fast import service."""
     return fast_import_database(project_name)
 
 
 @database_bp.route('/export_database/<project_name>', methods=['POST'])
-@admin_required
+@login_required
 def export_database(project_name):
     """Exporte la base de données d'un projet avec mysqldump direct."""
     project_path = os.path.join(PROJECTS_FOLDER, project_name)
@@ -225,7 +225,7 @@ def export_database(project_name):
 
 
 @database_bp.route('/api/database/stop-import/<project_name>', methods=['POST'])
-@admin_required
+@login_required
 def stop_import(project_name):
     """Arrête un import de base de données en cours."""
     if project_name not in import_processes:
@@ -246,7 +246,7 @@ def stop_import(project_name):
 
 
 @database_bp.route('/download_export/<filename>')
-@admin_required
+@login_required
 def download_export(filename):
     """Télécharge un fichier d'export de base de données."""
     secure_name = secure_filename(filename)

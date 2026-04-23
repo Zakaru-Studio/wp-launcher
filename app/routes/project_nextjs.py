@@ -19,7 +19,7 @@ PROJECTS_FOLDER = 'projets'
 CONTAINERS_FOLDER = 'containers'
 
 @project_nextjs_bp.route('/nextjs_npm/<project_name>/<command>', methods=['POST'])
-@admin_required
+@login_required
 def nextjs_npm_command(project_name, command):
     """Exécute une commande npm pour un projet NextJS"""
     try:
@@ -141,7 +141,7 @@ def check_nextjs_status(project_name):
 
 
 @project_nextjs_bp.route('/stop_nextjs_dev/<project_name>', methods=['POST'])
-@admin_required
+@login_required
 def stop_nextjs_dev(project_name):
     """Arrête npm run dev pour un projet NextJS"""
     try:
@@ -179,7 +179,7 @@ def stop_nextjs_dev(project_name):
 
 
 @project_nextjs_bp.route('/start_nextjs_container/<project_name>', methods=['POST'])
-@admin_required
+@login_required
 def start_nextjs_container(project_name):
     """Démarre le conteneur NextJS et lance npm run dev"""
     try:
@@ -216,7 +216,7 @@ def start_nextjs_container(project_name):
 
 
 @project_nextjs_bp.route('/fix_nextjs_package/<project_name>', methods=['POST'])
-@admin_required
+@login_required
 def fix_nextjs_package(project_name):
     """Répare ou crée le package.json manquant pour Next.js"""
     try:
@@ -261,7 +261,7 @@ def fix_nextjs_package(project_name):
 
 
 @project_nextjs_bp.route('/fix_docker_compose_ports/<project_name>', methods=['POST'])
-@admin_required
+@login_required
 def fix_docker_compose_ports(project_name):
     """Corrige les ports dans docker-compose.yml pour utiliser les valeurs des fichiers de ports"""
     try:
@@ -356,7 +356,7 @@ def fix_docker_compose_ports(project_name):
 
 
 @project_nextjs_bp.route('/fix_permissions/<project_name>', methods=['POST'])
-@admin_required
+@login_required
 def fix_permissions(project_name):
     """Corrige les permissions d'un projet pour permettre l'édition libre des fichiers"""
     try:
@@ -490,7 +490,7 @@ def fix_permissions(project_name):
 
 
 @project_nextjs_bp.route('/fix_permissions_simple/<project_name>', methods=['POST'])
-@admin_required
+@login_required
 def fix_permissions_simple(project_name):
     """Corrige simplement les permissions d'un projet sans vérifications Docker"""
     try:
@@ -538,7 +538,7 @@ def fix_permissions_simple(project_name):
 
  
 @project_nextjs_bp.route('/add_nextjs/<project_name>', methods=['POST'])
-@admin_required
+@login_required
 def add_nextjs(project_name):
     """Ajoute Next.js à un projet WordPress existant"""
     try:
@@ -703,7 +703,7 @@ export default function Home() {
 
 
 @project_nextjs_bp.route('/remove_nextjs/<project_name>', methods=['POST'])
-@admin_required
+@login_required
 def remove_nextjs(project_name):
     """Supprime Next.js d'un projet WordPress"""
     try:

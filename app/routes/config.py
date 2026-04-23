@@ -62,7 +62,7 @@ def get_php_config(project_name):
         }), 500
 
 @config_bp.route('/php/<project_name>', methods=['POST'])
-@admin_required
+@login_required
 def update_php_config(project_name):
     """Met à jour la configuration PHP d'un projet"""
     try:
@@ -175,7 +175,7 @@ def get_mysql_config(project_name):
         }), 500
 
 @config_bp.route('/mysql/<project_name>', methods=['POST'])
-@admin_required
+@login_required
 def update_mysql_config(project_name):
     """Met à jour la configuration MySQL d'un projet"""
     try:
@@ -408,7 +408,7 @@ def get_wordpress_type(project_name):
         }), 500
 
 @config_bp.route('/wordpress-type/<project_name>', methods=['POST'])
-@admin_required
+@login_required
 def update_wordpress_type(project_name):
     """Met à jour le type WordPress d'un projet et relance les containers"""
     try:

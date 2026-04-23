@@ -39,7 +39,7 @@ def validate_project_or_instance(project_name):
 
 
 @project_wpcli_bp.route('/wpcli/execute/<project_name>', methods=['POST'])
-@admin_required
+@login_required
 def execute_wpcli(project_name):
     """
     Exécute une commande WP-CLI dans le conteneur WordPress du projet
@@ -164,7 +164,7 @@ def list_plugins(project_name):
 
 
 @project_wpcli_bp.route('/wpcli/plugins/<project_name>/install', methods=['POST'])
-@admin_required
+@login_required
 def install_plugin(project_name):
     """
     Installe un plugin
@@ -206,7 +206,7 @@ def install_plugin(project_name):
 
 
 @project_wpcli_bp.route('/wpcli/plugins/<project_name>/<action>', methods=['POST'])
-@admin_required
+@login_required
 def manage_plugin(project_name, action):
     """
     Gère un plugin (activate, deactivate, delete)
@@ -309,7 +309,7 @@ def list_users(project_name):
 
 
 @project_wpcli_bp.route('/wpcli/users/<project_name>/create', methods=['POST'])
-@admin_required
+@login_required
 def create_user(project_name):
     """
     Crée un utilisateur WordPress
@@ -353,7 +353,7 @@ def create_user(project_name):
 
 
 @project_wpcli_bp.route('/wpcli/search-replace/<project_name>', methods=['POST'])
-@admin_required
+@login_required
 def search_replace(project_name):
     """
     Effectue un search-replace dans la base de données
@@ -397,7 +397,7 @@ def search_replace(project_name):
 
 
 @project_wpcli_bp.route('/wpcli/cache/<project_name>/flush', methods=['POST'])
-@admin_required
+@login_required
 def flush_cache(project_name):
     """Vide le cache WordPress"""
     try:
@@ -423,7 +423,7 @@ def flush_cache(project_name):
 
 
 @project_wpcli_bp.route('/wpcli/maintenance/<project_name>/<action>', methods=['POST'])
-@admin_required
+@login_required
 def maintenance_mode(project_name, action):
     """Active/désactive le mode maintenance (action: on|off)"""
     try:
@@ -482,7 +482,7 @@ def get_core_version(project_name):
 
 
 @project_wpcli_bp.route('/wpcli/rewrite/<project_name>/flush', methods=['POST'])
-@admin_required
+@login_required
 def flush_rewrite(project_name):
     """Régénère les règles de réécriture"""
     try:

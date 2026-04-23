@@ -21,7 +21,7 @@ PROJECTS_FOLDER = 'projets'
 CONTAINERS_FOLDER = 'containers'
 
 @project_maintenance_bp.route('/fix_permissions_old/<project_name>', methods=['POST'])
-@admin_required
+@login_required
 def fix_project_permissions(project_name):
     """Applique les permissions correctes à un projet existant (ancienne version)"""
     try:
@@ -128,7 +128,7 @@ def port_diagnostic():
         }), 500 
 
 @project_maintenance_bp.route('/fix_docker_compose_ports/<project_name>', methods=['POST'])
-@admin_required
+@login_required
 def fix_docker_compose_ports(project_name):
     """Corrige les ports dans docker-compose.yml pour utiliser les valeurs des fichiers de ports"""
     try:
@@ -223,7 +223,7 @@ def fix_docker_compose_ports(project_name):
 
 
 @project_maintenance_bp.route('/fix_permissions/<project_name>', methods=['POST'])
-@admin_required
+@login_required
 def fix_permissions(project_name):
     """Corrige les permissions d'un projet pour permettre l'édition libre des fichiers"""
     try:
@@ -433,7 +433,7 @@ def fix_permissions(project_name):
 
 
 @project_maintenance_bp.route('/fix_permissions_simple/<project_name>', methods=['POST'])
-@admin_required
+@login_required
 def fix_permissions_simple(project_name):
     """Corrige simplement les permissions d'un projet sans vérifications Docker"""
     try:
@@ -482,7 +482,7 @@ def fix_permissions_simple(project_name):
 
  
 @project_maintenance_bp.route('/add_nextjs/<project_name>', methods=['POST'])
-@admin_required
+@login_required
 def add_nextjs(project_name):
     """Ajoute Next.js à un projet WordPress existant"""
     try:
@@ -647,7 +647,7 @@ export default function Home() {
 
 
 @project_maintenance_bp.route('/remove_nextjs/<project_name>', methods=['POST'])
-@admin_required
+@login_required
 def remove_nextjs(project_name):
     """Supprime Next.js d'un projet WordPress"""
     try:
@@ -736,7 +736,7 @@ def remove_nextjs(project_name):
 
 
 @project_maintenance_bp.route('/fix_wordpress_permissions/<project_name>', methods=['POST'])
-@admin_required
+@login_required
 def fix_wordpress_permissions(project_name):
     """Corrige les permissions WordPress pour www-data (wp-content, uploads, plugins, themes)"""
     try:

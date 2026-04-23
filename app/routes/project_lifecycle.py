@@ -883,7 +883,7 @@ def _save_project_ports(project_name, ports):
 
 
 @project_lifecycle_bp.route('/start_project/<project_name>', methods=['POST'])
-@admin_required
+@login_required
 def start_project(project_name):
     """Démarre un projet"""
     # Log du début de l'opération
@@ -956,7 +956,7 @@ def start_project(project_name):
 
 
 @project_lifecycle_bp.route('/stop_project/<project_name>', methods=['POST'])
-@admin_required
+@login_required
 def stop_project(project_name):
     """Arrête un projet"""
     # Log du début de l'opération
@@ -1022,7 +1022,7 @@ def stop_project(project_name):
 
 
 @project_lifecycle_bp.route('/restart_project/<project_name>', methods=['POST'])
-@admin_required
+@login_required
 def restart_project(project_name):
     """Redémarre un projet (stop puis start)"""
     # Log du début de l'opération
@@ -1126,7 +1126,7 @@ def restart_project(project_name):
 
 
 @project_lifecycle_bp.route('/rebuild_project/<project_name>', methods=['POST'])
-@admin_required
+@login_required
 def rebuild_project(project_name):
     """Rebuild les conteneurs d'un projet en préservant les volumes"""
     # Log du début de l'opération
@@ -1214,7 +1214,7 @@ def rebuild_project(project_name):
 
 
 @project_lifecycle_bp.route('/delete_project/<project_name>', methods=['DELETE'])
-@admin_required
+@login_required
 def delete_project(project_name):
     """Supprime un projet"""
     try:

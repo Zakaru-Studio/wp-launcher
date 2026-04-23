@@ -16,7 +16,7 @@ CONTAINERS_FOLDER = 'containers'
 
 
 @project_snapshots_bp.route('/snapshots/create/<project_name>', methods=['POST'])
-@admin_required
+@login_required
 def create_snapshot(project_name):
     """
     Crée un snapshot d'un projet
@@ -122,7 +122,7 @@ def get_snapshot_info(snapshot_id):
 
 
 @project_snapshots_bp.route('/snapshots/rollback/<snapshot_id>', methods=['POST'])
-@admin_required
+@login_required
 def rollback_snapshot(snapshot_id):
     """Restaure un snapshot"""
     try:
@@ -248,7 +248,7 @@ def preview_snapshot(project_name):
 
 
 @project_snapshots_bp.route('/snapshots/delete/<snapshot_id>', methods=['DELETE'])
-@admin_required
+@login_required
 def delete_snapshot(snapshot_id):
     """Supprime un snapshot"""
     try:

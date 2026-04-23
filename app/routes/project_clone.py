@@ -16,7 +16,7 @@ CONTAINERS_FOLDER = 'containers'
 
 
 @project_clone_bp.route('/clone/<source_name>', methods=['POST'])
-@admin_required
+@login_required
 def clone_project(source_name):
     """
     Clone un projet existant
