@@ -387,16 +387,43 @@ function showCreateProjectModal() {
 }
 
 /**
- * Fonction pour charger les projets
+ * Fonction pour charger les projets.
+ *
+ * Silencieuse en échec background (polling 30s) : on log en console
+ * sans spammer la toaster. Détecte explicitement la redirection vers
+ * /login (session expirée) pour envoyer l'utilisateur se reconnecter
+ * au lieu d'afficher "Erreur" à chaque poll.
  */
-async function loadProjects() {
+async function loadProjects({ silent = false } = {}) {
     try {
-        const response = await fetch('/projects_with_status');
+        const response = await fetch('/projects_with_status', {
+            // Explicit: keep session cookie so expired sessions produce
+            // a clean 302, not a silent 200 with empty data.
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json' },
+        });
+
+        // Session expired → fetch followed 302 to /login which returns
+        // HTML. Stop the poll and invite the user to re-login instead
+        // of toasting "Erreur" every 30s.
+        if (response.redirected && /\/login(\?|$)/.test(response.url)) {
+            _handleSessionExpired();
+            return;
+        }
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+            throw new Error('Unexpected non-JSON response');
+        }
+
         const data = await response.json();
-        projects = data.projects || [];
+        projects = (data && data.projects) || [];
 
         // Trier les projets par ordre alphabétique croissant
-        projects.sort((a, b) => a.name.localeCompare(b.name));
+        projects.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
         // Mettre à jour les données pour le filtrage
         if (typeof updateProjectsList === 'function') {
@@ -417,18 +444,53 @@ async function loadProjects() {
 
         // Vérifier le statut des boutons npm run dev après le rendu
         setTimeout(() => checkNextjsDevStatus(), 1500);
-        
+
         // NOUVEAU : Restaurer les instances sélectionnées après le rendu
         setTimeout(() => {
             restoreSelectedInstances();
         }, 200);
 
+        // Successful load — reset the error counter so a future toast
+        // gets shown (instead of being dedup'd forever).
+        _loadProjectsErrorCount = 0;
+
     } catch (error) {
-        console.error('Erreur lors du chargement des projets:', error);
-        if (typeof showError === 'function') {
+        console.error('loadProjects failed:', error);
+        _loadProjectsErrorCount++;
+        // Only toast the very first failure. Subsequent polling errors
+        // are logged silently so the bell doesn't fill up with dupes.
+        if (!silent && _loadProjectsErrorCount === 1 && typeof showError === 'function') {
             showError('Erreur lors du chargement des projets');
         }
     }
+}
+
+// Tracks consecutive loadProjects() failures so we don't spam the
+// notification bell with identical "Erreur" entries.
+let _loadProjectsErrorCount = 0;
+
+// Poll interval handle — owned by the bottom boot section, exposed
+// here so _handleSessionExpired can cancel it without importing it.
+let _projectsPollTimer = null;
+function _stopProjectsPoll() {
+    if (_projectsPollTimer) {
+        clearInterval(_projectsPollTimer);
+        _projectsPollTimer = null;
+    }
+}
+
+// Session-expiry guard: only redirect once even if several callers
+// race on the same 302.
+let _sessionExpiredHandled = false;
+function _handleSessionExpired() {
+    if (_sessionExpiredHandled) return;
+    _sessionExpiredHandled = true;
+    console.warn('Session expired — redirecting to /login');
+    // Stop the background polling so we don't stack 302s during the
+    // page unload.
+    if (typeof _stopProjectsPoll === 'function') _stopProjectsPoll();
+    // Small delay so any in-flight rendering settles cleanly.
+    setTimeout(() => { window.location.href = '/login'; }, 150);
 }
 
 /**
@@ -2540,8 +2602,11 @@ document.addEventListener('DOMContentLoaded', function () {
     // Initialiser les gestionnaires WP-CLI
     initWPCLIHandlers();
 
-    // Rafraîchir automatiquement toutes les 30 secondes
-    setInterval(loadProjects, 30000);
+    // Rafraîchir automatiquement toutes les 30 secondes. Background
+    // polls run with silent=true so a transient error doesn't stack
+    // toast entries in the bell. _stopProjectsPoll() is called from
+    // the session-expiry guard so a dead session doesn't keep 302-ing.
+    _projectsPollTimer = setInterval(() => loadProjects({ silent: true }), 30000);
 
     // Vérifier le statut des boutons npm run dev toutes les 10 secondes
     setInterval(checkNextjsDevStatus, 10000);

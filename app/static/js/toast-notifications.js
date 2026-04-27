@@ -5,11 +5,33 @@
  * ========================================
  */
 
+// Dedup map: last time we showed a given (type + message) pair.
+// Any identical toast fired within DEDUPE_WINDOW_MS is skipped so a
+// looping poll can't fill the bell with 20 copies of the same error.
+const DEDUPE_WINDOW_MS = 10000;
+const _recentToasts = new Map();
+
 function showToast(message, type = 'info', duration = 5000) {
     // Attendre que le TaskManager soit disponible
     if (typeof taskManager === 'undefined' || !taskManager) {
         console.warn('TaskManager non disponible, notification ignorée:', message);
         return null;
+    }
+
+    // Dedup identical toasts within the short window.
+    const dedupeKey = `${type}::${message}`;
+    const now = Date.now();
+    const last = _recentToasts.get(dedupeKey);
+    if (last && (now - last) < DEDUPE_WINDOW_MS) {
+        return null;
+    }
+    _recentToasts.set(dedupeKey, now);
+    // Trim the map occasionally to avoid unbounded growth.
+    if (_recentToasts.size > 50) {
+        const cutoff = now - DEDUPE_WINDOW_MS;
+        for (const [k, t] of _recentToasts) {
+            if (t < cutoff) _recentToasts.delete(k);
+        }
     }
 
     // Générer un ID unique pour la notification
