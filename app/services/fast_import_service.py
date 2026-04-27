@@ -1223,8 +1223,20 @@ class FastImportService:
                 )
 
             # 4. Deactivate SSL-forcing plugins. These plugins rewrite
-            # every request to https on load — not helpful locally.
-            for plugin in ('really-simple-ssl', 'ssl-insecure-content-fixer'):
+            # every request to https on load OR set HSTS, which
+            # contaminates the browser's hostname-level cache and
+            # makes every site on the same IP unreachable in http.
+            ssl_forcing_plugins = (
+                'really-simple-ssl',
+                'really-simple-ssl-pro',
+                'ssl-insecure-content-fixer',
+                'wp-force-ssl',
+                'ssl-zen',
+                'wp-https',
+                'cloudflare-flexible-ssl',
+                'easy-https-redirection',
+            )
+            for plugin in ssl_forcing_plugins:
                 check = subprocess.run(
                     ['docker', 'exec', wp_container,
                      'wp', 'plugin', 'is-active', plugin, '--allow-root'],
@@ -1238,7 +1250,16 @@ class FastImportService:
                     )
                     log.info("url_replace: deactivated plugin %s", plugin)
 
-            # 5. Elementor URL pass (serializes its own data structures
+            # 5. Force-disable WP-side https flags that survive a plugin
+            # deactivation (constants stored in the DB / wp_options).
+            for opt in ('force_ssl_admin', 'force_ssl_login'):
+                subprocess.run(
+                    ['docker', 'exec', wp_container,
+                     'wp', 'option', 'update', opt, '0', '--allow-root'],
+                    capture_output=True, timeout=15,
+                )
+
+            # 6. Elementor URL pass (serializes its own data structures
             # so wp search-replace doesn't always reach everything).
             plugin_check = subprocess.run(
                 ['docker', 'exec', wp_container,
