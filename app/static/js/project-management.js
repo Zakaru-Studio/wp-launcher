@@ -499,6 +499,9 @@ function _handleSessionExpired() {
 function restoreSelectedInstances() {
     // Parcourir tous les projets pour restaurer leur instance sélectionnée
     projects.forEach(project => {
+        // Site arrêté : la carte n'affiche ni le menu instances ni les
+        // services — rien à restaurer (et le fetch de statut serait du bruit)
+        if (project.status !== 'active') return;
         const selectedInstance = sessionStorage.getItem(`selected_instance_${project.name}`);
         if (selectedInstance) {
             try {
@@ -937,7 +940,7 @@ function createProjectHTML(project) {
                 </div>
 
                 <div class="instance-actions project-header-right" onclick="event.stopPropagation();">
-                    ${isWordPress ? `
+                    ${isWordPress && project.status === 'active' ? `
                     <div class="btn-group">
                         <button class="instance-ghost-btn instance-dropdown-btn" type="button"
                                 data-bs-toggle="dropdown"
@@ -961,10 +964,14 @@ function createProjectHTML(project) {
                             <i class="fas fa-cog"></i>
                         </button>
                         <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end project-commands-dropdown">
+                            ${project.status === 'active' ? `
                             <li><a class="dropdown-item" href="#" onclick="restartProject('${project.name}'); return false;"><i class="fas fa-redo me-2"></i>Redémarrer</a></li>
+                            ` : ''}
                             <li><a class="dropdown-item" href="#" onclick="rebuildProject('${project.name}'); return false;"><i class="fas fa-hammer me-2"></i>Rebuild Containers</a></li>
+                            ${project.status === 'active' ? `
                             <li><a class="dropdown-item" href="#" onclick="openCloneModal('${project.name}'); return false;"><i class="fas fa-clone me-2"></i>Cloner</a></li>
                             <li><a class="dropdown-item" href="#" onclick="openSnapshotsModal('${project.name}'); return false;"><i class="fas fa-camera me-2"></i>Snapshots</a></li>
+                            ` : ''}
                             ${isWordPress && project.status === 'active' ? `
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item wpcli-cmd" href="#" data-project="${project.name}" data-cmd="fix-permissions"><i class="fas fa-wrench me-2"></i>Fix Permissions</a></li>

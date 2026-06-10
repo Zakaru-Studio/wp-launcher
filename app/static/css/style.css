@@ -1844,15 +1844,31 @@ body.sidebar-open .projects-grid {
     box-shadow: var(--shadow-medium);
 }
 
-.task-item.completed {
-    background: var(--al-secondary-container);
-    color: var(--al-on-secondary-container);
+/* Couleurs d'accent des notifications — un liseré + un voile léger au
+   lieu d'un aplat de couleur pleine qui jurait avec les surfaces
+   neutres du thème. */
+:root {
+    --notif-success: #0f8a6d;
+    --notif-error:   #ba1a1a;
+    --notif-warning: #b3640f;
+}
+[data-theme="dark"] {
+    --notif-success: #4ffebd;
+    --notif-error:   #ffb4ab;
+    --notif-warning: #fbbf77;
 }
 
-.task-item.error {
-    background: var(--al-error-container);
-    color: var(--al-on-error-container);
+.task-item.completed,
+.task-item.error,
+.task-item.warning {
+    background:
+        linear-gradient(90deg, color-mix(in srgb, var(--notif-accent) 9%, transparent), transparent 55%),
+        var(--al-surface-container-lowest);
+    box-shadow: inset 3px 0 0 var(--notif-accent), 0 1px 3px -1px rgba(12, 20, 39, 0.04);
 }
+.task-item.completed { --notif-accent: var(--notif-success); }
+.task-item.error     { --notif-accent: var(--notif-error); }
+.task-item.warning   { --notif-accent: var(--notif-warning); }
 
 .task-item.notification {
     background: var(--al-surface-container-lowest);
@@ -1875,8 +1891,9 @@ body.sidebar-open .projects-grid {
     letter-spacing: -0.01em;
 }
 
-.task-item.error .task-item-title { color: var(--al-on-error-container); }
-.task-item.completed .task-item-title { color: var(--al-on-secondary-container); }
+.task-item.error .task-item-title { color: var(--notif-error); }
+.task-item.completed .task-item-title { color: var(--notif-success); }
+.task-item.warning .task-item-title { color: var(--notif-warning); }
 
 .task-item-title i {
     margin-right: 0.5rem;
@@ -1907,8 +1924,11 @@ body.sidebar-open .projects-grid {
     line-height: 1.4;
 }
 
-.task-item.completed .task-item-message { color: var(--al-on-secondary-container); }
-.task-item.error .task-item-message { color: var(--al-on-error-container); }
+/* Le message reste neutre : l'icône, le liseré et le titre portent
+   déjà l'information de statut. */
+.task-item.completed .task-item-message,
+.task-item.error .task-item-message,
+.task-item.warning .task-item-message { color: var(--al-on-surface-variant); }
 
 .task-item-details {
     font-size: 0.72rem;
@@ -2126,7 +2146,8 @@ body.sidebar-open .projects-grid {
 }
 
 .task-toast {
-    background: rgba(255, 255, 255, 0.9);
+    --toast-surface: rgba(255, 255, 255, 0.9);
+    background: var(--toast-surface);
     backdrop-filter: blur(20px);
     border: none;
     border-radius: var(--border-radius);
@@ -2146,20 +2167,17 @@ body.sidebar-open .projects-grid {
     box-shadow: var(--shadow-glow-lg);
 }
 
-.task-toast.completed {
-    background: var(--al-secondary-container);
-    color: var(--al-on-secondary-container);
-}
-
-.task-toast.error {
-    background: var(--al-error-container);
-    color: var(--al-on-error-container);
-}
-
+.task-toast.completed,
+.task-toast.error,
 .task-toast.warning {
-    background: var(--al-error-container);
-    color: var(--al-on-error-container);
+    background:
+        linear-gradient(90deg, color-mix(in srgb, var(--notif-accent) 9%, transparent), transparent 55%),
+        var(--toast-surface);
+    box-shadow: inset 3px 0 0 var(--notif-accent), var(--shadow-strong);
 }
+.task-toast.completed { --notif-accent: var(--notif-success); }
+.task-toast.error     { --notif-accent: var(--notif-error); }
+.task-toast.warning   { --notif-accent: var(--notif-warning); }
 
 .task-toast.notification {
     background: var(--al-surface-container-lowest);
@@ -2183,8 +2201,9 @@ body.sidebar-open .projects-grid {
     gap: 0.5rem;
 }
 
-.task-toast.completed .task-toast-title { color: var(--al-on-secondary-container); }
-.task-toast.error .task-toast-title { color: var(--al-on-error-container); }
+.task-toast.completed .task-toast-title { color: var(--notif-success); }
+.task-toast.error .task-toast-title { color: var(--notif-error); }
+.task-toast.warning .task-toast-title { color: var(--notif-warning); }
 
 .task-toast-close {
     background: none;
@@ -2214,8 +2233,9 @@ body.sidebar-open .projects-grid {
     margin-bottom: 0.4rem;
 }
 
-.task-toast.completed .task-toast-message { color: var(--al-on-secondary-container); }
-.task-toast.error .task-toast-message { color: var(--al-on-error-container); }
+.task-toast.completed .task-toast-message,
+.task-toast.error .task-toast-message,
+.task-toast.warning .task-toast-message { color: var(--al-on-surface-variant); }
 
 .task-toast-details {
     font-size: 0.72rem;
@@ -3593,8 +3613,24 @@ a:focus-visible {
     background: var(--al-surface-container);
 }
 
+/* Ce sélecteur est plus spécifique que .task-item.<statut> : on
+   réapplique le liseré + voile en mode sombre (voile un peu plus
+   marqué, les teintes pastel ressortent moins sur fond sombre). */
+[data-theme="dark"] .task-item.completed,
+[data-theme="dark"] .task-item.error,
+[data-theme="dark"] .task-item.warning {
+    background:
+        linear-gradient(90deg, color-mix(in srgb, var(--notif-accent) 12%, transparent), transparent 55%),
+        var(--al-surface-container-lowest);
+    box-shadow: inset 3px 0 0 var(--notif-accent), 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+/* On ne touche qu'à la variable : la règle de base (et les variantes
+   de statut) référencent --toast-surface, redéclarer background ici
+   écraserait le voile coloré des variantes (même spécificité, règle
+   plus tardive). */
 [data-theme="dark"] .task-toast {
-    background: rgba(19, 27, 46, 0.92);
+    --toast-surface: rgba(19, 27, 46, 0.92);
 }
 
 [data-theme="dark"] .dropdown-menu,
@@ -4427,6 +4463,22 @@ body.app-shell {
     color: var(--al-primary);
 }
 .instance-ghost-btn i { font-size: 0.7rem; }
+
+/* Instance dev sélectionnée : accent vert lisible dans les deux thèmes
+   (--notif-success: teal foncé en clair, vert signature en sombre).
+   Remplace les anciens styles inline #4ffebd, illisibles sur fond clair. */
+.instance-ghost-btn.has-dev-instance {
+    /* inset box-shadow plutôt que border : pas de décalage de layout
+       (le bouton de base est border: none) */
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--notif-success) 55%, transparent);
+    background: color-mix(in srgb, var(--notif-success) 9%, transparent);
+    color: var(--notif-success);
+    font-weight: 600;
+}
+.instance-ghost-btn.has-dev-instance:hover {
+    background: color-mix(in srgb, var(--notif-success) 16%, transparent);
+    color: var(--notif-success);
+}
 
 .instance-link-btn {
     padding: 8px 14px;

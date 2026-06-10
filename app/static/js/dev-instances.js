@@ -58,32 +58,43 @@ class DevInstancesManager {
             
             const data = await response.json();
             if (data.success) {
-                alert(`Instance créée avec succès!\nURL: ${getProjectUrl(data.instance.port)}`);
+                // La progression et le succès s'affichent dans le toaster
+                // (événements socket task_start / task_complete).
                 this.loadUserInstances();
             } else {
-                alert(`Erreur: ${data.error}`);
+                this._toast('error', `Création de l'instance : ${data.error}`);
             }
         } catch (error) {
-            alert(`Erreur: ${error.message}`);
+            this._toast('error', `Création de l'instance : ${error.message}`);
         }
     }
-    
+
     async deleteInstance(instanceName) {
         if (!confirm(`Supprimer l'instance "${instanceName}" ?`)) {
             return;
         }
-        
+
         try {
             const response = await fetch(`/api/dev-instances/${instanceName}`, {
                 method: 'DELETE'
             });
-            
+
             if (response.ok) {
-                alert('Instance supprimée avec succès');
                 this.loadUserInstances();
+            } else {
+                const data = await response.json().catch(() => ({}));
+                this._toast('error', `Suppression de l'instance : ${data.error || 'Erreur inconnue'}`);
             }
         } catch (error) {
-            alert(`Erreur: ${error.message}`);
+            this._toast('error', `Suppression de l'instance : ${error.message}`);
+        }
+    }
+
+    _toast(type, message) {
+        if (typeof window.showToast === 'function') {
+            window.showToast(message, type);
+        } else {
+            alert(message);
         }
     }
     

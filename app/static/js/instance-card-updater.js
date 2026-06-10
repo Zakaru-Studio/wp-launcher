@@ -101,12 +101,11 @@ window.updateProjectCardForInstance = function(projectName, instance, status) {
             label.textContent = newLabel;
         }
         
-        // Appliquer le style vert cyan pour indiquer qu'une instance est sélectionnée
+        // Le style "instance sélectionnée" vit en CSS
+        // (.instance-ghost-btn.has-dev-instance) : il s'adapte au thème
+        // clair/sombre, contrairement aux anciens styles inline #4ffebd
+        // illisibles sur fond clair.
         instanceBtn.classList.add('has-dev-instance');
-        instanceBtn.style.backgroundColor = 'transparent';
-        instanceBtn.style.border = '1px solid #4ffebd';
-        instanceBtn.style.color = '#4ffebd';
-        instanceBtn.style.boxShadow = '0 4px 15px rgba(79, 254, 189, 0.3)';
     }
 }
 
@@ -189,7 +188,9 @@ window.restoreMainInstanceCard = function(projectName) {
             label.textContent = 'Instance principale';
         }
         
-        // Retirer le style .btn-running et restaurer le style normal
+        // Retirer la classe suffit : plus aucun style inline n'est posé.
+        // Les resets restent pour nettoyer d'éventuels styles inline
+        // posés par une version précédente encore en cache.
         instanceBtn.classList.remove('has-dev-instance');
         instanceBtn.style.backgroundColor = '';
         instanceBtn.style.border = '';
