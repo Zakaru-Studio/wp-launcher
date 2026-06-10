@@ -161,12 +161,59 @@ def test_allocate_ports_skips_extra_used_ports(monkeypatch):
     from app.services.port_service import PortService
 
     monkeypatch.setattr(port_service_module, "get_used_ports", lambda: [])
+    monkeypatch.setattr(port_service_module, "is_port_in_use", lambda p: False)
     svc = PortService()
     start = svc.port_range_start
     # Sans extra_used_ports, le premier port de la plage serait choisi ;
     # ici il appartient à une instance arrêtée et doit être sauté.
     ports = svc.allocate_ports_for_project(extra_used_ports={start, start + 1})
     assert ports["wordpress"] == start + 2
+
+
+def test_allocate_ports_skips_ports_held_by_host_processes(monkeypatch):
+    """get_used_ports() ne voit que Docker et les fichiers .port — un
+    service local (ex: python sur 8080) doit être détecté par le test
+    socket, sinon le conteneur plante au démarrage avec
+    'address already in use'."""
+    import app.services.port_service as port_service_module
+    from app.services.port_service import PortService
+
+    monkeypatch.setattr(port_service_module, "get_used_ports", lambda: [])
+    svc = PortService()
+    start = svc.port_range_start
+    busy = {start, start + 2}  # process hôtes fictifs
+    monkeypatch.setattr(port_service_module, "is_port_in_use", lambda p: p in busy)
+
+    ports = svc.allocate_ports_for_project()
+    allocated = set(ports.values())
+    assert busy.isdisjoint(allocated)
+    assert ports["wordpress"] == start + 1
+
+
+def test_allocate_ports_raises_when_range_exhausted(monkeypatch):
+    import app.services.port_service as port_service_module
+    from app.services.port_service import PortService
+
+    monkeypatch.setattr(port_service_module, "get_used_ports", lambda: [])
+    monkeypatch.setattr(port_service_module, "is_port_in_use", lambda p: True)
+    svc = PortService()
+    with pytest.raises(Exception, match="Aucun port libre"):
+        svc.allocate_ports_for_project()
+
+
+def test_get_used_ports_catches_ipv6_and_specific_ip_bindings(monkeypatch):
+    """docker ps affiche aussi des bindings ':::8080->' (IPv6) et
+    '192.168.1.21:8081->' — l'ancien motif limité à 0.0.0.0 les ratait."""
+    from types import SimpleNamespace
+    import app.utils.port_utils as port_utils
+
+    fake = SimpleNamespace(
+        stdout="0.0.0.0:8080->80/tcp, :::8080->80/tcp\n192.168.1.21:8081->80/tcp\n",
+        returncode=0,
+    )
+    monkeypatch.setattr(port_utils.subprocess, "run", lambda *a, **k: fake)
+    used = set(port_utils.get_used_ports())
+    assert {8080, 8081} <= used
 
 
 # ─── create / delete guards ───

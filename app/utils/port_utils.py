@@ -118,13 +118,17 @@ def get_used_ports():
     """
     used_ports = set()
 
-    # Ports utilisés par Docker
+    # Ports utilisés par Docker.
+    # Le motif `:(\d+)->` couvre toutes les formes de binding affichées
+    # par docker ps : `0.0.0.0:8080->`, `:::8080->` (IPv6) et
+    # `192.168.1.21:8080->` (IP spécifique) — l'ancien motif limité à
+    # 0.0.0.0 laissait passer les deux derniers.
     try:
         result = subprocess.run(['docker', 'ps', '--format', '{{.Ports}}'],
                                capture_output=True, text=True)
         for line in result.stdout.strip().split('\n'):
             if line:
-                port_matches = re.findall(r'0\.0\.0\.0:(\d+)->', line)
+                port_matches = re.findall(r':(\d+)->', line)
                 used_ports.update(int(port) for port in port_matches)
     except Exception:
         pass

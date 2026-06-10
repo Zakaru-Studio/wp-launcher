@@ -3,7 +3,7 @@
 Service de gestion des ports - Version simplifiée utilisant utils/port_utils.py
 """
 
-from app.utils.port_utils import get_used_ports, find_free_port_for_project, get_comprehensive_used_ports
+from app.utils.port_utils import get_used_ports, find_free_port_for_project, get_comprehensive_used_ports, is_port_in_use
 from app.config.ports_config import PortsConfig
 from app.config.docker_config import DockerConfig
 from app.utils.logger import wp_logger
@@ -39,52 +39,43 @@ class PortService:
         if extra_used_ports:
             used_ports.update(int(p) for p in extra_used_ports)
 
+        def next_free(candidate):
+            """Premier port libre >= candidate.
+
+            En plus de la liste agrégée (Docker + fichiers .port +
+            extra_used_ports), chaque candidat subit un test socket
+            réel : get_used_ports() ne voit pas les processus hôtes
+            (ex: un service local sur 8080), ce qui produisait des
+            "address already in use" au démarrage du conteneur.
+            """
+            while candidate <= self.port_range_end:
+                if candidate not in used_ports and not is_port_in_use(candidate):
+                    used_ports.add(candidate)  # réservé pour cette allocation
+                    return candidate
+                candidate += 1
+            error_msg = f"Aucun port libre trouvé entre {self.port_range_start} et {self.port_range_end}"
+            wp_logger.log_system_info(f"Erreur allocation ports: {error_msg}",
+                                    used_ports_count=len(used_ports),
+                                    port_range=f"{self.port_range_start}-{self.port_range_end}")
+            raise Exception(error_msg)
+
         # Allocation séquentielle pour éviter les conflits
         current_port = self.port_range_start
-        
-        # Trouver le premier port libre
-        while current_port in used_ports:
-            current_port += 1
-            if current_port > self.port_range_end:
-                error_msg = f"Aucun port libre trouvé entre {self.port_range_start} et {self.port_range_end}"
-                wp_logger.log_system_info(f"Erreur allocation ports: {error_msg}", 
-                                        used_ports_count=len(used_ports),
-                                        port_range=f"{self.port_range_start}-{self.port_range_end}")
-                raise Exception(error_msg)
-        
-        # Port WordPress
-        ports['wordpress'] = current_port
-        current_port += 1
-        
-        # Port phpMyAdmin
-        while current_port in used_ports:
-            current_port += 1
-        ports['phpmyadmin'] = current_port
-        current_port += 1
-        
-        # Port Mailpit
-        while current_port in used_ports:
-            current_port += 1
-        ports['mailpit'] = current_port
-        current_port += 1
-        
-        # Port SMTP
-        while current_port in used_ports:
-            current_port += 1
-        ports['smtp'] = current_port
-        current_port += 1
-        
+
+        ports['wordpress'] = next_free(current_port)
+        ports['phpmyadmin'] = next_free(ports['wordpress'] + 1)
+        ports['mailpit'] = next_free(ports['phpmyadmin'] + 1)
+        ports['smtp'] = next_free(ports['mailpit'] + 1)
+
         # Port Next.js si nécessaire
         if enable_nextjs:
-            while current_port in used_ports:
-                current_port += 1
-            ports['nextjs'] = current_port
-        
-        wp_logger.log_system_info(f"Ports alloués avec succès", 
+            ports['nextjs'] = next_free(ports['smtp'] + 1)
+
+        wp_logger.log_system_info(f"Ports alloués avec succès",
                                  ports=ports,
                                  enable_nextjs=enable_nextjs,
                                  total_ports=len(ports))
-        
+
         return ports
     
     def is_port_available(self, port):
