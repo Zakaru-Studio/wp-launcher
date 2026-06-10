@@ -74,13 +74,16 @@ def create_instance():
         )
         
         wp_logger.log_system_info(f"Instance created successfully: {instance.name}")
-        
-        # Émettre la completion de la tâche
+
+        # Émettre la completion de la tâche (avec l'URL : c'est la seule
+        # info que l'ancienne alert() apportait en plus)
         if socketio:
+            from app.config.docker_config import DockerConfig
+            instance_url = f"http://{DockerConfig.LOCAL_IP}:{instance.port}"
             socketio.emit('task_complete', {
                 'task_id': task_id,
                 'success': True,
-                'message': f'Instance créée avec succès pour {owner_username}',
+                'message': f'Instance créée avec succès pour {owner_username} — {instance_url}',
                 'instance': instance.to_dict()
             })
         

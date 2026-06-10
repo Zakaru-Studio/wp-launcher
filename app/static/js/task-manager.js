@@ -1102,6 +1102,10 @@ class TaskManager {
      * Obtenir la classe CSS de statut
      */
     getStatusClass(task) {
+        // Les toasts "warning" arrivent avec status='notification' ;
+        // on les distingue par leur type pour leur donner l'accent
+        // ambre au lieu du fond neutre.
+        if (task.type === 'notification_warning') return 'warning';
         switch (task.status) {
             case 'completed': return 'completed';
             case 'error': return 'error';

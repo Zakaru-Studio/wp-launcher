@@ -147,32 +147,41 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('✅ Instances UI Manager initialisé');
 });
 
+// Notification via le toaster existant (fallback alert si indisponible)
+function instanceToast(type, message) {
+    if (typeof window.showToast === 'function') {
+        window.showToast(message, type);
+    } else {
+        alert(message);
+    }
+}
+
 // Créer une instance pour soi-même (développeur)
 async function createDevInstanceForSelf(projectName) {
     if (!confirm(`Créer votre instance de développement pour "${projectName}" ?\n\nCela va copier les fichiers et la base de données du projet parent.`)) {
         return;
     }
-    
+
     try {
         const response = await fetch('/api/dev-instances/create', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ parent_project: projectName })
         });
-        
+
         const data = await response.json();
         if (data.success) {
-            alert(`Instance créée avec succès!\nURL: ${getProjectUrl(data.instance.port)}`);
-            // Recharger les instances
+            // Le toaster affiche déjà la tâche de création (task_start /
+            // task_complete via socket, avec l'URL) — pas d'alert.
             const dropdown = document.querySelector(`.instances-dropdown[data-project="${projectName}"]`);
             if (dropdown) {
                 window.instancesUIManager.loadProjectInstances(projectName, dropdown);
             }
         } else {
-            alert(`Erreur: ${data.error}`);
+            instanceToast('error', `Création de l'instance : ${data.error}`);
         }
     } catch (error) {
-        alert(`Erreur: ${error.message}`);
+        instanceToast('error', `Création de l'instance : ${error.message}`);
     }
 }
 
@@ -193,11 +202,11 @@ function openCreateInstanceModal(projectName) {
                 const modal = new bootstrap.Modal(document.getElementById('createInstanceModal'));
                 modal.show();
             } else {
-                alert('Erreur lors du chargement des utilisateurs');
+                instanceToast('error', 'Erreur lors du chargement des utilisateurs');
             }
         })
         .catch(error => {
-            alert('Erreur: ' + error.message);
+            instanceToast('error', 'Erreur: ' + error.message);
         });
 }
 
@@ -369,19 +378,19 @@ window.deleteDevInstance = async function(instanceName) {
         
         const data = await response.json();
         console.log('Delete response:', data);
-        
+
         if (data.success || response.ok) {
-            alert('Instance supprimée avec succès');
-            // Recharger les projets
+            // Le toaster reçoit déjà la tâche de suppression via socket —
+            // on recharge juste la liste.
             if (typeof loadProjects === 'function') {
                 loadProjects();
             }
         } else {
-            alert(`Erreur: ${data.error || 'Erreur inconnue'}`);
+            instanceToast('error', `Suppression de l'instance : ${data.error || 'Erreur inconnue'}`);
         }
     } catch (error) {
         console.error('Delete error:', error);
-        alert(`Erreur: ${error.message}`);
+        instanceToast('error', `Suppression de l'instance : ${error.message}`);
     }
 }
 
@@ -389,35 +398,37 @@ window.deleteDevInstance = async function(instanceName) {
 async function submitCreateInstance() {
     const projectName = document.getElementById('create-instance-project').value;
     const username = document.getElementById('create-instance-user').value;
-    
+
     if (!username) {
-        alert('Veuillez sélectionner un utilisateur');
+        instanceToast('warning', 'Veuillez sélectionner un utilisateur');
         return;
     }
-    
+
+    // Fermer la modale tout de suite : la progression s'affiche dans le
+    // toaster (task_start → task_complete via socket, avec l'URL).
+    bootstrap.Modal.getInstance(document.getElementById('createInstanceModal')).hide();
+
     try {
         const response = await fetch('/api/dev-instances/create', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ 
+            body: JSON.stringify({
                 parent_project: projectName,
                 owner_username: username // Admin peut spécifier le propriétaire
             })
         });
-        
+
         const data = await response.json();
         if (data.success) {
-            alert(`Instance créée avec succès pour ${username}!\nURL: ${getProjectUrl(data.instance.port)}`);
-            bootstrap.Modal.getInstance(document.getElementById('createInstanceModal')).hide();
             // Recharger les projets
             if (typeof loadProjects === 'function') {
                 loadProjects();
             }
         } else {
-            alert(`Erreur: ${data.error}`);
+            instanceToast('error', `Création de l'instance : ${data.error}`);
         }
     } catch (error) {
-        alert(`Erreur: ${error.message}`);
+        instanceToast('error', `Création de l'instance : ${error.message}`);
     }
 }
 
