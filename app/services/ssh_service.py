@@ -114,6 +114,18 @@ def decrypt_private_key(secret_key: str, token: bytes) -> str:
 # ────────────────────────────────────────────────────────────────────────
 
 
+# paramiko 4.x a retiré le support DSA (DSSKey). On le garde dans la
+# liste uniquement s'il existe encore, pour rester compatible 3.x.
+_PKEY_CLASSES = tuple(
+    cls for cls in (
+        getattr(paramiko, "Ed25519Key", None),
+        getattr(paramiko, "ECDSAKey", None),
+        getattr(paramiko, "RSAKey", None),
+        getattr(paramiko, "DSSKey", None),
+    ) if cls is not None
+)
+
+
 def _load_pkey(pem: str) -> paramiko.PKey:
     """Parse a PEM blob into whichever paramiko key type matches.
 
@@ -122,7 +134,7 @@ def _load_pkey(pem: str) -> paramiko.PKey:
     rather than the generic "unsupported or malformed" message.
     """
     buf = io.StringIO(pem)
-    for cls in (paramiko.Ed25519Key, paramiko.ECDSAKey, paramiko.RSAKey, paramiko.DSSKey):
+    for cls in _PKEY_CLASSES:
         buf.seek(0)
         try:
             return cls.from_private_key(buf)

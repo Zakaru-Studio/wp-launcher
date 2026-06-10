@@ -3,7 +3,7 @@
 
 # Web framework
 Flask==3.0.0
-Werkzeug==3.1.6
+Werkzeug==3.1.8
 Flask-WTF==1.2.2
 
 # WebSocket / real-time
@@ -15,14 +15,15 @@ eventlet==0.33.3
 Flask-Babel==4.0.0
 
 # Utilities
-chardet==5.2.0
+chardet==7.4.3
 python-dotenv==1.0.0
 psutil==5.9.8
-requests==2.33.0  # GitHub OAuth service, HTTP calls
+requests==2.33.1  # GitHub OAuth service, HTTP calls
 
 # Deployments: SSH client + at-rest encryption for stored private keys
-paramiko==3.5.0
+# paramiko 4.x drops DSA (DSSKey) support — handled in app/services/ssh_service.py
+paramiko==4.0.0
 cryptography==46.0.7
 
 # WSGI / production
-gunicorn==22.0.0
+gunicorn==25.3.0
