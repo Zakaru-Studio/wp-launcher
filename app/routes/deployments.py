@@ -13,6 +13,7 @@ Routes:
   GET    /api/deployments/<id>                       (login + owner/admin)
   GET    /api/deployments/<id>/log                   (login + owner/admin)
   POST   /api/deployments/run                        (login + can_user_deploy)
+  POST   /api/deployments/<id>/cancel                (login + owner/admin)
   GET    /api/deployments/deployable-projects        (login)
 
   GET    /api/projects/<name>/git                    (login + can_user_deploy)
@@ -506,14 +507,16 @@ def api_run_deployment():
         return jsonify(error="Invalid project name."), 400
     if server_id is None:
         return jsonify(error="server_id must be an integer"), 400
+
+    # Permission BEFORE existence: an unauthorized caller learns nothing
+    # about which project slugs exist on this instance.
+    if not _user_can_deploy(project_name):
+        return jsonify(error="You don't have permission to deploy this project."), 403
     if project_name not in _list_all_projects():
         return jsonify(error="Unknown project."), 404
     if not branch:
         cfg = svc.get_project_git_config(project_name)
         branch = (cfg.get("git_default_branch") or "main").strip()
-
-    if not _user_can_deploy(project_name):
-        return jsonify(error="You don't have permission to deploy this project."), 403
 
     try:
         deployment_id = svc.run(
@@ -526,9 +529,34 @@ def api_run_deployment():
     except ValueError as exc:
         return jsonify(error=str(exc)), 400
     except RuntimeError as exc:
-        return jsonify(error=str(exc)), 400
+        # Includes the "already running on this server" guard → 409 reads
+        # better than 400 for a state conflict.
+        msg = str(exc)
+        status = 409 if "already running" in msg else 400
+        return jsonify(error=msg), status
 
     return jsonify(deployment_id=deployment_id, project=project_name, branch=branch), 202
+
+
+@deployments_bp.route("/api/deployments/<int:deployment_id>/cancel", methods=["POST"])
+@login_required
+def api_cancel_deployment(deployment_id: int):
+    """Cancel a running deployment (owner of the project, or admin)."""
+    svc, err = _require("deployment_service")
+    if err:
+        return err
+    dep = svc.get_deployment(deployment_id)
+    if not dep:
+        return jsonify(error="Deployment not found"), 404
+    if not _is_admin() and not _user_can_deploy(dep["project_name"]):
+        return jsonify(error="Forbidden"), 403
+    if dep["status"] != "running":
+        return jsonify(error="Deployment is not running."), 409
+    if not svc.cancel(deployment_id):
+        # Row says running but no live worker owns it (e.g. app restarted
+        # mid-deploy before the reaper). Nothing to signal.
+        return jsonify(error="No cancellable worker for this deployment."), 409
+    return jsonify(success=True, deployment_id=deployment_id), 202
 
 
 # ─── helpers exposed for templates ──────────────────────────────────

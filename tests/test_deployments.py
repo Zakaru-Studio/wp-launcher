@@ -456,6 +456,184 @@ def test_emit_writes_redacted_line_to_log_file(tmp_deployment_service, tmp_serve
     assert "REDACTED_PRIVATE_KEY" in contents
 
 
+# ─── concurrent-deploy guard + cancellation ───
+
+
+def test_run_refuses_concurrent_deploy_same_project_server(
+    tmp_deployment_service, tmp_server_service
+):
+    """Two simultaneous deploys of the same project to the same server
+    would run `git reset --hard` concurrently on the remote — the
+    second POST must be refused while the first row is `running`."""
+    s = tmp_server_service.create(
+        label="busy", env="staging", hostname="h", ssh_user="u",
+        ssh_private_key_enc=b"x", deploy_base_path="/p",
+        host_fingerprint="SHA256:fake",
+    )
+    with sqlite3.connect(tmp_deployment_service.db_path) as raw:
+        raw.execute(
+            "INSERT INTO deployments (project_name, server_id, branch, status, "
+            "triggered_by, started_at, log_file) VALUES "
+            "('acme', ?, 'main', 'running', NULL, '2026-01-01T00:00:00+00:00', '')",
+            (s.id,),
+        )
+        raw.commit()
+
+    from contextlib import nullcontext
+
+    class FakeApp:
+        # The worker thread enters app.app_context(); a nullcontext is
+        # enough — the SSH part then fails and the row is finalized as
+        # failed, which is irrelevant to this guard test.
+        def app_context(self):
+            return nullcontext()
+
+    with pytest.raises(RuntimeError, match="already running"):
+        tmp_deployment_service.run(
+            project_name="acme",
+            server_id=s.id,
+            branch="main",
+            triggered_by=None,
+            app=FakeApp(),
+        )
+
+    # A different project on the same server is NOT blocked by the guard
+    # (it fails later on SSH, which is fine for this unit test — we only
+    # assert the error is not the concurrency refusal).
+    try:
+        tmp_deployment_service.run(
+            project_name="other",
+            server_id=s.id,
+            branch="main",
+            triggered_by=None,
+            app=FakeApp(),
+        )
+    except RuntimeError as exc:
+        assert "already running" not in str(exc)
+
+
+def test_cancel_unknown_deployment_returns_false(tmp_deployment_service):
+    assert tmp_deployment_service.cancel(999999) is False
+
+
+def test_cancel_signals_registered_worker(tmp_deployment_service):
+    event = threading.Event()
+    tmp_deployment_service._cancel_events[42] = event
+    try:
+        assert tmp_deployment_service.cancel(42) is True
+        assert event.is_set()
+    finally:
+        tmp_deployment_service._pop_cancel_event(42)
+
+
+def test_stream_channel_raises_on_cancel(tmp_deployment_service):
+    """A set cancel event must abort the streaming loop with
+    DeploymentCancelled (mapped to status='cancelled' upstream)."""
+    from app.services.deployment_service import DeploymentCancelled
+
+    channel = MagicMock()
+    channel.recv_ready.return_value = False
+    channel.recv_stderr_ready.return_value = False
+    channel.exit_status_ready.return_value = False
+    cancel_event = threading.Event()
+    cancel_event.set()
+
+    with pytest.raises(DeploymentCancelled):
+        tmp_deployment_service._stream_channel(
+            channel, lambda line, stream: None, time.monotonic(), 1,
+            cancel_event=cancel_event,
+        )
+    channel.close.assert_called()
+
+
+def test_schema_v2_migration_allows_cancelled_status(tmp_path):
+    """A v1 database (CHECK without 'cancelled') must be rebuilt by the
+    v2 migration so cancelled rows can be written."""
+    from app.services import deployments_schema
+
+    db = str(tmp_path / "legacy.db")
+    with sqlite3.connect(db) as raw:
+        raw.execute(
+            """
+            CREATE TABLE servers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                label TEXT NOT NULL UNIQUE,
+                env TEXT NOT NULL CHECK(env IN ('staging','production')),
+                hostname TEXT NOT NULL,
+                ssh_port INTEGER NOT NULL DEFAULT 22,
+                ssh_user TEXT NOT NULL,
+                ssh_private_key_enc BLOB NOT NULL,
+                host_fingerprint TEXT,
+                deploy_base_path TEXT NOT NULL,
+                created_by INTEGER,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        raw.execute(
+            """
+            CREATE TABLE deployments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_name TEXT NOT NULL,
+                server_id INTEGER NOT NULL,
+                branch TEXT NOT NULL,
+                commit_sha TEXT,
+                status TEXT NOT NULL
+                    CHECK(status IN ('running','success','failed','timeout')),
+                triggered_by INTEGER,
+                started_at TEXT NOT NULL,
+                finished_at TEXT,
+                log_file TEXT,
+                FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE
+            )
+            """
+        )
+        raw.execute(
+            "INSERT INTO deployments (project_name, server_id, branch, status, "
+            "started_at) VALUES ('p', 1, 'main', 'success', '2026-01-01')"
+        )
+        raw.execute("PRAGMA user_version = 1")
+        raw.commit()
+
+    deployments_schema.init(db)
+
+    with sqlite3.connect(db) as raw:
+        # Existing row survived the rebuild…
+        assert raw.execute("SELECT COUNT(*) FROM deployments").fetchone()[0] == 1
+        # …and 'cancelled' is now an accepted status.
+        raw.execute(
+            "INSERT INTO deployments (project_name, server_id, branch, status, "
+            "started_at) VALUES ('p', 1, 'main', 'cancelled', '2026-01-02')"
+        )
+        raw.commit()
+        assert raw.execute("PRAGMA user_version").fetchone()[0] == deployments_schema.SCHEMA_VERSION
+
+
+def test_deployment_dicts_do_not_expose_log_file(tmp_deployment_service, tmp_server_service):
+    """The absolute host path of the log file is an internal detail and
+    must not leak through the API-facing dicts."""
+    s = tmp_server_service.create(
+        label="nolog", env="staging", hostname="h", ssh_user="u",
+        ssh_private_key_enc=b"x", deploy_base_path="/p",
+        host_fingerprint="SHA256:fake",
+    )
+    with sqlite3.connect(tmp_deployment_service.db_path) as raw:
+        raw.execute(
+            "INSERT INTO deployments (project_name, server_id, branch, status, "
+            "triggered_by, started_at, log_file) VALUES "
+            "('leaky', ?, 'main', 'success', NULL, '2026-01-01', '/secret/path.log')",
+            (s.id,),
+        )
+        raw.commit()
+
+    listed = tmp_deployment_service.list_deployments(project_name="leaky")
+    assert listed and "log_file" not in listed[0]
+    dep = tmp_deployment_service.get_deployment(listed[0]["id"])
+    assert dep and "log_file" not in dep
+    # read_log still resolves the path internally.
+    assert tmp_deployment_service.read_log(dep["id"]) is None  # file doesn't exist
+
+
 # ─── HTTP layer ───
 
 
@@ -480,6 +658,12 @@ def test_run_deployment_rejects_unauth_without_body_crash(client):
     """Unauth POST must fail cleanly, not 500 with a traceback."""
     rv = client.post("/api/deployments/run", json={"project": "x"}, follow_redirects=False)
     # Either CSRF (if enabled), or login redirect (302), or auth (401/403).
+    assert rv.status_code in (302, 400, 401, 403)
+    assert rv.status_code != 500
+
+
+def test_cancel_deployment_rejects_unauth(client):
+    rv = client.post("/api/deployments/1/cancel", follow_redirects=False)
     assert rv.status_code in (302, 400, 401, 403)
     assert rv.status_code != 500
 

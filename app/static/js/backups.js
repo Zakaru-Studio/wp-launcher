@@ -8,12 +8,32 @@ let allMysqlBackups = [];
 let allMongodbBackups = [];
 let currentMysqlPage = 1;
 let currentMongodbPage = 1;
+let lastStorageStats = null;
+let backupPollTimer = null;
 
 // Initialisation
 document.addEventListener('DOMContentLoaded', function() {
     // Charger la liste des backups au démarrage
-    refreshBackupList();
+    refreshBackupList(true);
+
+    // Délégation des clics "supprimer" (évite d'interpoler les noms de
+    // fichiers dans des handlers onclick inline)
+    document.querySelectorAll('.backup-list-container').forEach(container => {
+        container.addEventListener('click', function(event) {
+            const btn = event.target.closest('button[data-action="delete-backup"]');
+            if (!btn) return;
+            const row = btn.closest('.backup-row');
+            if (!row) return;
+            deleteBackup(btn.dataset.type, row.dataset.backupProject, row.dataset.backupFile);
+        });
+    });
 });
+
+function escapeBackupHtml(value) {
+    const div = document.createElement('div');
+    div.textContent = String(value ?? '');
+    return div.innerHTML;
+}
 
 /**
  * Change d'onglet de backup
@@ -37,7 +57,7 @@ function switchBackupTab(tabName) {
 /**
  * Rafraîchit la liste des backups
  */
-async function refreshBackupList() {
+async function refreshBackupList(silent = false) {
     try {
         const response = await fetch('/api/backups');
         const data = await response.json();
@@ -56,9 +76,10 @@ async function refreshBackupList() {
             renderMongodbPage();
 
             // Storage panel (Stitch aside)
+            lastStorageStats = data.storage || null;
             updateStoragePanel();
 
-            showToast('Liste des backups actualisée', 'success');
+            if (!silent) showToast('Liste des backups actualisée', 'success');
         } else {
             showToast('Erreur lors du chargement des backups', 'error');
         }
@@ -210,12 +231,16 @@ function createBackupItem(backup, type) {
         ? `${(sizeMb / 1024).toFixed(1)} GB`
         : `${sizeMb} MB`;
 
+    const safeProject = escapeBackupHtml(backup.project);
+    const safeFile = escapeBackupHtml(backup.filename);
+    const downloadUrl = `/api/backups/${encodeURIComponent(type)}/${encodeURIComponent(backup.filename)}/download`;
+
     return `
-        <div class="backup-row" data-backup-project="${backup.project}" data-backup-file="${backup.filename}">
+        <div class="backup-row" data-backup-project="${safeProject}" data-backup-file="${safeFile}">
             <div class="backup-row-name">
                 <div class="backup-row-icon"><i class="${iconClass}"></i></div>
                 <div class="backup-row-text">
-                    <div class="backup-row-title">${backup.project}</div>
+                    <div class="backup-row-title" title="${safeFile}">${safeProject}</div>
                     <div class="backup-row-dest">
                         <i class="fas fa-cloud"></i>
                         <span>${destination}</span>
@@ -234,7 +259,10 @@ function createBackupItem(backup, type) {
                     <span class="status-dot"></span>
                     Complete
                 </span>
-                <button class="backup-kebab backup-action-btn danger" onclick="deleteBackup('${type}', '${backup.project}', '${backup.filename}')" title="Supprimer">
+                <a class="backup-kebab backup-action-btn" href="${downloadUrl}" title="Télécharger" download>
+                    <i class="fas fa-download"></i>
+                </a>
+                <button class="backup-kebab backup-action-btn danger" data-action="delete-backup" data-type="${escapeBackupHtml(type)}" title="Supprimer">
                     <i class="fas fa-trash"></i>
                 </button>
             </div>
@@ -245,9 +273,15 @@ function createBackupItem(backup, type) {
 /**
  * Met à jour le panneau Storage Utilization
  */
+function formatMb(mb) {
+    return mb >= 1024 ? (mb / 1024).toFixed(1) + ' GB' : Math.round(mb) + ' MB';
+}
+
 function updateStoragePanel() {
-    const totalMbMysql = allMysqlBackups.reduce((sum, b) => sum + (b.size_mb || 0), 0);
-    const totalMbMongo = allMongodbBackups.reduce((sum, b) => sum + (b.size_mb || 0), 0);
+    const stats = lastStorageStats || {};
+    const perType = stats.per_type_mb || {};
+    const totalMbMysql = perType.mysql ?? allMysqlBackups.reduce((sum, b) => sum + (b.size_mb || 0), 0);
+    const totalMbMongo = perType.mongodb ?? allMongodbBackups.reduce((sum, b) => sum + (b.size_mb || 0), 0);
     const totalMb = totalMbMysql + totalMbMongo;
     const totalGb = totalMb / 1024;
 
@@ -261,12 +295,19 @@ function updateStoragePanel() {
     const unitEl = document.getElementById('storage-used-unit');
     if (unitEl) unitEl.textContent = totalGb >= 1 ? 'GB Used' : 'MB Used';
 
-    // Progress relative to a soft 100 GB ceiling (arbitrary cap)
-    const pct = Math.max(2, Math.min(100, (totalGb / 100) * 100));
+    // Jauge relative à la capacité réelle du disque si connue,
+    // sinon plafond arbitraire de 100 GB.
+    const ceilingGb = stats.disk_total_gb || 100;
+    const pct = Math.max(2, Math.min(100, (totalGb / ceilingGb) * 100));
     fillEl.style.width = pct + '%';
 
-    if (dbEl) dbEl.textContent = (totalMbMysql / 1024).toFixed(1) + ' GB';
-    if (filesEl) filesEl.textContent = (totalMbMongo / 1024).toFixed(1) + ' GB';
+    if (dbEl) dbEl.textContent = formatMb(totalMbMysql);
+    if (filesEl) filesEl.textContent = formatMb(totalMbMongo);
+
+    const freeEl = document.getElementById('storage-free-value');
+    if (freeEl && stats.disk_free_gb != null) {
+        freeEl.textContent = stats.disk_free_gb + ' GB';
+    }
 }
 
 /**
@@ -275,7 +316,7 @@ function updateStoragePanel() {
 async function runBackup(type) {
     const btn = event.target.closest('button');
     const originalText = btn.innerHTML;
-    
+
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>En cours...';
 
@@ -290,20 +331,63 @@ async function runBackup(type) {
 
         const data = await response.json();
 
-        if (data.success) {
-            showToast(`Backup ${type} lancé avec succès!`, 'success');
-            // Recharger la liste des backups après 3 secondes
-            setTimeout(refreshBackupList, 3000);
+        if (response.status === 202 && data.success) {
+            showToast(`Backup ${type} lancé en arrière-plan`, 'success');
+            pollBackupStatus(btn, originalText);
+            return; // le bouton est réactivé en fin de polling
+        } else if (response.status === 409) {
+            showToast('Un backup est déjà en cours', 'warning');
         } else {
             showToast(`Erreur: ${data.error}`, 'error');
         }
     } catch (error) {
         showToast('Erreur lors du lancement du backup', 'error');
         console.error('Erreur backup:', error);
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = originalText;
     }
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+}
+
+/**
+ * Suit l'avancement du backup lancé en arrière-plan, puis recharge la liste.
+ */
+function pollBackupStatus(btn, originalText) {
+    if (backupPollTimer) clearInterval(backupPollTimer);
+    const startedAt = Date.now();
+    const MAX_POLL_MS = 12 * 60 * 1000; // garde-fou au-delà du timeout serveur (10 min)
+
+    const finish = () => {
+        clearInterval(backupPollTimer);
+        backupPollTimer = null;
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+        refreshBackupList(true);
+    };
+
+    backupPollTimer = setInterval(async () => {
+        if (Date.now() - startedAt > MAX_POLL_MS) {
+            showToast('Le backup met plus de temps que prévu — vérifiez les logs', 'warning');
+            finish();
+            return;
+        }
+        try {
+            const res = await fetch('/api/backups/run/status');
+            const data = await res.json();
+            const run = (data && data.run) || {};
+            if (run.status === 'running') return;
+            if (run.status === 'success') {
+                showToast('Backup terminé avec succès', 'success');
+            } else if (run.status === 'failed') {
+                showToast(`Backup échoué: ${run.error || 'voir les logs'}`, 'error');
+            }
+            finish();
+        } catch (e) {
+            // Erreur réseau transitoire : on retentera au prochain tick
+            console.warn('Statut backup indisponible:', e);
+        }
+    }, 3000);
 }
 
 /**
@@ -315,7 +399,7 @@ async function deleteBackup(type, project, filename) {
     }
 
     try {
-        const response = await fetch(`/api/backups/${type}/${project}/${filename}`, {
+        const response = await fetch(`/api/backups/${encodeURIComponent(type)}/${encodeURIComponent(filename)}`, {
             method: 'DELETE'
         });
 
@@ -323,7 +407,7 @@ async function deleteBackup(type, project, filename) {
 
         if (data.success) {
             showToast('Backup supprimé avec succès', 'success');
-            refreshBackupList();
+            refreshBackupList(true);
         } else {
             showToast(`Erreur: ${data.error}`, 'error');
         }

@@ -5,6 +5,7 @@ import os
 import time
 from flask import Blueprint, request, jsonify, g, current_app
 from app.middleware.auth_middleware import login_required, admin_required
+from app.utils.slug_utils import validate_project_name
 
 
 dev_instances_bp = Blueprint('dev_instances', __name__, url_prefix='/api/dev-instances')
@@ -16,12 +17,19 @@ def create_instance():
     """Create a new dev instance"""
     from app.utils.logger import wp_logger
     
-    data = request.json
+    data = request.get_json(silent=True) or {}
     parent_project = data.get('parent_project')
-    
+
     if not parent_project:
         return jsonify({'success': False, 'error': 'Projet parent manquant'}), 400
-    
+    # Charset strict avant tout usage en chemin/SQL (pas de ../, etc.)
+    try:
+        validate_project_name(parent_project)
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+    if not os.path.isdir(os.path.join('projets', parent_project)):
+        return jsonify({'success': False, 'error': 'Projet parent introuvable'}), 404
+
     # Déterminer le propriétaire
     if g.current_user.role == 'admin' and 'owner_username' in data:
         owner_username = data['owner_username']
@@ -177,54 +185,35 @@ def get_instance_status(instance_name):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+def _get_owned_instance(instance_name):
+    """Charge une instance et vérifie la propriété.
+
+    Retourne (instance, None) ou (None, (réponse, status)).
+    """
+    dev_instance_service = current_app.extensions['dev_instance_service']
+    instance = dev_instance_service.get_instance_by_name(instance_name)
+    if not instance:
+        return None, (jsonify({'success': False, 'error': 'Instance non trouvée'}), 404)
+    if instance.owner_username != g.current_user.username and g.current_user.role != 'admin':
+        return None, (jsonify({'success': False, 'error': 'Accès refusé'}), 403)
+    return instance, None
+
+
 @dev_instances_bp.route('/<instance_name>/start', methods=['POST'])
 @login_required
 def start_instance(instance_name):
     """Start an instance"""
+    from app.utils.logger import wp_logger
     try:
-        from app.utils.logger import wp_logger
-        import subprocess
-        
         wp_logger.log_system_info(f"Starting instance: {instance_name}")
-        
-        # Get instance from DB
-        dev_instance_service = current_app.extensions['dev_instance_service']
-        instance = dev_instance_service.get_instance_by_name(instance_name)
-        
-        if not instance:
-            return jsonify({'success': False, 'error': 'Instance non trouvée'}), 404
-        
-        # Check ownership
-        if instance.owner_username != g.current_user.username and g.current_user.role != 'admin':
-            return jsonify({'success': False, 'error': 'Accès refusé'}), 403
-        
-        # Get instance path
-        instance_path = os.path.join('projets', instance.parent_project, '.dev-instances', instance.slug)
-        
-        if not os.path.exists(instance_path):
-            return jsonify({'success': False, 'error': 'Dossier d\'instance non trouvé'}), 404
-        
-        # Start container
-        result = subprocess.run(
-            ['docker-compose', 'up', '-d'],
-            cwd=instance_path,
-            capture_output=True,
-            text=True,
-            timeout=60
-        )
-        
-        if result.returncode == 0:
-            wp_logger.log_system_info(f"Instance {instance_name} started successfully")
-            return jsonify({'success': True, 'message': 'Instance démarrée'})
-        else:
-            wp_logger.log_system_info(f"Failed to start instance {instance_name}: {result.stderr}")
-            return jsonify({'success': False, 'error': result.stderr}), 500
-            
+        _, err = _get_owned_instance(instance_name)
+        if err:
+            return err
+        current_app.extensions['dev_instance_service'].start_instance(instance_name)
+        wp_logger.log_system_info(f"Instance {instance_name} started successfully")
+        return jsonify({'success': True, 'message': 'Instance démarrée'})
     except Exception as e:
-        from app.utils.logger import wp_logger
         wp_logger.log_system_info(f"Error starting instance {instance_name}: {str(e)}")
-        import traceback
-        wp_logger.log_system_info(f"Traceback: {traceback.format_exc()}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
@@ -232,50 +221,17 @@ def start_instance(instance_name):
 @login_required
 def stop_instance(instance_name):
     """Stop an instance"""
+    from app.utils.logger import wp_logger
     try:
-        from app.utils.logger import wp_logger
-        import subprocess
-        
         wp_logger.log_system_info(f"Stopping instance: {instance_name}")
-        
-        # Get instance from DB
-        dev_instance_service = current_app.extensions['dev_instance_service']
-        instance = dev_instance_service.get_instance_by_name(instance_name)
-        
-        if not instance:
-            return jsonify({'success': False, 'error': 'Instance non trouvée'}), 404
-        
-        # Check ownership
-        if instance.owner_username != g.current_user.username and g.current_user.role != 'admin':
-            return jsonify({'success': False, 'error': 'Accès refusé'}), 403
-        
-        # Get instance path
-        instance_path = os.path.join('projets', instance.parent_project, '.dev-instances', instance.slug)
-        
-        if not os.path.exists(instance_path):
-            return jsonify({'success': False, 'error': 'Dossier d\'instance non trouvé'}), 404
-        
-        # Stop container
-        result = subprocess.run(
-            ['docker-compose', 'down'],
-            cwd=instance_path,
-            capture_output=True,
-            text=True,
-            timeout=60
-        )
-        
-        if result.returncode == 0:
-            wp_logger.log_system_info(f"Instance {instance_name} stopped successfully")
-            return jsonify({'success': True, 'message': 'Instance arrêtée'})
-        else:
-            wp_logger.log_system_info(f"Failed to stop instance {instance_name}: {result.stderr}")
-            return jsonify({'success': False, 'error': result.stderr}), 500
-            
+        _, err = _get_owned_instance(instance_name)
+        if err:
+            return err
+        current_app.extensions['dev_instance_service'].stop_instance(instance_name)
+        wp_logger.log_system_info(f"Instance {instance_name} stopped successfully")
+        return jsonify({'success': True, 'message': 'Instance arrêtée'})
     except Exception as e:
-        from app.utils.logger import wp_logger
         wp_logger.log_system_info(f"Error stopping instance {instance_name}: {str(e)}")
-        import traceback
-        wp_logger.log_system_info(f"Traceback: {traceback.format_exc()}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

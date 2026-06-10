@@ -70,7 +70,7 @@ function safeInt(v) {
 }
 
 /** Whitelist a status enum before injecting into a CSS class. */
-const KNOWN_STATUSES = new Set(['running', 'success', 'failed', 'timeout']);
+const KNOWN_STATUSES = new Set(['running', 'success', 'failed', 'timeout', 'cancelled']);
 function safeStatus(s) {
     return KNOWN_STATUSES.has(s) ? s : 'failed';
 }
@@ -169,6 +169,12 @@ function renderDeployments() {
         const dot = status === 'running'
             ? '<span class="status-dot is-pulse"></span>'
             : '<span class="status-dot"></span>';
+        const cancelBtn = status === 'running'
+            ? `<button class="deploy-server-action-btn is-danger" data-action="cancel" data-deployment-id="${id}"
+                       title="${escapeHtml(t('cancel_deployment', 'Cancel deployment'))}">
+                   <span class="material-symbols-outlined">stop_circle</span>
+               </button>`
+            : '';
         return `
             <tr>
                 <td><strong>${escapeHtml(d.project_name)}</strong></td>
@@ -178,6 +184,7 @@ function renderDeployments() {
                 <td><span class="status-pill status-${status}">${dot}${escapeHtml(status)}</span></td>
                 <td><small>${escapeHtml(fmtDate(d.started_at))}</small></td>
                 <td class="text-end">
+                    ${cancelBtn}
                     <button class="deploy-server-action-btn" data-action="replay" data-deployment-id="${id}"
                             title="${escapeHtml(t('view_logs', 'View logs'))}">
                         <span class="material-symbols-outlined">article</span>
@@ -634,11 +641,34 @@ function onServersTbodyClick(event) {
     else if (action === 'delete') deleteServer(id);
 }
 
+async function cancelDeployment(deploymentId) {
+    const id = safeInt(deploymentId);
+    if (id === null) return;
+    if (!confirm(t('confirm_cancel_deployment', 'Cancel this running deployment?'))) return;
+    try {
+        const res = await fetch(`/api/deployments/${id}/cancel`, {
+            method: 'POST',
+            headers: headerJson(),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+            deployToast('success', t('deployment_cancelled', 'Cancellation requested'));
+        } else {
+            deployToast('error', data.error || t('cancel_failed', 'Cancel failed'));
+        }
+        loadDeployments();
+    } catch (e) {
+        deployToast('error', e.message);
+    }
+}
+
 function onDeploymentsTbodyClick(event) {
-    const btn = event.target.closest('button[data-action="replay"]');
+    const btn = event.target.closest('button[data-action]');
     if (!btn) return;
     const id = safeInt(btn.dataset.deploymentId);
-    if (id !== null) replayDeployment(id);
+    if (id === null) return;
+    if (btn.dataset.action === 'replay') replayDeployment(id);
+    else if (btn.dataset.action === 'cancel') cancelDeployment(id);
 }
 
 /* ───── reset modals on close ───── */

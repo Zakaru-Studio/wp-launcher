@@ -27,6 +27,17 @@ def _safe_ident(name):
         raise ValueError(f"Invalid identifier: {name!r}")
     return name
 
+
+def _strip_mysql_warnings(stderr):
+    """Retire les lignes '[Warning] ...' de stderr pour faire ressortir
+    la vraie erreur (sinon le message d'échec affiché s'arrêtait au
+    warning de mot de passe et masquait la cause réelle)."""
+    if not stderr:
+        return stderr
+    lines = [l for l in stderr.splitlines() if '[Warning]' not in l]
+    cleaned = '\n'.join(lines).strip()
+    return cleaned or stderr.strip()
+
 class DatabaseService:
     """Service pour la gestion des bases de données MySQL"""
     
@@ -923,24 +934,28 @@ class DatabaseService:
                 else:
                     raise Exception(f"Conteneur MySQL introuvable pour le projet {source_project}. Vérifiez que le projet est démarré.")
             
-            # Export avec fichier de config pour éviter les avertissements
+            # Fichier de config MySQL ([client] couvre mysqldump ET mysql) :
+            # évite de passer le mot de passe en argument, et donc le
+            # "[Warning] Using a password..." qui polluait stderr et
+            # masquait les vraies erreurs d'import.
             import tempfile
 
             with tempfile.NamedTemporaryFile(mode='w', suffix='.cnf', delete=False) as config_file:
-                config_file.write("[mysqldump]\n")
+                config_file.write("[client]\n")
                 config_file.write("user=root\n")
                 config_file.write("password=rootpassword\n")
                 config_path = config_file.name
 
+            container_cnf = '/tmp/.mysqldump_clone.cnf'
             try:
                 # Copier le fichier de config dans le conteneur
                 subprocess.run(
-                    ['docker', 'cp', config_path, f"{mysql_container}:/tmp/.mysqldump_clone.cnf"],
+                    ['docker', 'cp', config_path, f"{mysql_container}:{container_cnf}"],
                     check=True,
                     capture_output=True
                 )
 
-                export_cmd = ['docker', 'exec', mysql_container, 'mysqldump', '--defaults-file=/tmp/.mysqldump_clone.cnf', '--no-tablespaces', source_db_name]
+                export_cmd = ['docker', 'exec', mysql_container, 'mysqldump', f'--defaults-file={container_cnf}', '--no-tablespaces', source_db_name]
                 with open(export_file, 'w') as f:
                     result = subprocess.run(export_cmd, stdout=f, stderr=subprocess.PIPE, text=True)
                     if result.returncode != 0:
@@ -949,11 +964,15 @@ class DatabaseService:
                                                         capture_output=True, text=True)
                         if mysql_container not in check_container.stdout:
                             raise Exception(f"Conteneur MySQL introuvable: {mysql_container}. Conteneurs disponibles: {check_container.stdout.strip()}")
-                        raise Exception(f"Erreur mysqldump: {result.stderr}")
-            finally:
-                # Nettoyer le fichier temporaire
-                subprocess.run(['docker', 'exec', mysql_container, 'rm', '-f', '/tmp/.mysqldump_clone.cnf'],
+                        raise Exception(f"Erreur mysqldump: {_strip_mysql_warnings(result.stderr)}")
+            except Exception:
+                # Le fichier de config dans le conteneur est encore utile
+                # pour l'import/update ci-dessous ; on ne le nettoie ici
+                # qu'en cas d'échec de l'export.
+                subprocess.run(['docker', 'exec', mysql_container, 'rm', '-f', container_cnf],
                               capture_output=True)
+                raise
+            finally:
                 os.unlink(config_path)
             
             if socketio:
@@ -982,20 +1001,22 @@ class DatabaseService:
                     'message': 'Import des données...'
                 })
             
-            # 3. Import dans nouvelle DB
-            import_cmd = ['docker', 'exec', '-i', mysql_container, 'mysql', '-u', 'root', '-prootpassword', target_db_name]
+            # 3. Import dans nouvelle DB (defaults-file : stderr ne
+            # contient plus le warning de mot de passe, donc les vraies
+            # erreurs — "MySQL server has gone away", etc. — ressortent)
+            import_cmd = ['docker', 'exec', '-i', mysql_container, 'mysql', f'--defaults-file={container_cnf}', target_db_name]
             with open(export_file, 'r') as f:
                 result = subprocess.run(import_cmd, stdin=f, stderr=subprocess.PIPE, text=True, timeout=1800)
                 if result.returncode != 0:
-                    raise Exception(f"Erreur mysql import: {result.stderr}")
-            
+                    raise Exception(f"Erreur mysql import: {_strip_mysql_warnings(result.stderr)}")
+
             if socketio:
                 socketio.emit('db_clone_progress', {
                     'step': 4,
                     'total': 5,
                     'message': 'Mise à jour des URLs WordPress...'
                 })
-            
+
             # 4. Mettre à jour les URLs WordPress (pas de shell=True)
             # target_port est validé en int pour éviter l'injection SQL via une valeur non numérique
             try:
@@ -1005,33 +1026,67 @@ class DatabaseService:
             new_url = f"http://{DockerConfig.LOCAL_IP}:{safe_port}"
             # Échapper les apostrophes dans l'URL (ceinture et bretelles, new_url est déjà contrôlé)
             escaped_url = new_url.replace("'", "''")
-            update_sql = (
-                f"UPDATE wp_options SET option_value = '{escaped_url}' "
-                f"WHERE option_name IN ('siteurl', 'home');"
-            )
-            subprocess.run(
+
+            # La table d'options dépend du préfixe du projet ('wp_options'
+            # codé en dur cassait le clonage des sites à préfixe custom).
+            list_tables = subprocess.run(
                 [
                     'docker', 'exec', mysql_container,
-                    'mysql', '-u', 'root', '-prootpassword', target_db_name,
-                    '--execute', update_sql
+                    'mysql', f'--defaults-file={container_cnf}', '-N',
+                    '--execute',
+                    f"SELECT table_name FROM information_schema.tables "
+                    f"WHERE table_schema='{target_db_name}' AND table_name LIKE '%options';"
                 ],
-                check=True, capture_output=True, timeout=60
+                capture_output=True, text=True, timeout=60
             )
-            
+            options_tables = [
+                t.strip() for t in list_tables.stdout.splitlines()
+                if t.strip() and re.fullmatch(r'[A-Za-z0-9_]+options', t.strip())
+            ]
+            if not options_tables:
+                raise Exception(
+                    f"Aucune table *options trouvée dans {target_db_name} — "
+                    "le clone semble incomplet."
+                )
+            for table in options_tables:
+                update_sql = (
+                    f"UPDATE `{table}` SET option_value = '{escaped_url}' "
+                    f"WHERE option_name IN ('siteurl', 'home');"
+                )
+                subprocess.run(
+                    [
+                        'docker', 'exec', mysql_container,
+                        'mysql', f'--defaults-file={container_cnf}', target_db_name,
+                        '--execute', update_sql
+                    ],
+                    check=True, capture_output=True, timeout=60
+                )
+
             if socketio:
                 socketio.emit('db_clone_progress', {
                     'step': 5,
                     'total': 5,
                     'message': 'Nettoyage...'
                 })
-            
-            # 5. Nettoyer fichier temporaire
+
+            # 5. Nettoyer fichiers temporaires (hôte + conteneur)
             if os.path.exists(export_file):
                 os.remove(export_file)
-            
+            subprocess.run(['docker', 'exec', mysql_container, 'rm', '-f', container_cnf],
+                          capture_output=True)
+
             return {'success': True}
             
         except Exception as e:
+            # Ne pas laisser traîner le fichier d'identifiants root dans
+            # le conteneur si l'import ou l'update a échoué.
+            try:
+                subprocess.run(
+                    ['docker', 'exec', mysql_container, 'rm', '-f', '/tmp/.mysqldump_clone.cnf'],
+                    capture_output=True, timeout=15
+                )
+            except Exception:
+                pass
             if socketio:
                 socketio.emit('db_clone_progress', {
                     'error': True,

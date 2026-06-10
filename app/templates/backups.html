@@ -116,16 +116,22 @@
                         <div class="storage-breakdown-row">
                             <span class="storage-breakdown-label">
                                 <span class="storage-breakdown-dot storage-breakdown-dot-db"></span>
-                                {{ _('Database') }}
+                                {{ _('MySQL') }}
                             </span>
                             <span class="storage-breakdown-value" id="storage-db-value">—</span>
                         </div>
                         <div class="storage-breakdown-row">
                             <span class="storage-breakdown-label">
                                 <span class="storage-breakdown-dot storage-breakdown-dot-files"></span>
-                                {{ _('Files') }}
+                                {{ _('MongoDB') }}
                             </span>
                             <span class="storage-breakdown-value" id="storage-files-value">—</span>
+                        </div>
+                        <div class="storage-breakdown-row">
+                            <span class="storage-breakdown-label">
+                                {{ _('Free disk space') }}
+                            </span>
+                            <span class="storage-breakdown-value" id="storage-free-value">—</span>
                         </div>
                     </div>
                 </div>
@@ -137,11 +143,8 @@
                     <h3 class="retention-panel-title">{{ _('Retention Policy') }}</h3>
                 </div>
                 <p class="retention-panel-text">
-                    {{ _('Daily backups are retained for 30 days. Weekly snapshots are kept for 12 months in cold storage.') }}
+                    {{ _('Automatic backups run every 4 hours. Files are retained for 7 days, with at most 6 backups kept per project.') }}
                 </p>
-                <a class="retention-panel-link" href="#" onclick="return false;">
-                    {{ _('Configure Policies') }} <i class="fas fa-arrow-right"></i>
-                </a>
             </section>
         </aside>
     </div>

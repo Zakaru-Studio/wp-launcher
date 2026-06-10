@@ -54,10 +54,12 @@ init_backup_system() {
 detect_mysql_containers() {
     log_message "INFO" "🔍 Détection des conteneurs MySQL actifs..."
     
-    # Rechercher tous les conteneurs MySQL actifs
+    # Rechercher tous les conteneurs MySQL actifs.
+    # On retire le suffixe _mysql_N au lieu de couper au premier '_',
+    # sinon les projets dont le nom contient un underscore sont tronqués.
     docker ps --format "{{.Names}}" | grep "_mysql_" | while read container_name; do
         if [ ! -z "$container_name" ]; then
-            project_name=$(echo "$container_name" | cut -d'_' -f1)
+            project_name=$(echo "$container_name" | sed 's/_mysql_[0-9]*$//')
             log_message "INFO" "  └─ Trouvé: $project_name (MySQL)" >&2
             echo "$project_name"
         fi
@@ -71,7 +73,7 @@ detect_mongodb_containers() {
     # Rechercher tous les conteneurs MongoDB actifs
     docker ps --format "{{.Names}}" | grep "_mongodb_" | while read container_name; do
         if [ ! -z "$container_name" ]; then
-            project_name=$(echo "$container_name" | cut -d'_' -f1)
+            project_name=$(echo "$container_name" | sed 's/_mongodb_[0-9]*$//')
             log_message "INFO" "  └─ Trouvé: $project_name (MongoDB)" >&2
             echo "$project_name"
         fi
@@ -87,29 +89,33 @@ backup_mysql_project() {
     
     log_message "INFO" "🗄️ Backup MySQL pour $project_name"
     
-    # Vérifier que le conteneur existe et est actif
-    if ! docker ps --format "{{.Names}}" | grep -q "$container_name"; then
+    # Vérifier que le conteneur existe et est actif (match exact,
+    # pas de sous-chaîne : "foo" ne doit pas matcher "foobar_mysql_1")
+    if ! docker ps --format "{{.Names}}" | grep -qx "$container_name"; then
         log_message "ERROR" "❌ Conteneur $container_name non trouvé ou inactif"
         return 1
     fi
-    
-    # Détecter le type de base de données
+
+    # Détecter le type de base de données.
+    # Le mot de passe root est lu dans l'env du conteneur (MYSQL_ROOT_PASSWORD)
+    # avec repli sur l'ancien mot de passe codé en dur, pour ne pas casser
+    # les projets dont le compose définit un autre mot de passe.
     local database_name="wordpress"
-    if docker exec "$container_name" mysql -u root -prootpassword -e "SHOW DATABASES;" 2>/dev/null | grep -q "$project_name"; then
+    if docker exec "$container_name" sh -c 'exec mysql -uroot -p"${MYSQL_ROOT_PASSWORD:-rootpassword}" -e "SHOW DATABASES;"' 2>/dev/null | grep -qx "$project_name"; then
         database_name="$project_name"
     fi
-    
+
     log_message "INFO" "  └─ Base de données: $database_name"
-    
+
     # Effectuer le backup
-    if docker exec "$container_name" mysqldump \
-        -u root -prootpassword \
+    if docker exec "$container_name" sh -c 'exec mysqldump \
+        -uroot -p"${MYSQL_ROOT_PASSWORD:-rootpassword}" \
         --single-transaction \
         --routines \
         --triggers \
         --default-character-set=utf8mb4 \
         --add-drop-database \
-        --databases "$database_name" > "$backup_file" 2>/dev/null; then
+        --databases "$1"' _ "$database_name" > "$backup_file" 2>/dev/null; then
         
         # Vérifier la taille du backup
         local file_size=$(stat -c%s "$backup_file" 2>/dev/null || echo "0")
@@ -147,21 +153,22 @@ backup_mongodb_project() {
     log_message "INFO" "🍃 Backup MongoDB pour $project_name"
     
     # Vérifier que le conteneur existe et est actif
-    if ! docker ps --format "{{.Names}}" | grep -q "$container_name"; then
+    if ! docker ps --format "{{.Names}}" | grep -qx "$container_name"; then
         log_message "ERROR" "❌ Conteneur $container_name non trouvé ou inactif"
         return 1
     fi
-    
+
     # Créer le dossier de backup
     mkdir -p "$backup_dir"
-    
-    # Effectuer le backup avec mongodump
-    if docker exec "$container_name" mongodump \
-        --username admin \
-        --password adminpassword \
+
+    # Effectuer le backup avec mongodump — identifiants lus dans l'env du
+    # conteneur, avec repli sur les anciennes valeurs codées en dur.
+    if docker exec "$container_name" sh -c 'exec mongodump \
+        --username "${MONGO_INITDB_ROOT_USERNAME:-admin}" \
+        --password "${MONGO_INITDB_ROOT_PASSWORD:-adminpassword}" \
         --authenticationDatabase admin \
-        --db "$project_name" \
-        --out /tmp/backup &>/dev/null; then
+        --db "$1" \
+        --out /tmp/backup' _ "$project_name" &>/dev/null; then
         
         # Copier le backup depuis le conteneur
         docker cp "$container_name:/tmp/backup/$project_name" "$backup_dir/"
@@ -218,7 +225,11 @@ cleanup_old_backups() {
             ls -t "$BACKUP_DIR/mongodb/${project}_"*.tar.gz 2>/dev/null | tail -n +$((MAX_BACKUPS_PER_PROJECT + 1)) | xargs -r rm -f
         done
     fi
-    
+
+    # Purger les rapports texte : sans ça ils s'accumulent indéfiniment
+    # à la racine du dossier de backups (6 par jour).
+    find "$BACKUP_DIR" -maxdepth 1 -name "backup_report_*.txt" -mtime +$RETENTION_DAYS -delete 2>/dev/null
+
     log_message "INFO" "✅ Nettoyage terminé"
 }
 

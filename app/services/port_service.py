@@ -23,15 +23,22 @@ class PortService:
         
         return find_free_port_for_project(start_port)
     
-    def allocate_ports_for_project(self, enable_nextjs=False):
-        """Alloue tous les ports nécessaires pour un projet"""
-        wp_logger.log_system_info(f"Allocation de ports pour nouveau projet", 
+    def allocate_ports_for_project(self, enable_nextjs=False, extra_used_ports=None):
+        """Alloue tous les ports nécessaires pour un projet
+
+        extra_used_ports : ports supplémentaires à considérer comme
+        occupés (ex: ports d'instances dev arrêtées, invisibles pour
+        get_used_ports() qui ne voit que les conteneurs actifs).
+        """
+        wp_logger.log_system_info(f"Allocation de ports pour nouveau projet",
                                  enable_nextjs=enable_nextjs,
                                  port_range=f"{self.port_range_start}-{self.port_range_end}")
-        
+
         ports = {}
-        used_ports = get_used_ports()
-        
+        used_ports = set(get_used_ports())
+        if extra_used_ports:
+            used_ports.update(int(p) for p in extra_used_ports)
+
         # Allocation séquentielle pour éviter les conflits
         current_port = self.port_range_start
         

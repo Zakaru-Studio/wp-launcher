@@ -10,7 +10,12 @@ RUN apt-get update && apt-get install -y \
     sudo \
     acl \
     attr \
+    libxml2-dev \
     && rm -rf /var/lib/apt/lists/*
+
+# Extensions PHP additionnelles requises par certains plugins WP
+# - soap : requis par Chronopost pour WooCommerce et autres plugins de transporteurs
+RUN docker-php-ext-install -j"$(nproc)" soap
 
 # Installer WP-CLI
 RUN curl -L https://github.com/wp-cli/wp-cli/releases/download/v2.8.1/wp-cli-2.8.1.phar -o /usr/local/bin/wp \

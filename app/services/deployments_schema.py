@@ -15,7 +15,7 @@ import sqlite3
 from typing import Optional
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def connect(db_path: str) -> sqlite3.Connection:
@@ -69,7 +69,7 @@ def _create_tables(conn: sqlite3.Connection) -> None:
             branch         TEXT NOT NULL,
             commit_sha     TEXT,
             status         TEXT NOT NULL
-                           CHECK(status IN ('running','success','failed','timeout')),
+                           CHECK(status IN ('running','success','failed','timeout','cancelled')),
             triggered_by   INTEGER,
             started_at     TEXT NOT NULL,
             finished_at    TEXT,
@@ -120,6 +120,12 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if current < 1 and _needs_deploy_paths_fk_rebuild(conn):
         _rebuild_project_server_deploy_paths(conn)
 
+    # --- v2 -----------------------------------------------------------
+    # The status CHECK gains 'cancelled' (deployment cancel feature).
+    # SQLite can't ALTER a CHECK constraint; rebuild the table.
+    if current < 2 and _needs_cancelled_status_rebuild(conn):
+        _rebuild_deployments_with_cancelled(conn)
+
     conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
 
@@ -136,6 +142,58 @@ def _needs_deploy_paths_fk_rebuild(conn: sqlite3.Connection) -> bool:
         ):
             return False
     return True
+
+
+def _needs_cancelled_status_rebuild(conn: sqlite3.Connection) -> bool:
+    """True if the deployments CHECK doesn't yet allow 'cancelled'."""
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='deployments'"
+    ).fetchone()
+    if not row or not row["sql"]:
+        return False
+    return "'cancelled'" not in row["sql"]
+
+
+def _rebuild_deployments_with_cancelled(conn: sqlite3.Connection) -> None:
+    """Rebuild the deployments table so the status CHECK accepts
+    'cancelled'. Same INSERT/DROP/RENAME dance as the deploy-paths
+    rebuild; the index is recreated afterwards."""
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS _new_deployments (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_name   TEXT NOT NULL,
+                server_id      INTEGER NOT NULL,
+                branch         TEXT NOT NULL,
+                commit_sha     TEXT,
+                status         TEXT NOT NULL
+                               CHECK(status IN ('running','success','failed','timeout','cancelled')),
+                triggered_by   INTEGER,
+                started_at     TEXT NOT NULL,
+                finished_at    TEXT,
+                log_file       TEXT,
+                FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            "INSERT INTO _new_deployments "
+            "(id, project_name, server_id, branch, commit_sha, status, "
+            " triggered_by, started_at, finished_at, log_file) "
+            "SELECT id, project_name, server_id, branch, commit_sha, status, "
+            "       triggered_by, started_at, finished_at, log_file "
+            "FROM deployments"
+        )
+        conn.execute("DROP TABLE deployments")
+        conn.execute("ALTER TABLE _new_deployments RENAME TO deployments")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_deploy_project "
+            "ON deployments(project_name, started_at DESC)"
+        )
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON")
 
 
 def _rebuild_project_server_deploy_paths(conn: sqlite3.Connection) -> None:

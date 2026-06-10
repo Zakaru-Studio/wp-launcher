@@ -46,6 +46,10 @@ _BRANCH_RE = re.compile(r"^[A-Za-z0-9._/-]{1,100}$")
 _MAX_LOG_FILES = 500
 
 
+class DeploymentCancelled(Exception):
+    """Raised inside the worker thread when cancel() was requested."""
+
+
 class DeploymentService:
     """Runs and tracks git-based deployments over SSH."""
 
@@ -60,6 +64,10 @@ class DeploymentService:
         self.log_dir = os.path.abspath(log_dir)
         self.server_service = server_service
         self.socketio = socketio
+        # Cancellation: one Event per running deployment, set by cancel().
+        # The worker thread polls it in _stream_channel.
+        self._cancel_events: dict[int, threading.Event] = {}
+        self._cancel_lock = threading.Lock()
         os.makedirs(self.log_dir, exist_ok=True)
         deployments_schema.init(self.db_path)
         self._reap_stale_running_rows()
@@ -241,6 +249,13 @@ class DeploymentService:
 
     # ─── deployment history ──────────────────────────────────────────
 
+    @staticmethod
+    def _public_row(row) -> dict:
+        """Row → dict, minus internals (absolute log path on the host)."""
+        d = dict(row)
+        d.pop("log_file", None)
+        return d
+
     def list_deployments(
         self,
         *,
@@ -262,7 +277,7 @@ class DeploymentService:
         with self._connect() as conn:
             rows = conn.execute(q, args).fetchall()
 
-        return [dict(r) for r in rows]
+        return [self._public_row(r) for r in rows]
 
     def get_deployment(self, deployment_id: int) -> Optional[dict]:
         with self._connect() as conn:
@@ -272,13 +287,17 @@ class DeploymentService:
                 "WHERE d.id = ?",
                 (deployment_id,),
             ).fetchone()
-        return dict(row) if row else None
+        return self._public_row(row) if row else None
 
     def read_log(self, deployment_id: int) -> Optional[str]:
-        dep = self.get_deployment(deployment_id)
-        if not dep or not dep.get("log_file"):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT log_file FROM deployments WHERE id = ?",
+                (deployment_id,),
+            ).fetchone()
+        if not row or not row["log_file"]:
             return None
-        path = dep["log_file"]
+        path = row["log_file"]
         if not os.path.isfile(path):
             return None
         try:
@@ -313,12 +332,28 @@ class DeploymentService:
                 "Run Test connection and save the fingerprint first."
             )
 
-        # Single transaction: insert row, capture the rowid, and patch
-        # the log_file path using the known id — without ever leaving
-        # the row in the `log_file=''` state visible to readers.
+        # Single transaction: refuse if a deploy is already running for
+        # this (project, server) couple, then insert the row, capture
+        # the rowid, and patch the log_file path using the known id —
+        # without ever leaving the row in the `log_file=''` state
+        # visible to readers. The running-check lives inside the same
+        # transaction so two simultaneous POSTs can't both pass it.
         now = self._now()
         with self._connect() as conn:
             cur = conn.cursor()
+            cur.execute("BEGIN IMMEDIATE")
+            running = cur.execute(
+                "SELECT id FROM deployments "
+                "WHERE project_name = ? AND server_id = ? AND status = 'running' "
+                "LIMIT 1",
+                (project_name, int(server_id)),
+            ).fetchone()
+            if running:
+                conn.rollback()
+                raise RuntimeError(
+                    f"Deployment #{running['id']} is already running for "
+                    f"this project on this server."
+                )
             cur.execute(
                 """
                 INSERT INTO deployments
@@ -336,6 +371,9 @@ class DeploymentService:
             )
             conn.commit()
 
+        with self._cancel_lock:
+            self._cancel_events[deployment_id] = threading.Event()
+
         thread = threading.Thread(
             target=self._execute_wrapped,
             args=(app, deployment_id, server, project_name, branch, log_path),
@@ -344,6 +382,28 @@ class DeploymentService:
         )
         thread.start()
         return deployment_id
+
+    def cancel(self, deployment_id: int) -> bool:
+        """Request cancellation of a running deployment.
+
+        Returns True if the worker was signalled; False if the
+        deployment is unknown or no longer running (already finished,
+        or owned by a previous process that crashed).
+        """
+        with self._cancel_lock:
+            event = self._cancel_events.get(deployment_id)
+        if event is None:
+            return False
+        event.set()
+        return True
+
+    def _pop_cancel_event(self, deployment_id: int) -> None:
+        with self._cancel_lock:
+            self._cancel_events.pop(deployment_id, None)
+
+    def _cancel_event_for(self, deployment_id: int) -> Optional[threading.Event]:
+        with self._cancel_lock:
+            return self._cancel_events.get(deployment_id)
 
     @staticmethod
     def _validate_branch(branch: str) -> None:
@@ -365,13 +425,16 @@ class DeploymentService:
 
     def _execute_wrapped(self, app, deployment_id, server, project_name, branch, log_path):
         """Thread target: establishes app context then delegates."""
-        with app.app_context():
-            try:
-                self._execute(deployment_id, server, project_name, branch, log_path)
-            except Exception as exc:  # noqa: BLE001
-                log.exception("Deployment %s crashed", deployment_id)
-                self._emit(deployment_id, log_path, f"[deployment crashed: {exc}]", stream="stderr")
-                self._finalize(deployment_id, status="failed", commit_sha=None)
+        try:
+            with app.app_context():
+                try:
+                    self._execute(deployment_id, server, project_name, branch, log_path)
+                except Exception as exc:  # noqa: BLE001
+                    log.exception("Deployment %s crashed", deployment_id)
+                    self._emit(deployment_id, log_path, f"[deployment crashed: {exc}]", stream="stderr")
+                    self._finalize(deployment_id, status="failed", commit_sha=None)
+        finally:
+            self._pop_cancel_event(deployment_id)
 
     def _execute(self, deployment_id, server, project_name, branch, log_path):
         start = time.monotonic()
@@ -442,7 +505,10 @@ class DeploymentService:
                         del tail_stdout[0]
                 self._emit(deployment_id, log_path, line, stream=stream)
 
-            self._stream_channel(channel, on_line, start, deployment_id)
+            self._stream_channel(
+                channel, on_line, start, deployment_id,
+                cancel_event=self._cancel_event_for(deployment_id),
+            )
 
             exit_code = channel.recv_exit_status()
             if exit_code == 0:
@@ -462,6 +528,9 @@ class DeploymentService:
                     stream="stderr",
                 )
                 status = "failed"
+        except DeploymentCancelled:
+            self._emit(deployment_id, log_path, "[deployment cancelled by user]", stream="stderr")
+            status = "cancelled"
         except TimeoutError:
             self._emit(deployment_id, log_path, "[deployment timed out]", stream="stderr")
             status = "timeout"
@@ -489,12 +558,27 @@ class DeploymentService:
 
         self._finalize(deployment_id, status=status, commit_sha=commit_sha)
 
-    def _stream_channel(self, channel, on_line: Callable[[str, str], None], start_time: float, deployment_id: int):
-        """Stream stdout/stderr lines until the channel closes or we hit the global timeout."""
+    def _stream_channel(
+        self,
+        channel,
+        on_line: Callable[[str, str], None],
+        start_time: float,
+        deployment_id: int,
+        cancel_event: Optional[threading.Event] = None,
+    ):
+        """Stream stdout/stderr lines until the channel closes, the global
+        timeout fires, or a cancellation is requested."""
         channel.settimeout(1.0)
         stdout_buf = ""
         stderr_buf = ""
         while True:
+            if cancel_event is not None and cancel_event.is_set():
+                try:
+                    channel.close()
+                except Exception:  # noqa: BLE001
+                    pass
+                raise DeploymentCancelled()
+
             if time.monotonic() - start_time > _DEPLOY_TIMEOUT_SECONDS:
                 try:
                     channel.close()

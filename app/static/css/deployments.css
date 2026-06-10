@@ -63,6 +63,7 @@
 .status-pill.status-success { background: var(--al-secondary-container); color: var(--al-on-secondary-container); }
 .status-pill.status-failed  { background: var(--al-error-container); color: var(--al-on-error-container); }
 .status-pill.status-timeout { background: var(--al-error-container); color: var(--al-on-error-container); }
+.status-pill.status-cancelled { background: var(--al-surface-container-high); color: var(--al-on-surface-variant); }
 
 .status-dot {
     width: 6px;

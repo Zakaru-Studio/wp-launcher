@@ -7,11 +7,18 @@ from datetime import datetime
 class DevInstance:
     """Development instance model"""
     
-    def __init__(self, id=None, name=None, slug=None, parent_project=None, owner_username=None, 
+    def __init__(self, id=None, name=None, slug=None, parent_project=None, owner_username=None,
                  port=None, db_name=None, created_at=None, status='stopped', ports=None):
+        if not slug and owner_username:
+            # Le dossier de l'instance est créé avec le username NETTOYÉ ;
+            # le fallback doit appliquer le même nettoyage, sinon les
+            # usernames avec majuscules/points pointent vers un dossier
+            # qui n'existe pas.
+            from app.utils.slug_utils import clean_username_for_slug
+            slug = clean_username_for_slug(owner_username)
         self.id = id
-        self.name = name                    # ex: "test-dev-pancin" (nom complet pour Docker/DB)
-        self.slug = slug or owner_username  # ex: "pancin" (nom simple pour dossier)
+        self.name = name                    # ex: "test_dev_pancin" (nom complet pour Docker/DB)
+        self.slug = slug                    # ex: "pancin" (nom simple pour dossier)
         self.parent_project = parent_project # ex: "test"
         self.owner_username = owner_username
         self.port = port  # Port principal WordPress

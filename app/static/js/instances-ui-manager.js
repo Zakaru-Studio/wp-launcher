@@ -355,7 +355,7 @@ window.updateCommandsMenu = function(projectCard, targetName, isDevInstance) {
 window.deleteDevInstance = async function(instanceName) {
     console.log('deleteDevInstance called with:', instanceName);
     
-    if (!confirm(`Supprimer l'instance "${instanceName}" ?\n\nCette action supprimera uniquement le conteneur Docker.\nLes fichiers et la base de données seront conservés.`)) {
+    if (!confirm(`Supprimer l'instance "${instanceName}" ?\n\nCette action supprime DÉFINITIVEMENT :\n- le conteneur Docker\n- les fichiers de l'instance (thèmes/plugins copiés)\n- la base de données clonée\n\nLes uploads partagés avec le projet parent ne sont pas touchés.`)) {
         return;
     }
     
