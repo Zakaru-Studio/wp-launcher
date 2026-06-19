@@ -23,7 +23,7 @@ requests==2.33.1  # GitHub OAuth service, HTTP calls
 # Deployments: SSH client + at-rest encryption for stored private keys
 # paramiko 4.x drops DSA (DSSKey) support — handled in app/services/ssh_service.py
 paramiko==4.0.0
-cryptography==46.0.7
+cryptography==48.0.1
 
 # WSGI / production
 gunicorn==25.3.0
