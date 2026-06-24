@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-06-24
+
+### Added
+- UI: contextual menus for stopped sites, a subtler notification design,
+  and improved dev-instance UX
+
+### Fixed
+- Sites stuck unreachable ("Connection reset") despite the container being
+  `Up`: `init-permissions.sh` ran a fork-per-file `chmod`/`setfacl` over the
+  whole `wp-content/uploads` tree and blocked Apache from starting. It now
+  runs in the background (Apache starts immediately), batches `chmod` with
+  `-exec … +`, and performs the heavy recursive sweep only once (sentinel
+  file `wp-content/.wp-launcher-perms-done`), re-applying only lightweight
+  permissions + default ACLs on later boots
+- Port allocation: live socket check during allocation and a broader Docker
+  binding regex, avoiding ports wrongly reported as free
+
 ## [1.2.0] - 2026-06-10
 
 ### Added
