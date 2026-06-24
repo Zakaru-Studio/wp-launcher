@@ -23,10 +23,14 @@ fi
 
 echo "🔧 Initialisation des permissions WordPress..."
 
-# Exécuter le script d'initialisation des permissions s'il existe
+# IMPORTANT : le script de permissions est lancé en ARRIÈRE-PLAN.
+# Sur des sites avec beaucoup de fichiers (uploads volumineux), il pouvait mettre
+# des heures et BLOQUAIT le démarrage d'Apache → site injoignable ("Connection reset").
+# En l'exécutant en tâche de fond, Apache démarre immédiatement et les permissions
+# convergent en parallèle.
 if [ -f /usr/local/bin/init-permissions.sh ]; then
     chmod +x /usr/local/bin/init-permissions.sh
-    /usr/local/bin/init-permissions.sh
+    /usr/local/bin/init-permissions.sh &
 else
     echo "⚠️  Script de permissions non trouvé"
 fi
