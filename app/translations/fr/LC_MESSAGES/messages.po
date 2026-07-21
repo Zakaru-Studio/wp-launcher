@@ -343,3 +343,182 @@ msgstr "Aucune notification"
 
 msgid "View logs"
 msgstr "Voir les logs"
+
+# — Deployment targets (one-click redeploy feature) —
+msgid "Deployment targets"
+msgstr "Cibles de déploiement"
+
+msgid "Saved configurations you can re-deploy in one click."
+msgstr "Configurations enregistrées, redéployables en un clic."
+
+msgid "New target"
+msgstr "Nouvelle cible"
+
+msgid "Edit target"
+msgstr "Modifier la cible"
+
+msgid "Target name"
+msgstr "Nom de la cible"
+
+msgid "e.g. Numerik → staging"
+msgstr "ex. Numerik → staging"
+
+msgid "Leave empty to use the project default branch."
+msgstr "Laisser vide pour utiliser la branche par défaut du projet."
+
+msgid "Redeploy"
+msgstr "Redéployer"
+
+msgid "History"
+msgstr "Historique"
+
+msgid "Never deployed"
+msgstr "Jamais déployé"
+
+msgid "Failed to load targets."
+msgstr "Échec du chargement des cibles."
+
+msgid "No runs yet for this target."
+msgstr "Aucun déploiement pour cette cible."
+
+msgid "No saved target yet. Click \"New target\" to create one."
+msgstr "Aucune cible enregistrée. Cliquez sur « Nouvelle cible » pour en créer une."
+
+msgid "Redeploy {project} on {server} ({branch})?"
+msgstr "Redéployer {project} sur {server} ({branch}) ?"
+
+msgid "Delete this deployment target? Its run history is kept."
+msgstr "Supprimer cette cible de déploiement ? Son historique est conservé."
+
+msgid "Target created"
+msgstr "Cible créée"
+
+msgid "Target updated"
+msgstr "Cible mise à jour"
+
+msgid "Target deleted"
+msgstr "Cible supprimée"
+
+msgid "A target name is required."
+msgstr "Un nom de cible est requis."
+
+msgid "No server registered yet. Click \"Add server\"."
+msgstr "Aucun serveur enregistré. Cliquez sur « Ajouter un serveur »."
+
+msgid "See more"
+msgstr "Voir plus"
+
+msgid "See less"
+msgstr "Voir moins"
+
+msgid "environment"
+msgstr "environnement"
+
+msgid "environments"
+msgstr "environnements"
+
+# — Deployment projects (folders) + connections —
+msgid "Deployment projects"
+msgstr "Projets de déploiement"
+
+msgid "One folder per project; add staging and production connections inside."
+msgstr "Un dossier par projet ; ajoutez-y les connexions staging et production."
+
+msgid "Create project"
+msgstr "Créer un projet"
+
+msgid "Create"
+msgstr "Créer"
+
+msgid "Pick one of your launcher projects to set up for deployment."
+msgstr "Choisissez un de vos projets launcher à configurer pour le déploiement."
+
+msgid "Add connection"
+msgstr "Ajouter une connexion"
+
+msgid "Edit connection"
+msgstr "Modifier la connexion"
+
+msgid "Connection name"
+msgstr "Nom de la connexion"
+
+msgid "Back"
+msgstr "Retour"
+
+msgid "connection"
+msgstr "connexion"
+
+msgid "connections"
+msgstr "connexions"
+
+msgid "no connection"
+msgstr "aucune connexion"
+
+msgid "Connection created"
+msgstr "Connexion créée"
+
+msgid "Connection updated"
+msgstr "Connexion mise à jour"
+
+msgid "Connection deleted"
+msgstr "Connexion supprimée"
+
+msgid "Project created"
+msgstr "Projet créé"
+
+msgid "Project deleted"
+msgstr "Projet supprimé"
+
+msgid "All your projects are already created"
+msgstr "Tous vos projets sont déjà créés"
+
+msgid "No project yet. Click 'Create project' to add one."
+msgstr "Aucun projet. Cliquez sur « Créer un projet » pour en ajouter un."
+
+msgid "No connection yet. Click 'Add connection' to create staging or production."
+msgstr "Aucune connexion. Cliquez sur « Ajouter une connexion » pour créer un staging ou une production."
+
+msgid "Delete this project and all its connections? Run history is kept."
+msgstr "Supprimer ce projet et toutes ses connexions ? L'historique des runs est conservé."
+
+msgid "Recent activity"
+msgstr "Activité récente"
+
+msgid "Configure"
+msgstr "Paramétrer"
+
+msgid "No {env} connection yet."
+msgstr "Aucune connexion {env} pour l'instant."
+
+msgid "Deployment completed successfully."
+msgstr "Déploiement réussi."
+
+msgid "An error occurred during deployment."
+msgstr "Une erreur s'est produite pendant le déploiement."
+
+msgid "Deployment was cancelled."
+msgstr "Déploiement annulé."
+
+msgid "New server"
+msgstr "Nouveau serveur"
+
+msgid "Create server"
+msgstr "Créer le serveur"
+
+msgid "Create a server to deploy to, then it will be selected for this connection."
+msgstr "Créez un serveur cible ; il sera ensuite sélectionné pour cette connexion."
+
+msgid "Manage servers"
+msgstr "Gérer les serveurs"
+
+msgid "Registered servers"
+msgstr "Serveurs enregistrés"
+
+msgid "Base path"
+msgstr "Chemin de base"
+
+msgid "Register, edit and test the remote SSH targets your projects deploy to."
+msgstr "Enregistrez, modifiez et testez les cibles SSH distantes sur lesquelles vos projets se déploient."
+
+msgid "Each server stores its SSH credentials, pinned host fingerprint and base deploy path."
+msgstr "Chaque serveur stocke ses identifiants SSH, l'empreinte d'hôte épinglée et le chemin de déploiement de base."

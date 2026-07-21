@@ -529,7 +529,7 @@ if (defined('WP_CLI') && WP_CLI) {
 
 // Configuration des chemins - Accès local uniquement
 define('WP_CONTENT_DIR', ABSPATH . 'wp-content');
-define('WP_CONTENT_URL', 'http://{local_ip}:PROJECT_PORT/wp-content');
+define('WP_CONTENT_URL', WP_HOME . '/wp-content');
 
 // Chargement des réglages WordPress
 require_once ABSPATH . 'wp-settings.php';

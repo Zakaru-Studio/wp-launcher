@@ -291,7 +291,7 @@ def _create_wordpress_project(project_name, editable_path, container_path, enabl
     else:
         wp_needs_install = False
     
-    if not enable_nextjs:
+    if enable_nextjs:
             # Créer les fichiers de base WordPress (.htaccess et wp-config.php)
             if not create_wordpress_base_files(editable_path):
                 return jsonify({'success': False, 'message': 'Erreur lors de la création des fichiers de base WordPress'})

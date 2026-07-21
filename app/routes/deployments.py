@@ -9,7 +9,17 @@ Routes:
   DELETE /api/servers/<id>                           (admin)
   POST   /api/servers/test                           (admin)
 
-  GET    /api/deployments?project=...                (login)
+  GET    /api/deployment-projects                    (login)
+  POST   /api/deployment-projects                    (login + can_user_deploy)
+  DELETE /api/deployment-projects/<name>             (login + can_user_deploy)
+
+  GET    /api/deployment-targets[?project=]          (login)
+  POST   /api/deployment-targets                     (login + can_user_deploy)
+  PATCH  /api/deployment-targets/<id>                (login + can_user_deploy)
+  DELETE /api/deployment-targets/<id>                (login + can_user_deploy)
+  POST   /api/deployment-targets/<id>/deploy         (login + can_user_deploy)
+
+  GET    /api/deployments?project=&server_id=&branch= (login)
   GET    /api/deployments/<id>                       (login + owner/admin)
   GET    /api/deployments/<id>/log                   (login + owner/admin)
   POST   /api/deployments/run                        (login + can_user_deploy)
@@ -158,6 +168,17 @@ def deployments_page():
     at the API layer.
     """
     return render_template("deployments.html")
+
+
+@deployments_bp.route("/deployments/servers")
+@admin_required
+def servers_page():
+    """Dedicated server management page (list / create / edit / delete).
+
+    Server CRUD is admin-only, so — unlike the deployments page — this
+    view is gated at the page level, not just the API.
+    """
+    return render_template("deployment_servers.html")
 
 
 # ─── servers CRUD ────────────────────────────────────────────────────
@@ -433,6 +454,270 @@ def api_set_deploy_path(project_name: str, server_id: int):
     )
 
 
+# ─── deployment projects (folders) ──────────────────────────────────
+
+
+CONTAINERS_FOLDER = os.environ.get("WP_CONTAINERS_FOLDER", "containers")
+
+
+def _read_project_port(project_name: str) -> Optional[int]:
+    """Read the WordPress port from ``containers/<name>/.port`` without
+    touching Docker or any service. Returns None if unavailable."""
+    path = os.path.join(CONTAINERS_FOLDER, project_name, ".port")
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            return int(fh.read().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def _project_favicon_urls(project_name: str, dep_svc, server_svc) -> list[str]:
+    """Best-effort favicon candidates for a project's card, tried in
+    order by the frontend (which falls back to a folder icon).
+
+    1. the local dev site (``http://<LOCAL_IP>:<port>/favicon.ico``)
+    2. each connection's deploy host over https (usually the live domain)
+    """
+    urls: list[str] = []
+    try:
+        from app.config.docker_config import DockerConfig
+        local_ip = DockerConfig.LOCAL_IP
+    except Exception:  # noqa: BLE001
+        local_ip = None
+
+    port = _read_project_port(project_name)
+    if local_ip and port:
+        urls.append(f"http://{local_ip}:{port}/favicon.ico")
+
+    if server_svc and dep_svc:
+        try:
+            for tg in dep_svc.list_targets(project_name=project_name):
+                srv = server_svc.get_by_id(tg["server_id"])
+                if srv and getattr(srv, "hostname", None):
+                    urls.append(f"https://{srv.hostname}/favicon.ico")
+        except Exception:  # noqa: BLE001
+            pass
+
+    # De-duplicate, preserve order.
+    return list(dict.fromkeys(urls))
+
+
+@deployments_bp.route("/api/deployment-projects", methods=["GET"])
+@login_required
+def api_list_projects():
+    """List registered project folders. Non-admins only see projects
+    they're allowed to deploy."""
+    svc, err = _require("deployment_service")
+    if err:
+        return err
+    projects = svc.list_projects()
+    if not _is_admin():
+        projects = [p for p in projects if _user_can_deploy(p["project_name"])]
+
+    server_svc = _service("server_service")
+    for p in projects:
+        p["favicon_urls"] = _project_favicon_urls(p["project_name"], svc, server_svc)
+    return jsonify(projects=projects)
+
+
+@deployments_bp.route("/api/deployment-projects", methods=["POST"])
+@login_required
+def api_create_project():
+    svc, err = _require("deployment_service")
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+    project_name = (data.get("project") or "").strip() if isinstance(data.get("project"), str) else ""
+
+    if not _validate_project_name(project_name):
+        return jsonify(error="Invalid project name."), 400
+    if not _user_can_deploy(project_name):
+        return jsonify(error="You don't have permission to configure this project."), 403
+    if project_name not in _list_all_projects():
+        return jsonify(error="Unknown project."), 404
+
+    try:
+        project = svc.create_project(project_name, created_by=getattr(g.current_user, "id", None))
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 409
+    return jsonify(project=project), 201
+
+
+@deployments_bp.route("/api/deployment-projects/<project_name>", methods=["DELETE"])
+@login_required
+def api_delete_project(project_name: str):
+    if not _validate_project_name(project_name):
+        return jsonify(error="Invalid project name."), 400
+    svc, err = _require("deployment_service")
+    if err:
+        return err
+    if not svc.get_project(project_name):
+        return jsonify(error="Project not found."), 404
+    if not _user_can_deploy(project_name):
+        return jsonify(error="Forbidden."), 403
+    svc.delete_project(project_name)
+    return jsonify(success=True)
+
+
+# ─── deployment targets (connections) ───────────────────────────────
+
+
+@deployments_bp.route("/api/deployment-targets", methods=["GET"])
+@login_required
+def api_list_targets():
+    """List saved targets (connections), optionally scoped to one
+    project. Non-admins only see targets for projects they can deploy."""
+    svc, err = _require("deployment_service")
+    if err:
+        return err
+    project = request.args.get("project") or None
+    if project and not _validate_project_name(project):
+        return jsonify(error="Invalid project name."), 400
+    targets = svc.list_targets(project_name=project)
+    if not _is_admin():
+        targets = [t for t in targets if _user_can_deploy(t["project_name"])]
+    return jsonify(targets=targets)
+
+
+@deployments_bp.route("/api/deployment-targets", methods=["POST"])
+@login_required
+def api_create_target():
+    svc, err = _require("deployment_service")
+    if err:
+        return err
+    server_svc, err = _require("server_service")
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+
+    label = (data.get("label") or "").strip()
+    project_name = (data.get("project") or "").strip() if isinstance(data.get("project"), str) else ""
+    server_id = _coerce_int(data.get("server_id"))
+    branch_raw = data.get("branch")
+    branch = branch_raw.strip() if isinstance(branch_raw, str) else ""
+
+    if not label:
+        return jsonify(error="A target label is required."), 400
+    if not _validate_project_name(project_name):
+        return jsonify(error="Invalid project name."), 400
+    if server_id is None:
+        return jsonify(error="server_id must be an integer."), 400
+    if not _user_can_deploy(project_name):
+        return jsonify(error="You don't have permission to configure this project."), 403
+    if project_name not in _list_all_projects():
+        return jsonify(error="Unknown project."), 404
+    if server_svc.get_by_id(server_id) is None:
+        return jsonify(error="Server not found."), 404
+    if not branch:
+        cfg = svc.get_project_git_config(project_name)
+        branch = (cfg.get("git_default_branch") or "main").strip()
+
+    try:
+        target = svc.create_target(
+            label=label,
+            project_name=project_name,
+            server_id=server_id,
+            branch=branch,
+            created_by=getattr(g.current_user, "id", None),
+        )
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+    return jsonify(target=target), 201
+
+
+@deployments_bp.route("/api/deployment-targets/<int:target_id>", methods=["PATCH"])
+@login_required
+def api_update_target(target_id: int):
+    svc, err = _require("deployment_service")
+    if err:
+        return err
+    server_svc, err = _require("server_service")
+    if err:
+        return err
+    target = svc.get_target(target_id)
+    if not target:
+        return jsonify(error="Target not found."), 404
+    if not _user_can_deploy(target["project_name"]):
+        return jsonify(error="Forbidden."), 403
+
+    data = request.get_json(silent=True) or {}
+    payload: dict = {}
+    if "label" in data and data["label"] is not None:
+        payload["label"] = str(data["label"])
+    if "server_id" in data and data["server_id"] is not None:
+        sid = _coerce_int(data["server_id"])
+        if sid is None:
+            return jsonify(error="server_id must be an integer."), 400
+        if server_svc.get_by_id(sid) is None:
+            return jsonify(error="Server not found."), 404
+        payload["server_id"] = sid
+    if "branch" in data and data["branch"] is not None:
+        payload["branch"] = str(data["branch"])
+
+    try:
+        updated = svc.update_target(target_id, **payload)
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+    if not updated:
+        return jsonify(error="Target not found."), 404
+    return jsonify(target=updated)
+
+
+@deployments_bp.route("/api/deployment-targets/<int:target_id>", methods=["DELETE"])
+@login_required
+def api_delete_target(target_id: int):
+    svc, err = _require("deployment_service")
+    if err:
+        return err
+    target = svc.get_target(target_id)
+    if not target:
+        return jsonify(error="Target not found."), 404
+    if not _user_can_deploy(target["project_name"]):
+        return jsonify(error="Forbidden."), 403
+    svc.delete_target(target_id)
+    return jsonify(success=True)
+
+
+@deployments_bp.route("/api/deployment-targets/<int:target_id>/deploy", methods=["POST"])
+@login_required
+def api_deploy_target(target_id: int):
+    """One-click redeploy of a saved target: no re-entry of project /
+    server / branch. Reuses the same worker as the manual deploy."""
+    svc, err = _require("deployment_service")
+    if err:
+        return err
+    target = svc.get_target(target_id)
+    if not target:
+        return jsonify(error="Target not found."), 404
+    project_name = target["project_name"]
+    if not _user_can_deploy(project_name):
+        return jsonify(error="You don't have permission to deploy this project."), 403
+    if project_name not in _list_all_projects():
+        return jsonify(error="Unknown project."), 404
+
+    try:
+        deployment_id = svc.run(
+            project_name=project_name,
+            server_id=target["server_id"],
+            branch=target["branch"],
+            triggered_by=getattr(g.current_user, "id", None),
+            app=current_app._get_current_object(),
+        )
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+    except RuntimeError as exc:
+        msg = str(exc)
+        status = 409 if "already running" in msg else 400
+        return jsonify(error=msg), status
+
+    return jsonify(
+        deployment_id=deployment_id,
+        project=project_name,
+        branch=target["branch"],
+        server_id=target["server_id"],
+    ), 202
+
+
 # ─── deployments ────────────────────────────────────────────────────
 
 
@@ -443,6 +728,8 @@ def api_list_deployments():
     if err:
         return err
     project = request.args.get("project") or None
+    server_id = _coerce_int(request.args.get("server_id"))
+    branch = request.args.get("branch") or None
     limit = max(1, min(_coerce_int(request.args.get("limit"), 50), 500))
 
     if not _is_admin():
@@ -452,11 +739,15 @@ def api_list_deployments():
             projects = [p for p in _list_all_projects() if _user_can_deploy(p)]
             out = []
             for p in projects:
-                out.extend(svc.list_deployments(project_name=p, limit=limit))
+                out.extend(svc.list_deployments(
+                    project_name=p, server_id=server_id, branch=branch, limit=limit
+                ))
             out.sort(key=lambda r: r.get("started_at") or "", reverse=True)
             return jsonify(deployments=out[:limit])
 
-    return jsonify(deployments=svc.list_deployments(project_name=project, limit=limit))
+    return jsonify(deployments=svc.list_deployments(
+        project_name=project, server_id=server_id, branch=branch, limit=limit
+    ))
 
 
 @deployments_bp.route("/api/deployments/<int:deployment_id>", methods=["GET"])

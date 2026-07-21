@@ -67,8 +67,8 @@ class ConfigService:
             default_php_content = """; Configuration PHP personnalisée pour ce projet
 ; Limites de mémoire
 memory_limit = 512M
-post_max_size = 128M
-upload_max_filesize = 64M
+post_max_size = 256M
+upload_max_filesize = 256M
 max_file_uploads = 20
 
 ; Timeouts et limites d'exécution

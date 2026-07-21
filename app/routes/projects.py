@@ -4,7 +4,9 @@ Routes pour la gestion des projets WordPress - Core (Liste et Statut)
 """
 
 import os
-from flask import Blueprint, jsonify, current_app
+import re
+import glob
+from flask import Blueprint, jsonify, current_app, send_file, abort
 from app.models.project import Project
 from app.config.docker_config import DockerConfig
 from app.middleware.auth_middleware import login_required, admin_required
@@ -14,6 +16,55 @@ projects_bp = Blueprint('projects', __name__)
 # Configuration des constantes
 PROJECTS_FOLDER = 'projets'
 CONTAINERS_FOLDER = 'containers'
+
+
+_FAVICON_EXTS = ('png', 'ico', 'svg', 'jpg', 'jpeg')
+_ROOT_FAVICONS = ('favicon.ico', 'favicon.png', 'favicon.svg', 'apple-touch-icon.png')
+
+
+def _score_site_icon(path):
+    """Heuristic score: how likely a ``cropped-*`` upload is the WP Site
+    Icon (rather than a cropped header/background image)."""
+    name = os.path.basename(path).lower()
+    s = 0
+    if 'favicon' in name:
+        s += 100
+    if 'site-icon' in name or 'site_icon' in name:
+        s += 90
+    m = re.search(r'-(\d+)x(\d+)\.', name)
+    if m:
+        w, h = int(m.group(1)), int(m.group(2))
+        if w == h:                       # site icons are square
+            s += 40 + max(0, 30 - abs(w - 192) // 16)
+    else:
+        s += 10                          # base cropped source, no size suffix
+    return s
+
+
+def _find_local_favicon(base):
+    """Return the path to a site's logo from its local files, or None.
+
+    Looks for a static favicon at the web root first, then the WordPress
+    Site Icon crops in ``wp-content/uploads`` (bounded to the usual
+    year/month depth so we never walk a huge uploads tree)."""
+    for name in _ROOT_FAVICONS:
+        p = os.path.join(base, name)
+        if os.path.isfile(p):
+            return p
+
+    uploads = os.path.join(base, 'wp-content', 'uploads')
+    if not os.path.isdir(uploads):
+        return None
+
+    candidates = []
+    for pat in ('cropped-*', '*/cropped-*', '*/*/cropped-*'):
+        for p in glob.glob(os.path.join(uploads, pat)):
+            if os.path.isfile(p) and p.rsplit('.', 1)[-1].lower() in _FAVICON_EXTS:
+                candidates.append(p)
+    if not candidates:
+        return None
+    candidates.sort(key=_score_site_icon, reverse=True)
+    return candidates[0]
 
 
 @projects_bp.route('/projects')
@@ -126,12 +177,33 @@ def list_projects_with_status():
             'mysql_port': project.mysql_port,
             'mongodb_port': project.mongodb_port,
             'mongo_express_port': project.mongo_express_port,
-            'urls': urls
+            'urls': urls,
+            # Served from the project's local files; the route 404s when
+            # there's no logo, so the card falls back to its default icon.
+            'favicon_urls': ['/project_favicon/' + project_name],
         }
-        
+
         projects.append(project_info)
-    
+
     return jsonify({'projects': projects})
+
+
+@projects_bp.route('/project_favicon/<project_name>')
+@login_required
+def project_favicon(project_name):
+    """Serve a project's logo (favicon / WP Site Icon) from its local
+    files. 404 when none is found so the UI shows its default icon."""
+    if not re.fullmatch(r'[A-Za-z0-9._-]+', project_name or ''):
+        abort(404)
+    base = os.path.join(PROJECTS_FOLDER, project_name)
+    if not os.path.isdir(base):
+        abort(404)
+    path = _find_local_favicon(base)
+    if not path or not os.path.isfile(path):
+        abort(404)
+    resp = send_file(os.path.abspath(path))
+    resp.headers['Cache-Control'] = 'public, max-age=3600'
+    return resp
 
 
 @projects_bp.route('/project_status/<project_name>')

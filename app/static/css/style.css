@@ -3934,6 +3934,7 @@ body.app-shell {
     margin-left: 256px;
     padding: 28px 32px 48px;
     min-height: calc(100vh - 64px);
+    transition: padding-right 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .app-main { padding: 0; }
 
@@ -4344,6 +4345,16 @@ body.app-shell {
     font-size: 1.2rem;
 }
 .instance-icon i { color: inherit; }
+/* Production favicon shown inside the site icon square (falls back to the
+   default icon via onSiteFaviconError). */
+.instance-icon .instance-favicon {
+    width: 30px;
+    height: 30px;
+    object-fit: contain;
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.9);
+    padding: 2px;
+}
 
 .instance-icon.instance-icon-muted {
     background: var(--al-surface-variant);
@@ -5362,6 +5373,16 @@ body.app-shell {
 .task-popover.open { /* explicit "shown" class */ }
 body.sidebar-open .task-popover { display: flex !important; }
 body.sidebar-open .task-popover[hidden] { display: flex !important; }
+
+/* Push layout: on wide screens the canvas shrinks while the popover is open,
+   so per-site actions (gear / Start) on the far right stay visible.
+   Below 1200px the popover keeps overlaying — pushing would crush the content. */
+@media (min-width: 1200px) {
+    body.sidebar-open .app-canvas {
+        /* popover width (380) + right offset (24) + breathing room (24) */
+        padding-right: 428px;
+    }
+}
 
 @media (max-width: 768px) {
     .task-popover {

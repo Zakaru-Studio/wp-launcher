@@ -260,6 +260,8 @@ class DeploymentService:
         self,
         *,
         project_name: Optional[str] = None,
+        server_id: Optional[int] = None,
+        branch: Optional[str] = None,
         limit: int = 50,
     ) -> List[dict]:
         limit = max(1, min(int(limit), 500))
@@ -267,10 +269,19 @@ class DeploymentService:
             "SELECT d.*, s.label AS server_label, s.env AS server_env "
             "FROM deployments d LEFT JOIN servers s ON s.id = d.server_id "
         )
+        clauses: List[str] = []
         args: Tuple = ()
         if project_name:
-            q += "WHERE d.project_name = ? "
-            args = (project_name,)
+            clauses.append("d.project_name = ?")
+            args = args + (project_name,)
+        if server_id is not None:
+            clauses.append("d.server_id = ?")
+            args = args + (int(server_id),)
+        if branch:
+            clauses.append("d.branch = ?")
+            args = args + (branch,)
+        if clauses:
+            q += "WHERE " + " AND ".join(clauses) + " "
         q += "ORDER BY d.started_at DESC LIMIT ?"
         args = args + (limit,)
 
@@ -305,6 +316,217 @@ class DeploymentService:
                 return fh.read()
         except OSError:
             return None
+
+    # ─── deployment projects (folders grouping connections) ──────────
+
+    def list_projects(self) -> List[dict]:
+        """Registered project folders, newest first, each enriched with
+        its connection count and most-recent deployment (any connection)."""
+        q = """
+            SELECT
+                p.project_name,
+                p.created_at,
+                (SELECT COUNT(*) FROM deployment_targets t
+                   WHERE t.project_name = p.project_name)      AS connection_count,
+                (SELECT d.status FROM deployments d
+                   WHERE d.project_name = p.project_name
+                   ORDER BY d.started_at DESC LIMIT 1)          AS last_status,
+                (SELECT d.started_at FROM deployments d
+                   WHERE d.project_name = p.project_name
+                   ORDER BY d.started_at DESC LIMIT 1)          AS last_started_at
+            FROM deployment_projects p
+            ORDER BY p.created_at DESC
+        """
+        with self._connect() as conn:
+            rows = conn.execute(q).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_project(self, project_name: str) -> Optional[dict]:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT project_name, created_by, created_at "
+                "FROM deployment_projects WHERE project_name = ?",
+                (project_name,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def create_project(
+        self, project_name: str, *, created_by: Optional[int] = None
+    ) -> dict:
+        with self._connect() as conn:
+            try:
+                conn.execute(
+                    "INSERT INTO deployment_projects (project_name, created_by, created_at) "
+                    "VALUES (?, ?, ?)",
+                    (project_name, created_by, self._now()),
+                )
+                conn.commit()
+            except sqlite3.IntegrityError as exc:
+                raise ValueError("This project is already created.") from exc
+        return self.get_project(project_name)  # type: ignore[return-value]
+
+    def delete_project(self, project_name: str) -> bool:
+        """Remove a project folder and all its connections. Deployment
+        history rows are kept (audit trail)."""
+        with self._connect() as conn:
+            conn.execute(
+                "DELETE FROM deployment_targets WHERE project_name = ?", (project_name,)
+            )
+            cur = conn.execute(
+                "DELETE FROM deployment_projects WHERE project_name = ?", (project_name,)
+            )
+            conn.commit()
+            return cur.rowcount > 0
+
+    # ─── deployment targets (reusable one-click configs) ─────────────
+
+    def _target_row(self, row) -> dict:
+        """Target row → dict. Kept separate from _public_row because
+        targets carry an enriched last-run block (see list_targets)."""
+        return dict(row)
+
+    def list_targets(self, *, project_name: Optional[str] = None) -> List[dict]:
+        """All saved targets, newest first, enriched with their most
+        recent matching deployment (status / started_at / commit) and a
+        total run count. Correlated subqueries are fine here — the
+        targets table is tiny (one row per saved config)."""
+        q = """
+            SELECT
+                t.*,
+                s.label AS server_label,
+                s.env   AS server_env,
+                (SELECT d.status FROM deployments d
+                   WHERE d.project_name = t.project_name
+                     AND d.server_id = t.server_id
+                     AND d.branch = t.branch
+                   ORDER BY d.started_at DESC LIMIT 1)     AS last_status,
+                (SELECT d.started_at FROM deployments d
+                   WHERE d.project_name = t.project_name
+                     AND d.server_id = t.server_id
+                     AND d.branch = t.branch
+                   ORDER BY d.started_at DESC LIMIT 1)     AS last_started_at,
+                (SELECT d.commit_sha FROM deployments d
+                   WHERE d.project_name = t.project_name
+                     AND d.server_id = t.server_id
+                     AND d.branch = t.branch
+                   ORDER BY d.started_at DESC LIMIT 1)     AS last_commit_sha,
+                (SELECT COUNT(*) FROM deployments d
+                   WHERE d.project_name = t.project_name
+                     AND d.server_id = t.server_id
+                     AND d.branch = t.branch)              AS run_count
+            FROM deployment_targets t
+            LEFT JOIN servers s ON s.id = t.server_id
+        """
+        args: Tuple = ()
+        if project_name:
+            q += "WHERE t.project_name = ? "
+            args = (project_name,)
+        q += "ORDER BY t.updated_at DESC"
+        with self._connect() as conn:
+            rows = conn.execute(q, args).fetchall()
+        return [self._target_row(r) for r in rows]
+
+    def get_target(self, target_id: int) -> Optional[dict]:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT t.*, s.label AS server_label, s.env AS server_env "
+                "FROM deployment_targets t "
+                "LEFT JOIN servers s ON s.id = t.server_id "
+                "WHERE t.id = ?",
+                (int(target_id),),
+            ).fetchone()
+        return self._target_row(row) if row else None
+
+    def create_target(
+        self,
+        *,
+        label: str,
+        project_name: str,
+        server_id: int,
+        branch: str,
+        created_by: Optional[int] = None,
+    ) -> dict:
+        label = (label or "").strip()
+        branch = (branch or "main").strip() or "main"
+        if not label:
+            raise ValueError("A target label is required.")
+        self._validate_branch(branch)
+        now = self._now()
+        with self._connect() as conn:
+            try:
+                # Keep the invariant that every connection's project has a
+                # folder row, even if the connection is created directly.
+                conn.execute(
+                    "INSERT OR IGNORE INTO deployment_projects "
+                    "(project_name, created_by, created_at) VALUES (?, ?, ?)",
+                    (project_name, created_by, now),
+                )
+                cur = conn.execute(
+                    """
+                    INSERT INTO deployment_targets
+                        (label, project_name, server_id, branch,
+                         created_by, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (label, project_name, int(server_id), branch,
+                     created_by, now, now),
+                )
+                conn.commit()
+            except sqlite3.IntegrityError as exc:
+                raise ValueError(
+                    "A target already exists for this project, server and branch."
+                ) from exc
+            target_id = cur.lastrowid
+        return self.get_target(target_id)  # type: ignore[return-value]
+
+    def update_target(
+        self,
+        target_id: int,
+        *,
+        label: Optional[str] = None,
+        server_id: Optional[int] = None,
+        branch: Optional[str] = None,
+    ) -> Optional[dict]:
+        fields: List[Tuple[str, object]] = []
+        if label is not None:
+            label = label.strip()
+            if not label:
+                raise ValueError("A target label is required.")
+            fields.append(("label", label))
+        if server_id is not None:
+            fields.append(("server_id", int(server_id)))
+        if branch is not None:
+            branch = branch.strip() or "main"
+            self._validate_branch(branch)
+            fields.append(("branch", branch))
+        if not fields:
+            return self.get_target(target_id)
+        fields.append(("updated_at", self._now()))
+
+        set_clause = ", ".join(f"{col} = ?" for col, _ in fields)
+        values: List[object] = [val for _, val in fields] + [int(target_id)]
+        with self._connect() as conn:
+            try:
+                cur = conn.execute(
+                    f"UPDATE deployment_targets SET {set_clause} WHERE id = ?",
+                    values,
+                )
+                conn.commit()
+            except sqlite3.IntegrityError as exc:
+                raise ValueError(
+                    "A target already exists for this project, server and branch."
+                ) from exc
+            if cur.rowcount == 0:
+                return None
+        return self.get_target(target_id)
+
+    def delete_target(self, target_id: int) -> bool:
+        with self._connect() as conn:
+            cur = conn.execute(
+                "DELETE FROM deployment_targets WHERE id = ?", (int(target_id),)
+            )
+            conn.commit()
+            return cur.rowcount > 0
 
     # ─── run ─────────────────────────────────────────────────────────
 
