@@ -334,3 +334,9 @@ msgstr "No notifications yet"
 
 msgid "View logs"
 msgstr "View logs"
+
+msgid "Managed processes"
+msgstr "Managed processes"
+
+msgid "Only the containers of your projects and the launcher itself — host processes are not listed."
+msgstr "Only the containers of your projects and the launcher itself — host processes are not listed."

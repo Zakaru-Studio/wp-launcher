@@ -76,14 +76,34 @@ def kill_process():
         
         if not pid:
             return jsonify({'success': False, 'error': 'PID manquant'}), 400
-        
+
+        try:
+            pid = int(pid)
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'error': 'PID invalide'}), 400
+
         import psutil
         import signal
-        
+
+        monitoring_service = current_app.extensions['monitoring']
+
+        # N'autoriser que les processus réellement administrés par le
+        # launcher. Sans cette garde, une session admin pouvait envoyer un
+        # SIGTERM à n'importe quel PID de la machine — sshd, le pare-feu,
+        # l'application d'un autre locataire.
+        if not monitoring_service.is_managed_pid(pid):
+            wp_logger.log_system_info(
+                f"Refus de terminer le PID {pid} : hors périmètre du launcher"
+            )
+            return jsonify({
+                'success': False,
+                'error': "Ce processus n'appartient pas à un service géré par WP Launcher"
+            }), 403
+
         try:
             process = psutil.Process(pid)
             process_name = process.name()
-            
+
             # Envoyer SIGTERM (terminaison gracieuse)
             process.send_signal(signal.SIGTERM)
             

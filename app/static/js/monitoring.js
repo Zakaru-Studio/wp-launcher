@@ -16,6 +16,13 @@ let tabsLoaded = {
 let currentProcessPage = 1;
 let totalProcessPages = 1;
 let processesPerPage = 20;
+
+/** Échappe une valeur avant interpolation dans innerHTML. */
+function escapeHtml(value) {
+    const div = document.createElement('div');
+    div.textContent = String(value ?? '');
+    return div.innerHTML;
+}
 let allProcesses = [];
 
 // Initialisation
@@ -446,23 +453,30 @@ function renderProcessPage() {
     const endIndex = startIndex + processesPerPage;
     const pageProcesses = allProcesses.slice(startIndex, endIndex);
     
-    processList.innerHTML = pageProcesses.map(proc => `
+    processList.innerHTML = pageProcesses.map(proc => {
+        // Noms de processus, comptes et conteneurs viennent de l'hôte :
+        // échappés avant d'atterrir dans innerHTML.
+        const name = escapeHtml(proc.name);
+        const user = escapeHtml(proc.user);
+        const scope = escapeHtml(proc.container || proc.project || '');
+        return `
         <div class="process-item">
             <div class="process-info">
-                <strong>${proc.name}</strong>
-                <small class="text-muted d-block">PID: ${proc.pid} | User: ${proc.user}</small>
+                <strong>${name}</strong>
+                ${scope ? `<span class="process-scope">${scope}</span>` : ''}
+                <small class="process-meta d-block">PID: ${proc.pid} · ${user}</small>
             </div>
             <div class="text-end me-3">
                 <div>CPU: <strong>${proc.cpu.toFixed(1)}%</strong></div>
-                <div><small>RAM: ${proc.memory.toFixed(1)}%</small></div>
+                <div><small class="process-meta">RAM: ${proc.memory.toFixed(1)}%</small></div>
             </div>
             <div class="process-actions">
-                <button class="btn-kill" onclick="killProcess(${proc.pid}, '${proc.name}')" title="Terminer le processus">
+                <button class="btn-kill" onclick="killProcess(${proc.pid}, '${name.replace(/'/g, "\\'")}')" title="Terminer le processus">
                     <i class="fas fa-times me-1"></i>Kill
                 </button>
             </div>
-        </div>
-    `).join('');
+        </div>`;
+    }).join('');
     
     // Mettre à jour les boutons de pagination
     document.getElementById('current-page').textContent = currentProcessPage;

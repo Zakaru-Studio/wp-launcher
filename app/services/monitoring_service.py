@@ -137,26 +137,125 @@ class MonitoringService:
             wp_logger.log_system_info(f"Erreur récupération stats Docker: {e}")
             return {'success': False, 'error': str(e)}
     
-    def get_processes(self, limit: int = 20) -> Dict[str, Any]:
-        """Récupère la liste des processus système"""
+    def _managed_container_ids(self) -> Dict[str, str]:
+        """Identifiants Docker complets -> nom de conteneur, pour les seuls
+        conteneurs appartenant à un projet du launcher.
+
+        Un projet est reconnu par son dossier dans PROJECTS_FOLDER, et ses
+        conteneurs par le préfixe `<projet>_`. Tout ce qui tourne d'autre sur
+        l'hôte est ignoré.
+        """
+        from app.config.docker_config import DockerConfig
+
         try:
+            projects = {
+                name for name in os.listdir(DockerConfig.PROJECTS_FOLDER)
+                if os.path.isdir(os.path.join(DockerConfig.PROJECTS_FOLDER, name))
+            }
+        except OSError:
+            return {}
+        if not projects:
+            return {}
+
+        try:
+            result = subprocess.run(
+                ['docker', 'ps', '--no-trunc', '--format', '{{.ID}}\t{{.Names}}'],
+                capture_output=True, text=True, timeout=10,
+            )
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+            return {}
+        if result.returncode != 0:
+            return {}
+
+        owned = {}
+        for line in result.stdout.splitlines():
+            if '\t' not in line:
+                continue
+            cid, name = line.split('\t', 1)
+            project = name.split('_')[0]
+            if project in projects:
+                owned[cid.strip()] = name.strip()
+        return owned
+
+    @staticmethod
+    def _container_id_of(pid: int) -> Optional[str]:
+        """Identifiant du conteneur auquel appartient ce PID, via son cgroup.
+
+        Gère cgroup v2 (`0::/system.slice/docker-<id>.scope`) et v1
+        (`…/docker/<id>`). Retourne None pour un processus de l'hôte, ou quand
+        /proc n'est pas lisible — dans les deux cas on l'exclut.
+        """
+        try:
+            with open(f'/proc/{pid}/cgroup', 'r') as handle:
+                content = handle.read()
+        except (OSError, PermissionError):
+            return None
+        match = re.search(r'(?:docker[-/])([0-9a-f]{64})', content)
+        return match.group(1) if match else None
+
+    def _launcher_pids(self) -> set:
+        """PID de l'application elle-même : le worker courant, son maître
+        gunicorn et les frères issus du même maître."""
+        pids = set()
+        try:
+            me = psutil.Process(os.getpid())
+            pids.add(me.pid)
+            parent = me.parent()
+            if parent:
+                pids.add(parent.pid)
+                for child in parent.children(recursive=True):
+                    pids.add(child.pid)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+        return pids
+
+    def get_processes(self, limit: int = 20) -> Dict[str, Any]:
+        """Processus des services gérés par le launcher, uniquement.
+
+        La liste complète des processus de l'hôte n'a pas sa place dans cette
+        interface : elle révèle les autres services de la machine, les comptes
+        qui les font tourner et la topologie générale — un cadeau pour qui
+        obtiendrait une session. On ne renvoie donc que ce que le launcher
+        administre réellement : les processus tournant dans les conteneurs de
+        ses projets, plus l'application elle-même.
+        """
+        try:
+            containers = self._managed_container_ids()
+            launcher_pids = self._launcher_pids()
+
             processes = []
             for proc in psutil.process_iter(['pid', 'name', 'username', 'cpu_percent', 'memory_percent']):
                 try:
                     pinfo = proc.info
+                    pid = pinfo['pid']
+
+                    owner = None
+                    container_id = self._container_id_of(pid)
+                    if container_id and container_id in containers:
+                        container_name = containers[container_id]
+                        owner = container_name.split('_')[0]
+                    elif pid in launcher_pids:
+                        container_name = None
+                        owner = 'wp-launcher'
+                    else:
+                        # Processus de l'hôte sans rapport avec le launcher.
+                        continue
+
                     processes.append({
-                        'pid': pinfo['pid'],
+                        'pid': pid,
                         'name': pinfo['name'],
                         'user': pinfo['username'],
                         'cpu': pinfo['cpu_percent'] or 0,
-                        'memory': pinfo['memory_percent'] or 0
+                        'memory': pinfo['memory_percent'] or 0,
+                        'project': owner,
+                        'container': container_name,
                     })
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     pass
-            
+
             # Trier par utilisation CPU décroissante
             processes.sort(key=lambda x: x['cpu'], reverse=True)
-            
+
             return {
                 'success': True,
                 'processes': processes[:limit],
@@ -165,6 +264,21 @@ class MonitoringService:
         except Exception as e:
             wp_logger.log_system_info(f"Erreur récupération processus: {e}")
             return {'success': False, 'error': str(e)}
+
+    def is_managed_pid(self, pid: int) -> bool:
+        """Ce PID appartient-il à un service géré par le launcher ?
+
+        Sert de garde à l'arrêt de processus : sans elle, une session admin
+        pouvait envoyer un SIGTERM à n'importe quel PID de la machine — sshd,
+        le pare-feu, l'application d'un autre locataire.
+        """
+        try:
+            if pid in self._launcher_pids():
+                return True
+            container_id = self._container_id_of(pid)
+            return bool(container_id and container_id in self._managed_container_ids())
+        except Exception:  # noqa: BLE001
+            return False
     
     def _scan_backup_dir(self, backup_type: str) -> List[Dict[str, Any]]:
         """Liste les fichiers de backup d'un type donné (mysql/mongodb)."""

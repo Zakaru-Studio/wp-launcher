@@ -298,132 +298,16 @@
     color: var(--al-on-surface-variant);
 }
 
-/* Topology card */
-.topology-card {
-    background: var(--al-surface-container-lowest);
-    border-radius: var(--border-radius);
-    box-shadow: 0 12px 40px -10px rgba(12, 20, 39, 0.06);
-    overflow: hidden;
-}
-.topology-card-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 22px 22px 14px;
-}
-.topology-title {
-    font-family: 'Manrope', sans-serif;
-    font-size: 1.05rem;
-    font-weight: 700;
-    color: var(--al-primary);
-    letter-spacing: -0.015em;
-    margin: 0;
-}
-.topology-link {
-    color: var(--al-secondary);
-    text-decoration: none;
-    font-family: 'Inter', sans-serif;
-    font-size: 0.85rem;
-    font-weight: 500;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-}
-.topology-link:hover { color: var(--al-secondary-fixed-dim); }
 
-.topology-canvas {
-    position: relative;
-    height: 240px;
-    background: var(--al-surface-container-low);
-    background-image: radial-gradient(circle at 2px 2px, rgba(197,198,205,0.4) 1px, transparent 0);
-    background-size: 16px 16px;
-    mask-image: linear-gradient(to bottom, white, transparent 95%);
-    -webkit-mask-image: linear-gradient(to bottom, white, transparent 95%);
-}
-.topology-lines {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    color: var(--al-secondary-container);
-    pointer-events: none;
-}
-.topology-node {
-    position: absolute;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    z-index: 2;
-}
-.topology-node-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: 12px;
-    background: var(--al-surface-container-lowest);
-    color: var(--al-secondary);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 4px 16px -4px rgba(12, 20, 39, 0.1);
-    position: relative;
-}
-.topology-node-primary .topology-node-icon {
-    border: 1.5px solid var(--al-secondary-fixed);
-}
-.topology-node-secondary .topology-node-icon {
-    width: 40px;
-    height: 40px;
-    color: var(--al-on-surface-variant);
-    border: 1px solid var(--al-outline-variant);
-}
-.topology-node-label {
-    font-family: 'Inter', sans-serif;
-    font-size: 0.72rem;
-    font-weight: 500;
-    color: var(--al-on-surface-variant);
-}
-.topology-node-primary {
-    top: 50%;
-    left: 20%;
-    transform: translateY(-50%);
-}
-.topology-node-top {
-    top: 24%;
-    left: 64%;
-    transform: translateY(-50%);
-}
-.topology-node-bottom {
-    top: 76%;
-    left: 64%;
-    transform: translateY(-50%);
-}
-.topology-node-dot {
-    position: absolute;
-    bottom: 4px;
-    right: 12px;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: var(--al-secondary);
-    box-shadow: 0 0 0 2px var(--al-surface-container-lowest);
-    animation: pulseDot 2s ease-in-out infinite;
-}
 @keyframes pulseDot {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.55; }
 }
 
 @media (max-width: 768px) {
-    .topology-canvas { height: 200px; }
-    .topology-node-primary { left: 12%; }
-    .topology-node-top, .topology-node-bottom { left: 62%; }
 }
 
 /* Dark mode: small tweaks */
-[data-theme="dark"] .topology-canvas {
-    background-image: radial-gradient(circle at 2px 2px, rgba(100,101,108,0.35) 1px, transparent 0);
-}
 
 
 /* ============================================
@@ -475,4 +359,57 @@
         var(--al-surface-container-highest) 50%,
         var(--al-surface-container-high) 100%
     );
+}
+
+/* ─── Titres de section ────────────────────────────────────────────────
+   Petit frère de .page-title : le titre de page nomme la page, ceux-ci
+   nomment un bloc à l'intérieur. Les h2 étaient jusqu'ici sans style et
+   héritaient de la taille par défaut du navigateur, hors du système. */
+.section-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: 'Manrope', sans-serif;
+    font-size: 1.125rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--al-primary);
+    line-height: 1.2;
+    margin: 0;
+}
+
+.section-title i {
+    font-size: 0.9em;
+    color: var(--al-on-surface-variant);
+}
+
+.section-title-hint {
+    display: block;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.8125rem;
+    font-weight: 400;
+    color: var(--al-on-surface-variant);
+    margin-top: 4px;
+}
+
+/* ─── Métadonnées de processus ────────────────────────────────────────
+   .text-muted de Bootstrap est calibré pour un fond clair : sur le thème
+   sombre il tombe à un contraste illisible. On passe par la variable de
+   texte secondaire du thème, qui suit le mode clair comme sombre. */
+.process-meta {
+    color: var(--al-on-surface-variant);
+}
+
+/* Conteneur ou projet auquel appartient le processus. */
+.process-scope {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--glass-bg);
+    border: 1px solid var(--al-outline-variant, rgba(255, 255, 255, 0.12));
+    font-family: 'Inter', sans-serif;
+    font-size: 0.75rem;
+    color: var(--al-on-surface-variant);
+    vertical-align: middle;
 }

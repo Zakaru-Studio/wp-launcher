@@ -603,3 +603,9 @@ msgstr "Voir les notes de version"
 
 msgid "The application will be updated to the latest release, then restarted. Running sites are not affected."
 msgstr "L'application sera mise à jour vers la dernière version, puis redémarrée. Les sites en cours d'exécution ne sont pas affectés."
+
+msgid "Managed processes"
+msgstr "Processus gérés"
+
+msgid "Only the containers of your projects and the launcher itself — host processes are not listed."
+msgstr "Uniquement les conteneurs de vos projets et l'application elle-même — les processus de l'hôte ne sont pas listés."
