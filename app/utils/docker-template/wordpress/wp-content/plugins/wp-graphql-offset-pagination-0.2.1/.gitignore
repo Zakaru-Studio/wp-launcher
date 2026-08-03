@@ -1,5 +1,0 @@
-.env
-.wp-install
-_output
-composer.lock
-node_modules

@@ -184,6 +184,20 @@ if ! wp core is-installed --allow-root 2>/dev/null; then
     wp config set FORCE_SSL_ADMIN "false" --raw --allow-root
     wp config set WP_MEMORY_LIMIT "512M" --allow-root
     
+    # Les fichiers WordPress proviennent de l'image, figée au jour de sa
+    # construction : un site créé aujourd'hui hériterait sinon de la version
+    # d'alors. On récupère la dernière version avant d'installer.
+    # `--skip-content` laisse wp-content intact ; en cas d'échec réseau on
+    # conserve la version de l'image plutôt que d'interrompre la création.
+    if [ "${WP_INSTALL_LATEST:-true}" = "true" ]; then
+        echo "⬆️ Récupération de la dernière version de WordPress..."
+        if wp core download --force --skip-content --allow-root 2>/dev/null; then
+            echo "✅ Core mis à jour : $(wp core version --allow-root 2>/dev/null)"
+        else
+            echo "⚠️ Téléchargement impossible — version de l'image conservée"
+        fi
+    fi
+
     # Installer WordPress automatiquement
     echo "⚙️ Installation du core WordPress..."
     wp core install \
@@ -264,38 +278,36 @@ if ! wp core is-installed --allow-root 2>/dev/null; then
             RESTORE_UPLOADS=false
         fi
         
-        # Vider les dossiers plugins et themes
-        echo "🗑️ Vidage des dossiers plugins et themes..."
-        if [ -d "/var/www/html/wp-content/plugins" ]; then
+        # Le template peut ne contenir ni thème ni plugin : `index.php` n'est
+        # qu'un garde anti-listing et ne compte pas comme du contenu. On ne
+        # vide donc un dossier que si le template a de quoi le remplacer,
+        # sinon on supprimerait les thèmes livrés par l'image sans rien
+        # fournir — et le site se retrouverait sans aucun thème.
+        if [ -n "$(ls -A "$TEMPLATE_WP_CONTENT/plugins" 2>/dev/null | grep -v '^index\.php$')" ]; then
+            echo "🗑️ Remplacement des plugins par ceux du template..."
             rm -rf /var/www/html/wp-content/plugins/*
-            echo "✅ Dossier plugins vidé"
-        fi
-        
-        if [ -d "/var/www/html/wp-content/themes" ]; then
-            rm -rf /var/www/html/wp-content/themes/*
-            echo "✅ Dossier themes vidé"
-        fi
-        
-        # Copier le contenu du template
-        echo "📋 Copie du contenu du template..."
-        
-        # Copier plugins du template
-        if [ -d "$TEMPLATE_WP_CONTENT/plugins" ]; then
             cp -r "$TEMPLATE_WP_CONTENT/plugins"/* /var/www/html/wp-content/plugins/
             echo "✅ Plugins du template copiés"
+        else
+            echo "ℹ️ Aucun plugin dans le template — plugins de l'image conservés"
         fi
-        
-        # Copier themes du template
-        if [ -d "$TEMPLATE_WP_CONTENT/themes" ]; then
+
+        if [ -n "$(ls -A "$TEMPLATE_WP_CONTENT/themes" 2>/dev/null | grep -v '^index\.php$')" ]; then
+            echo "🗑️ Remplacement des thèmes par ceux du template..."
+            rm -rf /var/www/html/wp-content/themes/*
             cp -r "$TEMPLATE_WP_CONTENT/themes"/* /var/www/html/wp-content/themes/
             echo "✅ Thèmes du template copiés"
+
+            # Les thèmes par défaut ne sont retirés que si le template en
+            # fournit un : sans cette garde, le site n'aurait plus de thème.
+            echo "🗑️ Suppression des thèmes WordPress par défaut..."
+            for th in twentytwentyfive twentytwentyfour twentytwentythree; do
+                wp theme delete "$th" --allow-root 2>/dev/null \
+                    && echo "✅ Thème $th supprimé" || true
+            done
+        else
+            echo "ℹ️ Aucun thème dans le template — thèmes par défaut conservés"
         fi
-        
-        # Supprimer les thèmes par défaut de WordPress pour éviter les conflits
-        echo "🗑️ Suppression des thèmes WordPress par défaut..."
-        wp theme delete twentytwentyfive --allow-root 2>/dev/null && echo "✅ Thème twentytwentyfive supprimé" || echo "⚠️ Thème twentytwentyfive non trouvé"
-        wp theme delete twentytwentyfour --allow-root 2>/dev/null && echo "✅ Thème twentytwentyfour supprimé" || echo "⚠️ Thème twentytwentyfour non trouvé"
-        wp theme delete twentytwentythree --allow-root 2>/dev/null && echo "✅ Thème twentytwentythree supprimé" || echo "⚠️ Thème twentytwentythree non trouvé"
         
         # Copier mu-plugins du template
         if [ -d "$TEMPLATE_WP_CONTENT/mu-plugins" ]; then
@@ -411,15 +423,19 @@ else
                 RESTORE_UPLOADS=false
             fi
             
-            # Vider et copier plugins
-            echo "🗑️ Mise à jour des plugins..."
-            rm -rf /var/www/html/wp-content/plugins/*
-            cp -r "$TEMPLATE_WP_CONTENT/plugins"/* /var/www/html/wp-content/plugins/
-            
-            # Vider et copier themes
-            echo "🗑️ Mise à jour des thèmes..."
-            rm -rf /var/www/html/wp-content/themes/*
-            cp -r "$TEMPLATE_WP_CONTENT/themes"/* /var/www/html/wp-content/themes/
+            # Même garde que plus haut : ne rien vider si le template n'a
+            # rien à mettre à la place.
+            if [ -n "$(ls -A "$TEMPLATE_WP_CONTENT/plugins" 2>/dev/null | grep -v '^index\.php$')" ]; then
+                echo "🗑️ Mise à jour des plugins..."
+                rm -rf /var/www/html/wp-content/plugins/*
+                cp -r "$TEMPLATE_WP_CONTENT/plugins"/* /var/www/html/wp-content/plugins/
+            fi
+
+            if [ -n "$(ls -A "$TEMPLATE_WP_CONTENT/themes" 2>/dev/null | grep -v '^index\.php$')" ]; then
+                echo "🗑️ Mise à jour des thèmes..."
+                rm -rf /var/www/html/wp-content/themes/*
+                cp -r "$TEMPLATE_WP_CONTENT/themes"/* /var/www/html/wp-content/themes/
+            fi
             
             # Copier mu-plugins
             if [ -d "$TEMPLATE_WP_CONTENT/mu-plugins" ]; then
