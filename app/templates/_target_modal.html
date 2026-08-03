@@ -1,0 +1,161 @@
+<!-- Create / edit a connection. A single modal with two steps:
+     1) the connection form, 2) an inline "new server" form (no second
+     modal). openServerFromConnection() / backToConnectionStep() swap them. -->
+<div class="modal fade" id="targetModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <span class="material-symbols-outlined">cable</span>
+          <span id="target-modal-title">{{ _('Add connection') }}</span>
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <!-- ── Step 1 — connection ── -->
+      <form id="targetForm" onsubmit="saveTarget(event)">
+        <input type="hidden" id="target-id">
+        <div class="modal-body">
+          <div class="profile-field">
+            <label for="target-label">{{ _('Connection name') }} *</label>
+            <input type="text" class="form-control" id="target-label" required
+                   placeholder="{{ _('e.g. Numerik → staging') }}">
+          </div>
+
+          <div class="profile-form-row two-cols">
+            <div class="profile-field" id="target-project-field">
+              <label for="target-project">{{ _('Project') }} *</label>
+              <select class="form-control" id="target-project" required>
+                <option value="">{{ _('Loading...') }}</option>
+              </select>
+            </div>
+            <div class="profile-field">
+              <label for="target-server">{{ _('Server') }} *</label>
+              <select class="form-control" id="target-server" required>
+                <option value="">{{ _('Loading...') }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="profile-field">
+            <label for="target-branch">{{ _('Branch') }}</label>
+            <input type="text" class="form-control" id="target-branch" placeholder="main">
+            <small class="profile-field-hint">{{ _('Leave empty to use the project default branch.') }}</small>
+          </div>
+
+          <div class="profile-field" id="target-deploy-path-field">
+            <label for="target-deploy-path">
+              {{ _('Deploy path on this server') }}
+              <small class="profile-field-hint">({{ _('optional; defaults to server base path / project name') }})</small>
+            </label>
+            <input type="text" class="form-control" id="target-deploy-path"
+                   placeholder="/var/www/vhosts/site/httpdocs/wp-content">
+            <small class="profile-field-hint" id="target-deploy-path-default-hint"></small>
+          </div>
+
+          <div class="profile-field">
+            <label for="target-git-remote">
+              {{ _('Git remote URL') }}
+              <small class="profile-field-hint">({{ _('optional, stored per project') }})</small>
+            </label>
+            <input type="text" class="form-control" id="target-git-remote"
+                   placeholder="git@github.com:org/repo.git">
+          </div>
+
+          <div id="target-error" class="deploy-alert" hidden></div>
+        </div>
+        <div class="modal-footer deploy-conn-footer">
+          <button type="button" class="deploy-fbtn is-add" onclick="openServerFromConnection()">
+            <span class="material-symbols-outlined">add</span>
+            <span>{{ _('Add server') }}</span>
+          </button>
+          <button type="button" class="deploy-fbtn is-cancel" data-bs-dismiss="modal">
+            <span class="material-symbols-outlined">close</span>
+            <span>{{ _('Cancel') }}</span>
+          </button>
+          <button type="submit" class="deploy-fbtn is-save">
+            <span class="material-symbols-outlined">save</span>
+            <span>{{ _('Save') }}</span>
+          </button>
+        </div>
+      </form>
+
+      <!-- ── Step 2 — new server (inline, same modal) ── -->
+      <form id="serverForm" onsubmit="saveServer(event)" hidden>
+        <input type="hidden" id="server-id">
+        <span id="server-modal-title" hidden></span>
+        <div class="modal-body">
+          <p class="deploy-server-step-hint">{{ _('Create a server to deploy to, then it will be selected for this connection.') }}</p>
+
+          <div class="profile-form-row two-cols">
+            <div class="profile-field">
+              <label for="server-label">{{ _('Label') }} *</label>
+              <input type="text" class="form-control" id="server-label" placeholder="acme-prod">
+            </div>
+            <div class="profile-field">
+              <label for="server-env">{{ _('Environment') }} *</label>
+              <select class="form-control" id="server-env">
+                <option value="staging">{{ _('Staging') }}</option>
+                <option value="production">{{ _('Production') }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="profile-form-row two-cols">
+            <div class="profile-field">
+              <label for="server-hostname">{{ _('Hostname') }} *</label>
+              <input type="text" class="form-control" id="server-hostname" placeholder="deploy.example.com">
+            </div>
+            <div class="profile-field">
+              <label for="server-ssh-port">{{ _('SSH port') }}</label>
+              <input type="number" class="form-control" id="server-ssh-port" value="22" min="1" max="65535">
+            </div>
+          </div>
+
+          <div class="profile-form-row two-cols">
+            <div class="profile-field">
+              <label for="server-ssh-user">{{ _('SSH user') }} *</label>
+              <input type="text" class="form-control" id="server-ssh-user" placeholder="deploy">
+            </div>
+            <div class="profile-field">
+              <label for="server-deploy-path">{{ _('Deploy base path') }} *</label>
+              <input type="text" class="form-control" id="server-deploy-path" placeholder="/var/www">
+            </div>
+          </div>
+
+          <div class="profile-field">
+            <label for="server-private-key">
+              {{ _('Private key') }}
+              <span id="server-key-hint" class="profile-field-hint" style="display:none;">
+                {{ _('Paste an OpenSSH private key. Leave empty to keep the current one.') }}
+              </span>
+            </label>
+            <textarea class="form-control profile-textarea" id="server-private-key" rows="5"
+                      placeholder="-----BEGIN OPENSSH PRIVATE KEY-----..."></textarea>
+          </div>
+
+          <div class="profile-field deploy-fingerprint-box" id="server-fingerprint-box" hidden>
+            <div class="deploy-fingerprint-label">{{ _('Pinned host fingerprint') }}</div>
+            <code class="deploy-fingerprint-value" id="server-fingerprint-value">—</code>
+          </div>
+
+          <div id="server-test-result" class="deploy-alert" hidden></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="ghost-btn" onclick="backToConnectionStep()">
+            <span class="material-symbols-outlined">arrow_back</span>
+            <span>{{ _('Back') }}</span>
+          </button>
+          <button type="button" class="btn-primary-dark" onclick="testServerConnection()">
+            <span class="material-symbols-outlined">wifi_tethering</span>
+            <span>{{ _('Test connection') }}</span>
+          </button>
+          <button type="submit" class="btn-primary-teal">
+            <span class="material-symbols-outlined">save</span>
+            <span>{{ _('Create server') }}</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

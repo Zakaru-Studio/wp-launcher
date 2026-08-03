@@ -576,6 +576,41 @@ function renderProjects() {
 /**
  * Fonction pour créer le HTML d'un projet
  */
+/** Minimal attribute escaper for values injected into HTML attributes. */
+function _escAttr(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/** Site favicon markup: try the production favicon(s), falling back
+ *  through the candidate list, and finally to the site's default icon
+ *  so a broken/absent favicon never leaves an empty square. */
+function siteFaviconMarkup(project, mainIcon) {
+    const urls = Array.isArray(project.favicon_urls) ? project.favicon_urls : [];
+    if (!urls.length) return `<i class="${mainIcon}"></i>`;
+    const first = urls[0];
+    const rest = urls.slice(1).join('|');
+    return `<img class="instance-favicon" src="${_escAttr(first)}" alt="" loading="lazy"
+                 referrerpolicy="no-referrer" data-fallbacks="${_escAttr(rest)}"
+                 data-icon="${_escAttr(mainIcon)}" onerror="onSiteFaviconError(this)">`;
+}
+
+/** onerror handler: advance to the next favicon candidate, or swap in the
+ *  default Font Awesome icon once the candidates are exhausted. */
+function onSiteFaviconError(img) {
+    const fb = (img.dataset.fallbacks || '').split('|').filter(Boolean);
+    if (fb.length) {
+        img.dataset.fallbacks = fb.slice(1).join('|');
+        img.src = fb[0];
+        return;
+    }
+    const i = document.createElement('i');
+    i.className = img.dataset.icon || 'fas fa-cube';
+    img.replaceWith(i);
+}
+window.onSiteFaviconError = onSiteFaviconError;
+
 function createProjectHTML(project) {
     // Services disponibles
     const services = [];
@@ -916,7 +951,7 @@ function createProjectHTML(project) {
 
             <div class="instance-strip-main" ${project.status === 'active' ? `onclick="toggleProject('${project.name}')" style="cursor: pointer;"` : 'style="cursor: default;"'}>
                 <div class="${iconBoxClass}">
-                    <i class="${mainIcon}"></i>
+                    ${siteFaviconMarkup(project, mainIcon)}
                 </div>
 
                 <div class="instance-body">

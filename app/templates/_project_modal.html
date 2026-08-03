@@ -1,0 +1,33 @@
+<!-- Create a deployment project (folder) from an existing launcher project -->
+<div class="modal fade" id="projectModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <span class="material-symbols-outlined">create_new_folder</span>
+          <span>{{ _('Create project') }}</span>
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form id="projectForm" onsubmit="saveProject(event)">
+        <div class="modal-body">
+          <div class="profile-field">
+            <label for="project-select">{{ _('Project') }} *</label>
+            <select class="form-control" id="project-select" required>
+              <option value="">{{ _('Loading...') }}</option>
+            </select>
+            <small class="profile-field-hint">{{ _('Pick one of your launcher projects to set up for deployment.') }}</small>
+          </div>
+          <div id="project-error" class="deploy-alert" hidden></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="ghost-btn" data-bs-dismiss="modal">{{ _('Cancel') }}</button>
+          <button type="submit" class="btn-primary-teal">
+            <span class="material-symbols-outlined">create_new_folder</span>
+            <span>{{ _('Create') }}</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

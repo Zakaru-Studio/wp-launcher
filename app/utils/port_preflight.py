@@ -155,7 +155,8 @@ def _write_sidecar_port(container_path: str, kind: str, new_port: int) -> None:
 
 def _update_wp_config(projects_folder: str, project_name: str,
                       old_port: int, new_port: int) -> bool:
-    """Rewrite WP_HOME / WP_SITEURL in projets/<project>/wp-config.php."""
+    """Rewrite the URLs carrying the old port in projets/<project>/wp-config.php:
+    WP_HOME, WP_SITEURL, WP_CONTENT_URL and the WP-CLI $_SERVER shims."""
     wp_config = os.path.join(projects_folder, project_name, 'wp-config.php')
     if not os.path.isfile(wp_config):
         return False
@@ -165,14 +166,24 @@ def _update_wp_config(projects_folder: str, project_name: str,
     except OSError:
         return False
     pattern = (
-        r"'(WP_HOME|WP_SITEURL)'\s*,\s*'http://([^:/'\"]+):"
+        r"'(WP_HOME|WP_SITEURL|WP_CONTENT_URL)'\s*,\s*'http://([^:/'\"]+):"
         + str(old_port)
-        + r"'"
+        + r"(/[^'\"]*)?'"
     )
     new_content = re.sub(
         pattern,
-        lambda m: f"'{m.group(1)}', 'http://{m.group(2)}:{new_port}'",
+        lambda m: f"'{m.group(1)}', 'http://{m.group(2)}:{new_port}{m.group(3) or ''}'",
         content,
+    )
+    new_content = re.sub(
+        r"(\$_SERVER\['SERVER_PORT'\]\s*=\s*')" + str(old_port) + r"(')",
+        lambda m: f"{m.group(1)}{new_port}{m.group(2)}",
+        new_content,
+    )
+    new_content = re.sub(
+        r"(\$_SERVER\['HTTP_HOST'\]\s*=\s*'[^:'\"]+:)" + str(old_port) + r"(')",
+        lambda m: f"{m.group(1)}{new_port}{m.group(2)}",
+        new_content,
     )
     if new_content != content:
         try:

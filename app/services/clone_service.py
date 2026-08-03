@@ -520,12 +520,13 @@ class CloneService:
             
             # Construire les nouvelles URLs
             new_url = f"http://{DockerConfig.LOCAL_IP}:{ports['wordpress']}"
-            new_content_url = f"http://{DockerConfig.LOCAL_IP}:{ports['wordpress']}/wp-content"
-            
+            # WP_CONTENT_URL est TOUJOURS dérivé de WP_HOME (jamais un port hardcodé),
+            # sinon un changement de port casse le CSS/JS des thèmes et plugins.
+
             print(f"🔧 [CLONE] Mise à jour wp-config.php:")
             print(f"   - WP_HOME: {new_url}")
             print(f"   - WP_SITEURL: {new_url}")
-            print(f"   - WP_CONTENT_URL: {new_content_url}")
+            print(f"   - WP_CONTENT_URL: WP_HOME . '/wp-content'")
             
             import re
             
@@ -561,26 +562,41 @@ class CloneService:
                     content = content[:insert_pos] + f"\ndefine( 'WP_SITEURL', '{new_url}' );\n" + content[insert_pos:]
                     print(f"✅ [CLONE] WP_SITEURL ajouté")
             
-            # Mettre à jour WP_CONTENT_URL (IMPORTANT!)
-            if "define( 'WP_CONTENT_URL'" in content or "define('WP_CONTENT_URL'" in content:
+            # Mettre à jour WP_CONTENT_URL (IMPORTANT!) — toujours relatif à WP_HOME
+            if "WP_CONTENT_URL" in content:
                 content = re.sub(
-                    r"define\s*\(\s*['\"]WP_CONTENT_URL['\"]\s*,\s*['\"][^'\"]+['\"]\s*\)\s*;",
-                    f"define('WP_CONTENT_URL', '{new_content_url}');",
+                    r"define\s*\(\s*['\"]WP_CONTENT_URL['\"]\s*,.*?\)\s*;",
+                    "define('WP_CONTENT_URL', WP_HOME . '/wp-content');",
                     content
                 )
-                print(f"✅ [CLONE] WP_CONTENT_URL mis à jour")
+                print(f"✅ [CLONE] WP_CONTENT_URL mis à jour (relatif à WP_HOME)")
             else:
                 # Ajouter WP_CONTENT_URL si inexistant
                 # Le placer après WP_CONTENT_DIR si possible
                 if "define('WP_CONTENT_DIR'" in content or "define( 'WP_CONTENT_DIR'" in content:
                     content = re.sub(
                         r"(define\s*\(\s*['\"]WP_CONTENT_DIR['\"][^;]+;)",
-                        f"\\1\ndefine('WP_CONTENT_URL', '{new_content_url}');",
+                        "\\1\ndefine('WP_CONTENT_URL', WP_HOME . '/wp-content');",
                         content,
                         count=1
                     )
                     print(f"✅ [CLONE] WP_CONTENT_URL ajouté après WP_CONTENT_DIR")
-            
+
+            # Mettre à jour le bloc de protection WP-CLI (SERVER_PORT / HTTP_HOST)
+            # qui garde sinon le port du projet source cloné.
+            wp_port = ports['wordpress']
+            content = re.sub(
+                r"(\$_SERVER\['SERVER_PORT'\]\s*=\s*)['\"][^'\"]+['\"]\s*;",
+                rf"\g<1>'{wp_port}';",
+                content
+            )
+            content = re.sub(
+                r"(\$_SERVER\['HTTP_HOST'\]\s*=\s*)['\"][^'\"]+['\"]\s*;",
+                rf"\g<1>'{DockerConfig.LOCAL_IP}:{wp_port}';",
+                content
+            )
+            print(f"✅ [CLONE] Bloc WP-CLI aligné sur le port {wp_port}")
+
             # Écrire le fichier modifié
             with open(wp_config_path, 'w') as f:
                 f.write(content)

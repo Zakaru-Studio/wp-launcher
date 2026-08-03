@@ -8,76 +8,43 @@
 {% block content %}
 <header class="page-header">
     <div class="page-header-text">
-        <h1 class="page-title">{{ _('Deployments') }}</h1>
-        <p class="page-subtitle">{{ _('Register servers, pin SSH fingerprints, and ship projects to staging or production.') }}</p>
+        <h1 class="page-title" id="deploy-page-title">{{ _('Deployments') }}</h1>
+        <p class="page-subtitle" id="deploy-page-subtitle">{{ _('Register servers, pin SSH fingerprints, and ship projects to staging or production.') }}</p>
     </div>
+    {#- Per-project deploy actions live inside each project card. The only
+        global action is jumping to the dedicated server management page. -#}
     <div class="page-header-actions">
-        {% if g.current_user and g.current_user.role == 'admin' %}
-        <button class="btn-primary-dark" data-bs-toggle="modal" data-bs-target="#serverModal" onclick="openServerModal()">
-            <span class="material-symbols-outlined">add</span>
-            <span>{{ _('Add server') }}</span>
-        </button>
+        {% if g.current_user.role == 'admin' %}
+        <a href="/deployments/servers" class="btn-primary-dark">
+            <span class="material-symbols-outlined">dns</span>
+            <span>{{ _('Manage servers') }}</span>
+        </a>
         {% endif %}
-        <button class="btn-primary-teal" data-bs-toggle="modal" data-bs-target="#deployModal">
-            <span class="material-symbols-outlined">rocket_launch</span>
-            <span>{{ _('Deploy') }}</span>
-        </button>
     </div>
 </header>
 
-<!-- Servers card (admin view shows CRUD, dev view shows read-only list) -->
-<section class="users-card deploy-section">
-    <header class="deploy-section-header">
-        <h2 class="deploy-section-title">{{ _('Servers') }}</h2>
-        <p class="deploy-section-subtitle">{{ _('Targets where deployments can land.') }}</p>
+<!-- Deployment projects — folders grouping their staging/prod
+     connections, each re-deployable in one click. -->
+<section class="users-card deploy-section" id="projects-section">
+    <header class="deploy-section-header deploy-section-header--row">
+        <div>
+            <h2 class="deploy-section-title">{{ _('Deployment projects') }}</h2>
+            <p class="deploy-section-subtitle">{{ _('One folder per project; add staging and production connections inside.') }}</p>
+        </div>
+        <button class="btn-primary-dark deploy-target-add-btn" id="create-project-btn"
+                onclick="openProjectModal()">
+            <span class="material-symbols-outlined">create_new_folder</span>
+            <span>{{ _('Create project') }}</span>
+        </button>
     </header>
-    <div class="users-table-wrap">
-        <table class="users-table deploy-servers-table">
-            <thead>
-                <tr>
-                    <th>{{ _('Label') }}</th>
-                    <th>{{ _('Environment') }}</th>
-                    <th>{{ _('Host') }}</th>
-                    <th>{{ _('User') }}</th>
-                    <th>{{ _('Fingerprint') }}</th>
-                    <th class="text-end">{{ _('Actions') }}</th>
-                </tr>
-            </thead>
-            <tbody id="servers-tbody">
-                <tr class="deploy-empty-row"><td colspan="6">{{ _('Loading...') }}</td></tr>
-            </tbody>
-        </table>
+    <div id="projects-view" class="deploy-projects-view">
+        <div class="deploy-targets-empty">{{ _('Loading...') }}</div>
     </div>
 </section>
 
-<!-- Deployment history -->
-<section class="users-card deploy-section">
-    <header class="deploy-section-header">
-        <h2 class="deploy-section-title">{{ _('Recent deployments') }}</h2>
-        <p class="deploy-section-subtitle">{{ _('Live view of the last runs across all servers.') }}</p>
-    </header>
-    <div class="users-table-wrap">
-        <table class="users-table deploy-history-table">
-            <thead>
-                <tr>
-                    <th>{{ _('Project') }}</th>
-                    <th>{{ _('Server') }}</th>
-                    <th>{{ _('Branch') }}</th>
-                    <th>{{ _('Commit') }}</th>
-                    <th>{{ _('Status') }}</th>
-                    <th>{{ _('Started') }}</th>
-                    <th class="text-end">{{ _('Actions') }}</th>
-                </tr>
-            </thead>
-            <tbody id="deployments-tbody">
-                <tr class="deploy-empty-row"><td colspan="7">{{ _('Loading...') }}</td></tr>
-            </tbody>
-        </table>
-    </div>
-</section>
-
-{% include '_server_modal.html' %}
 {% include '_deploy_modal.html' %}
+{% include '_project_modal.html' %}
+{% include '_target_modal.html' %}
 {% endblock %}
 
 {% block scripts %}
@@ -86,30 +53,63 @@
     t(key, fallback) lookups inside deployments.js. -#}
 <script type="application/json" id="deploy-i18n">
 {
+  "add_connection": "{{ _('Add connection') }}",
   "add_server": "{{ _('Add server') }}",
+  "all_projects_created": "{{ _('All your projects are already created') }}",
+  "back": "{{ _('Back') }}",
+  "confirm_delete_project": "{{ _('Delete this project and all its connections? Run history is kept.') }}",
+  "connection": "{{ _('connection') }}",
+  "connection_created": "{{ _('Connection created') }}",
+  "connection_deleted": "{{ _('Connection deleted') }}",
+  "connection_updated": "{{ _('Connection updated') }}",
+  "connections": "{{ _('connections') }}",
+  "configure": "{{ _('Configure') }}",
+  "edit_connection": "{{ _('Edit connection') }}",
+  "no_connection_short": "{{ _('no connection') }}",
+  "no_connection_yet": "{{ _("No connection yet. Click 'Add connection' to create staging or production.") }}",
+  "no_project_yet": "{{ _("No project yet. Click 'Create project' to add one.") }}",
+  "project_created": "{{ _('Project created') }}",
+  "project_deleted": "{{ _('Project deleted') }}",
   "admins_only": "{{ _('Admins only — contact an administrator to see servers.') }}",
   "cancel_deployment": "{{ _('Cancel deployment') }}",
   "cancel_failed": "{{ _('Cancel failed') }}",
   "confirm_cancel_deployment": "{{ _('Cancel this running deployment?') }}",
   "confirm_delete_server": "{{ _('Delete this server? Existing deployment history is kept.') }}",
+  "confirm_delete_target": "{{ _('Delete this deployment target? Its run history is kept.') }}",
+  "confirm_redeploy": "{{ _('Redeploy {project} on {server} ({branch})?') }}",
   "connection_failed": "{{ _('Connection failed.') }}",
   "connection_ok": "{{ _('Connection OK. Fingerprint pinned:') }}",
   "default": "{{ _('Default') }}",
   "delete": "{{ _('Delete') }}",
+  "deploy_cancelled_msg": "{{ _('Deployment was cancelled.') }}",
+  "deploy_error_msg": "{{ _('An error occurred during deployment.') }}",
+  "deploy_success_msg": "{{ _('Deployment completed successfully.') }}",
   "delete_failed": "{{ _('Delete failed') }}",
+  "deploy_now": "{{ _('Deploy') }}",
   "deployment_cancelled": "{{ _('Cancellation requested') }}",
   "deployment_refused": "{{ _('Deployment refused.') }}",
   "edit": "{{ _('Edit') }}",
   "edit_server": "{{ _('Edit server') }}",
+  "edit_target": "{{ _('Edit target') }}",
+  "environment": "{{ _('environment') }}",
+  "environments": "{{ _('environments') }}",
   "failed_load_deployments": "{{ _('Failed to load deployments.') }}",
   "failed_load_servers": "{{ _('Failed to load servers') }}",
+  "failed_load_targets": "{{ _('Failed to load targets.') }}",
+  "history": "{{ _('History') }}",
   "failed_save_git": "{{ _('Failed to save git config') }}",
   "failed_save_path": "{{ _('Failed to save deploy path') }}",
   "git_config_saved": "{{ _('Git config saved') }}",
+  "never_deployed": "{{ _('Never deployed') }}",
+  "new_server": "{{ _('New server') }}",
+  "new_target": "{{ _('New target') }}",
+  "no_env_connection": "{{ _('No {env} connection yet.') }}",
   "no_deployment_yet": "{{ _('No deployment yet.') }}",
   "no_log_output": "{{ _('(no log output)') }}",
+  "no_runs_yet": "{{ _('No runs yet for this target.') }}",
   "no_server_available": "{{ _('No server available') }}",
   "no_server_yet": "{{ _('No server registered yet. Click \"Add server\".') }}",
+  "no_target_yet": "{{ _('No saved target yet. Click \"New target\" to create one.') }}",
   "path_cleared": "{{ _('Override cleared — will use server default') }}",
   "path_saved": "{{ _('Custom deploy path saved') }}",
   "pick_project": "{{ _('Pick a project first.') }}",
@@ -118,11 +118,19 @@
   "project_and_server_required": "{{ _('Project and server are required.') }}",
   "request_failed": "{{ _('Request failed') }}",
   "save_failed": "{{ _('Save failed') }}",
+  "recent_activity": "{{ _('Recent activity') }}",
+  "redeploy": "{{ _('Redeploy') }}",
+  "see_less": "{{ _('See less') }}",
+  "see_more": "{{ _('See more') }}",
   "select_project": "{{ _('— Select a project —') }}",
   "select_server": "{{ _('— Select a server —') }}",
   "server_created": "{{ _('Server created') }}",
   "server_deleted": "{{ _('Server deleted') }}",
   "server_updated": "{{ _('Server updated') }}",
+  "target_created": "{{ _('Target created') }}",
+  "target_deleted": "{{ _('Target deleted') }}",
+  "target_label_required": "{{ _('A target name is required.') }}",
+  "target_updated": "{{ _('Target updated') }}",
   "test": "{{ _('Test') }}",
   "testing": "{{ _('Testing…') }}",
   "view_logs": "{{ _('View logs') }}"

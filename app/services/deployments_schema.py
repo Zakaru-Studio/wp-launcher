@@ -15,7 +15,7 @@ import sqlite3
 from typing import Optional
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 4
 
 
 def connect(db_path: str) -> sqlite3.Connection:
@@ -104,6 +104,43 @@ def _create_tables(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    # A named, reusable deployment configuration ("target"): freeze a
+    # (project, server, branch) triple once and re-deploy it in one
+    # click. The UNIQUE constraint keeps the list free of duplicates;
+    # the FK cascades a target away when its server is deleted.
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS deployment_targets (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            label          TEXT NOT NULL,
+            project_name   TEXT NOT NULL,
+            server_id      INTEGER NOT NULL,
+            branch         TEXT NOT NULL DEFAULT 'main',
+            created_by     INTEGER,
+            created_at     TEXT NOT NULL,
+            updated_at     TEXT NOT NULL,
+            UNIQUE(project_name, server_id, branch),
+            FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE
+        )
+        """
+    )
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_target_project "
+        "ON deployment_targets(project_name)"
+    )
+    # A registered deployment "project" — a folder that groups one or
+    # more connections (deployment_targets). A project can exist with
+    # zero connections (freshly created). The main view lists these; a
+    # project maps 1:1 to a real launcher project by name.
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS deployment_projects (
+            project_name  TEXT PRIMARY KEY,
+            created_by    INTEGER,
+            created_at    TEXT NOT NULL
+        )
+        """
+    )
 
 
 def _migrate(conn: sqlite3.Connection) -> None:
@@ -125,6 +162,23 @@ def _migrate(conn: sqlite3.Connection) -> None:
     # SQLite can't ALTER a CHECK constraint; rebuild the table.
     if current < 2 and _needs_cancelled_status_rebuild(conn):
         _rebuild_deployments_with_cancelled(conn)
+
+    # --- v3 -----------------------------------------------------------
+    # Adds the `deployment_targets` table (reusable one-click deploy
+    # configs). Nothing to backfill: `_create_tables` already ran its
+    # CREATE IF NOT EXISTS above, so the bump just records the version.
+
+    # --- v4 -----------------------------------------------------------
+    # Adds the `deployment_projects` folder registry. Back-populate it
+    # from any existing targets so pre-v4 connections stay visible under
+    # their project after the UI switches to the folder view.
+    if current < 4:
+        conn.execute(
+            "INSERT OR IGNORE INTO deployment_projects (project_name, created_by, created_at) "
+            "SELECT DISTINCT project_name, NULL, "
+            "       COALESCE(MIN(created_at), datetime('now')) "
+            "FROM deployment_targets GROUP BY project_name"
+        )
 
     conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 

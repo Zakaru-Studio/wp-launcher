@@ -290,6 +290,22 @@ def register_socketio_handlers(socketio):
             leave_room(project_name)
             print(f'📡 Client quitte la room du projet: {project_name}')
     
+    @socketio.on('join')
+    def handle_join(data):
+        """Rejoindre une room générique (ex: deploy_<id> pour le log live)."""
+        room = (data or {}).get('room')
+        if room:
+            join_room(room)
+            print(f'📡 Client rejoint la room: {room}')
+
+    @socketio.on('leave')
+    def handle_leave(data):
+        """Quitter une room générique."""
+        room = (data or {}).get('room')
+        if room:
+            leave_room(room)
+            print(f'📡 Client quitte la room: {room}')
+
     # Gestionnaires d'événements pour les tâches synchronisées
     @socketio.on('task_created')
     def handle_task_created(data):
