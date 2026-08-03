@@ -49,6 +49,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Port reallocation and repair routes matched a hardcoded `0.0.0.0:` prefix
   and would have silently stopped matching on newly created projects.
+- Stopping a project no longer removes its Docker network. Doing so left the
+  stopped containers pointing at a dead network id, and the next start failed
+  with `network <id> not found`. Docker's address pool is configured through
+  `/etc/docker/daemon.json` instead — see the Deployment section.
 
 ## [1.4.0] - 2026-08-03
 

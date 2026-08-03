@@ -8,7 +8,7 @@
 
 **An open source project by [Zakaru Studio](https://github.com/Zakaru-Studio).**
 
-![WP Launcher](docs/wp-launcher.png)
+![WP Launcher](app/static/images/screenshot.png)
 
 A web application to create, manage, and maintain WordPress (and Next.js) projects via Docker containers.
 
@@ -262,6 +262,32 @@ loopback and stay off the internet. Tunnel in instead:
 ```bash
 ssh -L 8081:127.0.0.1:8081 user@your-vps   # then open http://localhost:8081
 ```
+
+### Docker address pools
+
+Each project gets its own bridge network, and Docker's stock pools only
+allow around 30 of them. Past that, creating a project fails with
+`all predefined address pools have been fully subnetted`. Stopping a project
+does **not** free its network — that is deliberate, since removing it leaves
+the stopped containers unable to restart.
+
+If you plan to host more than a handful of sites, widen the pools in
+`/etc/docker/daemon.json` and restart the daemon (this restarts every
+container):
+
+```json
+{
+  "default-address-pools": [
+    { "base": "172.20.0.0/14", "size": 24 },
+    { "base": "10.201.0.0/16", "size": 24 }
+  ]
+}
+```
+
+Avoid `192.168.0.0/16` here if your LAN lives in that range — the stock
+pools use it and can collide.
+
+`docker network prune` frees the networks of projects you have deleted.
 
 ### Firewall
 

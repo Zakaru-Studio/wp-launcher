@@ -448,7 +448,6 @@ class DockerService:
 
             # Log du résultat
             if success:
-                self._release_project_network(project_name)
                 wp_logger.log_docker_operation('stop', project_name, True,
                                              result.stdout,
                                              "",
@@ -478,47 +477,6 @@ class DockerService:
         finally:
             os.chdir(original_cwd)
     
-    def _release_project_network(self, project_name):
-        """Libère le réseau bridge d'un projet arrêté.
-
-        ``docker-compose stop`` laisse l'objet réseau en place, et chaque
-        réseau consomme un sous-réseau du pool Docker. Avec assez de projets
-        arrêtés le pool s'épuise et toute création de projet échoue sur
-        « all predefined address pools have been fully subnetted ».
-
-        Contrepartie assumée : au redémarrage suivant, le warm restart
-        (``docker-compose start``) échouera puisque le réseau a disparu, et
-        ``start_containers`` retombera sur ``up -d`` — plus lent, mais il
-        recrée le réseau et les conteneurs sans perte de données (elles sont
-        dans les volumes et les bind mounts).
-
-        Deux garde-fous. Docker refuse de lui-même de supprimer un réseau
-        ayant des endpoints *actifs*. Mais les instances de dev déclarent ce
-        réseau en ``external: true`` (dev_instance_service) : si elles sont
-        elles aussi à l'arrêt, la suppression passerait, et leur ``up -d``
-        échouerait ensuite sur « network declared as external, but could not
-        be found » — un réseau externe ne se recrée pas tout seul. On
-        s'abstient donc dès qu'un projet a des instances.
-
-        Best-effort par ailleurs : toute erreur est ignorée.
-        """
-        instances_dir = os.path.join(
-            DockerConfig.PROJECTS_FOLDER, project_name, '.dev-instances'
-        )
-        if os.path.isdir(instances_dir) and os.listdir(instances_dir):
-            return
-
-        network = f"{project_name}_wordpress_network"
-        try:
-            result = subprocess.run(
-                ['docker', 'network', 'rm', network],
-                capture_output=True, text=True, timeout=15,
-            )
-            if result.returncode == 0:
-                print(f"🧹 [DOCKER_SERVICE] Réseau {network} libéré")
-        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-            pass
-
     def remove_containers(self, container_path, timeout=60):
         """Supprime complètement les conteneurs d'un projet depuis containers/"""
         original_cwd = os.getcwd()
