@@ -6,20 +6,74 @@ import subprocess
 import os
 from typing import Optional
 
-# Version déclarée de l'application : source de vérité pour l'affichage.
-# À incrémenter à chaque release, en cohérence avec le tag Git `vX.Y.Z`
-# et l'entrée correspondante du CHANGELOG.
-__version__ = "1.4.1"
+# Repli de dernier recours, utilisé seulement si ni l'archive ni le dépôt Git
+# ne renseignent la version. Le CI vérifie qu'il correspond au tag publié
+# (job `version` de .github/workflows/ci.yml), donc il ne peut pas dériver en
+# silence.
+__version__ = "1.5.0"
+
+# Fichier porteur du jeton de substitution. `git archive` y remplace
+# $Format:%(describe:tags)$ par le tag du commit archivé — y compris pour les
+# archives générées automatiquement par GitHub sur une release.
+_VERSION_FILE = os.path.join(os.path.dirname(__file__), '_version.txt')
+
+# Marqueur d'un jeton NON substitué : présent tant qu'on lit le fichier
+# depuis un dépôt Git plutôt que depuis une archive.
+_UNSUBSTITUTED = '$Format:'
+
+
+def _version_from_archive() -> Optional[str]:
+    """Version injectée par `git archive` à la création de l'archive."""
+    try:
+        with open(_VERSION_FILE, 'r') as handle:
+            value = handle.read().strip()
+    except OSError:
+        return None
+    if not value or value.startswith(_UNSUBSTITUTED):
+        return None
+    return value
+
+
+def _version_from_git() -> Optional[str]:
+    """Dernier tag atteignable, sans suffixe.
+
+    `--abbrev=0` volontairement : `git describe` seul ajoute `-N-gHASH` et
+    `-dirty` selon l'état de l'arbre, ce qui n'a pas sa place dans une version
+    affichée à l'utilisateur.
+    """
+    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    if not os.path.exists(os.path.join(root_dir, '.git')):
+        return None
+    try:
+        result = subprocess.run(
+            ['git', 'describe', '--tags', '--abbrev=0'],
+            capture_output=True, text=True, cwd=root_dir, timeout=5,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return None
+    if result.returncode != 0:
+        return None
+    value = result.stdout.strip()
+    return value or None
 
 
 def get_app_version() -> str:
     """
-    Version affichée dans l'interface (ex. 'v1.4.0').
+    Version affichée dans l'interface (ex. 'v1.5.0').
 
-    Volontairement indépendante de Git : `git describe` renvoie des suffixes
-    parasites (`-dirty`, `-N-gHASH`) selon l'état du dépôt, et retombe sur
-    'v0.0.0-dev' en production où le `.git` est absent.
+    Trois sources, de la plus fiable à la moins fiable :
+
+    1. la substitution faite par `git archive` — c'est le cas d'une release
+       téléchargée, où le `.git` est absent ;
+    2. le dernier tag du dépôt, pour une installation clonée ;
+    3. la constante déclarée, si aucune des deux n'est disponible.
+
+    L'ensemble suit donc le tag automatiquement : publier `v1.5.1` suffit à
+    faire changer la version affichée, sans édition de code.
     """
+    version = _version_from_archive() or _version_from_git()
+    if version:
+        return version if version.startswith('v') else f'v{version}'
     return f"v{__version__}"
 
 

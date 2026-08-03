@@ -5433,7 +5433,6 @@ a.instance-icon-btn:hover { text-decoration: none; }
     gap: 10px;
     width: 100%;
     padding: 10px 12px;
-    margin-bottom: 10px;
     background: var(--al-secondary-container);
     color: var(--al-on-secondary-container);
     border: none;

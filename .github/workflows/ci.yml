@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [main, develop]
+    tags: ['v*']
   pull_request:
     branches: [main, develop]
 
@@ -90,3 +91,51 @@ jobs:
       # un CI au vert.
       - name: Run gitleaks
         run: gitleaks detect --source . --config .gitleaks.toml --no-banner --redact --verbose
+
+  version:
+    name: Version matches tag
+    runs-on: ubuntu-latest
+    # Uniquement sur un tag : ailleurs il n'y a rien à comparer.
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # La version affichée est normalement dérivée du tag — par substitution
+      # git archive pour une release téléchargée, par `git describe` pour un
+      # clone. __version__ n'est qu'un repli de dernier recours, mais un repli
+      # faux resterait invisible : ce garde-fou l'interdit.
+      - name: Compare __version__ with the pushed tag
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          DECLARED=$(python3 -c "import re,pathlib; \
+            print(re.search(r'^__version__ = \"([^\"]+)\"', \
+            pathlib.Path('app/utils/version_utils.py').read_text(), re.M).group(1))")
+          echo "tag=$TAG  __version__=$DECLARED"
+          if [ "$TAG" != "$DECLARED" ]; then
+            echo "::error::__version__ ($DECLARED) ne correspond pas au tag ($TAG)."
+            echo "Mettre à jour __version__ dans app/utils/version_utils.py."
+            exit 1
+          fi
+
+      # Vérifie que la substitution fonctionne réellement dans une archive,
+      # plutôt que de la supposer.
+      - name: Check archive substitution
+        run: |
+          git archive --format=tar "$GITHUB_REF_NAME" -- app/utils/_version.txt \
+            | tar -xO app/utils/_version.txt > /tmp/version.txt
+          ARCHIVED=$(cat /tmp/version.txt)
+          echo "archive → $ARCHIVED"
+          # `if` plutôt que `grep && { … }` : le AND-list renvoie l'échec de
+          # grep, donc le step tomberait précisément dans le cas nominal où le
+          # jeton A bien été substitué. Les conditions de `if` échappent au -e.
+          if [ "${ARCHIVED#\$Format:}" != "$ARCHIVED" ]; then
+            echo "::error::export-subst n'a pas substitué le jeton — vérifier .gitattributes"
+            exit 1
+          fi
+          if [ "$ARCHIVED" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::archive=$ARCHIVED ≠ tag=$GITHUB_REF_NAME"
+            exit 1
+          fi

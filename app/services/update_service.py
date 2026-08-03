@@ -26,7 +26,20 @@ import urllib.error
 import urllib.request
 
 from app.utils.logger import wp_logger
-from app.utils.version_utils import __version__ as CURRENT_VERSION
+from app.utils.version_utils import get_app_version
+
+
+def _current_version() -> str:
+    """
+    Version installée, résolue à chaque appel.
+
+    On passe par `get_app_version()` — qui consulte l'archive puis le tag Git
+    avant de retomber sur la constante — et non par `__version__` : cette
+    constante n'est qu'un repli de dernier recours, et la lire à l'import
+    figerait la valeur, donc l'afficherait périmée juste après une mise à
+    jour. Le comparateur doit voir la même version que la barre latérale.
+    """
+    return get_app_version().lstrip('v')
 
 # Fenêtre de cache : l'API GitHub non authentifiée est limitée à 60 appels
 # par heure et par IP, et le bouton est interrogé à chaque chargement de page.
@@ -125,8 +138,9 @@ def check_for_update(force: bool = False) -> dict:
         if _cache['payload'] and fresh and not force:
             return _cache['payload']
 
+    current = _current_version()
     result = {
-        'current_version': f'v{CURRENT_VERSION}',
+        'current_version': f'v{current}',
         'latest_version': None,
         'update_available': False,
         'release_url': None,
@@ -144,7 +158,7 @@ def check_for_update(force: bool = False) -> dict:
         result['latest_version'] = tag
         result['release_url'] = url
         result['published_at'] = published
-        result['update_available'] = bool(tag) and is_newer(tag, CURRENT_VERSION)
+        result['update_available'] = bool(tag) and is_newer(tag, current)
     except urllib.error.HTTPError as exc:
         result['error'] = f'GitHub a répondu {exc.code}'
     except Exception as exc:  # réseau coupé, DNS, JSON invalide…
@@ -203,8 +217,9 @@ def apply_update(target: str = None) -> dict:
     tag = target or info.get('latest_version')
     if not tag:
         return {'success': False, 'error': info.get('error') or 'aucune release trouvée'}
-    if not is_newer(tag, CURRENT_VERSION):
-        return {'success': False, 'error': f'déjà à jour (version {CURRENT_VERSION})'}
+    current = _current_version()
+    if not is_newer(tag, current):
+        return {'success': False, 'error': f'déjà à jour (version {current})'}
 
     ok, before = _run(['git', 'rev-parse', 'HEAD'], timeout=15)
     if not ok:
@@ -240,12 +255,12 @@ def apply_update(target: str = None) -> dict:
                 'error': f'installation des dépendances échouée, retour à la version précédente : {out[-400:]}',
             }
 
-    wp_logger.log_system_info(f'Mise à jour appliquée : {CURRENT_VERSION} -> {tag}')
+    wp_logger.log_system_info(f'Mise à jour appliquée : {current} -> {tag}')
     threading.Thread(target=_restart_service, daemon=True).start()
 
     return {
         'success': True,
-        'previous_version': f'v{CURRENT_VERSION}',
+        'previous_version': f'v{current}',
         'new_version': tag,
         'dependencies_updated': deps_changed,
         'message': 'Mise à jour appliquée. Le service redémarre…',

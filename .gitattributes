@@ -1,0 +1,8 @@
+# Substitution à l'archivage (git archive, et donc les archives générées par
+# GitHub sur une release) : le jeton $Format:...$ du fichier ci-dessous est
+# remplacé par le tag décrivant le commit archivé.
+#
+# C'est ce qui permet à la version affichée de suivre le tag sans que personne
+# n'ait à penser à l'incrémenter, et sans workflow qui recommiterait sur une
+# branche protégée.
+app/utils/_version.txt export-subst
