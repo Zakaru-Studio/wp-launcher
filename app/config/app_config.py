@@ -20,7 +20,9 @@ APP_HOST = DockerConfig.LOCAL_IP
 APP_PORT = DockerConfig.APP_PORT
 APP_URL = f"http://{APP_HOST}:{APP_PORT}"
 
-# Version déclarée de l'application (cf. app/utils/version_utils.py)
+# Instantané pris au démarrage, conservé pour les appelants historiques.
+# NE PAS l'utiliser pour un affichage : elle est figée à l'import et ne suit
+# pas un changement de tag. Passer par get_app_version(), qui résout à l'appel.
 APP_VERSION = get_app_version()
 
 def create_app():

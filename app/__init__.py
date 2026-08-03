@@ -135,8 +135,13 @@ def create_app():
     @app.context_processor
     def inject_globals():
         """Injecte des variables globales dans tous les templates"""
+        # Résolue à la requête, pas figée à l'import : sinon la barre latérale
+        # continue d'afficher l'ancienne version après un changement de tag,
+        # même en rechargeant. get_app_version() a son propre cache de 30 s,
+        # donc ça ne relance pas `git describe` à chaque rendu.
+        from app.utils.version_utils import get_app_version
         return {
-            'app_version': APP_VERSION
+            'app_version': get_app_version()
         }
 
     @app.after_request
@@ -336,6 +341,16 @@ def register_socketio_handlers(socketio):
     def handle_connect():
         """Gestion de la connexion WebSocket"""
         print('🔌 Client connecté via WebSocket')
+
+        # Annoncer la version au client dès la connexion. Le socket se
+        # reconnecte tout seul après un redémarrage du service, donc un onglet
+        # resté ouvert pendant une mise à jour reçoit la nouvelle version sans
+        # que l'utilisateur ait à recharger.
+        try:
+            from app.utils.version_utils import get_app_version
+            emit('app_version', {'version': get_app_version(refresh=True)})
+        except Exception:  # noqa: BLE001
+            pass
     
     @socketio.on('disconnect')
     def handle_disconnect():

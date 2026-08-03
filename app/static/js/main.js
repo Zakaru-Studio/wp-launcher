@@ -148,6 +148,21 @@ function debouncedRefreshProjects() {
 function setupProjectSocketEvents() {
     if (!socket) return;
 
+    // Version annoncée par le serveur à chaque connexion. Le socket se
+    // reconnecte tout seul après un redémarrage du service, donc un onglet
+    // resté ouvert pendant une mise à jour affiche la nouvelle version sans
+    // rechargement manuel — la valeur rendue côté serveur, elle, date du
+    // chargement de la page.
+    socket.on('app_version', function (data) {
+        const version = data && data.version;
+        if (!version) return;
+        document.querySelectorAll('.brand-subtitle').forEach(el => {
+            if (el.textContent.trim() !== version) {
+                el.textContent = version;
+            }
+        });
+    });
+
     // Événements de progression de tâches
     socket.on('task_progress', function(data) {
 

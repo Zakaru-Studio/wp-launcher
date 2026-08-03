@@ -3,6 +3,7 @@
 Utilitaires pour gérer la version de l'application
 """
 import subprocess
+import time
 import os
 from typing import Optional
 
@@ -57,7 +58,14 @@ def _version_from_git() -> Optional[str]:
     return value or None
 
 
-def get_app_version() -> str:
+#: Cache de la version résolue : (valeur, instant). `git describe` lance un
+#: sous-processus, inutile de le refaire à chaque rendu de page — mais la
+#: figer à l'import l'afficherait périmée après une mise à jour.
+_cache: tuple = (None, 0.0)
+_CACHE_TTL_SECONDS = 30
+
+
+def get_app_version(refresh: bool = False) -> str:
     """
     Version affichée dans l'interface (ex. 'v1.5.0').
 
@@ -70,11 +78,23 @@ def get_app_version() -> str:
 
     L'ensemble suit donc le tag automatiquement : publier `v1.5.1` suffit à
     faire changer la version affichée, sans édition de code.
+
+    Le résultat est mis en cache 30 s. Assez pour ne pas relancer
+    `git describe` à chaque rendu de page, assez court pour qu'un changement
+    de tag se voie sans redémarrer le processus.
     """
+    global _cache
+    cached, fetched_at = _cache
+    if cached and not refresh and (time.monotonic() - fetched_at) < _CACHE_TTL_SECONDS:
+        return cached
+
     version = _version_from_archive() or _version_from_git()
-    if version:
-        return version if version.startswith('v') else f'v{version}'
-    return f"v{__version__}"
+    resolved = (
+        (version if version.startswith('v') else f'v{version}')
+        if version else f"v{__version__}"
+    )
+    _cache = (resolved, time.monotonic())
+    return resolved
 
 
 def get_git_version() -> str:
