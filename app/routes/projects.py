@@ -14,8 +14,13 @@ from app.middleware.auth_middleware import login_required, admin_required
 projects_bp = Blueprint('projects', __name__)
 
 # Configuration des constantes
-PROJECTS_FOLDER = 'projets'
-CONTAINERS_FOLDER = 'containers'
+# Chemins ABSOLUS, jamais relatifs : le service Docker change le répertoire
+# courant du processus (os.chdir) pendant les opérations sur les conteneurs,
+# et l'app tourne dans un seul worker. Un chemin relatif évalué pendant cette
+# fenêtre pointe ailleurs — c'est ce qui faisait retourner une liste de sites
+# vide en plein milieu d'une création.
+PROJECTS_FOLDER = DockerConfig.PROJECTS_FOLDER
+CONTAINERS_FOLDER = DockerConfig.CONTAINERS_FOLDER
 
 
 _FAVICON_EXTS = ('png', 'ico', 'svg', 'jpg', 'jpeg')
@@ -79,9 +84,17 @@ def list_projects():
     
     # Fallback si le service n'est pas disponible
     projects = []
-    
-    if not os.path.exists(PROJECTS_FOLDER):
-        return jsonify([])
+
+    # Même raison qu'à /projects_with_status : ne pas faire passer une
+    # installation cassée pour une instance sans projet.
+    if not os.path.isdir(PROJECTS_FOLDER):
+        current_app.logger.error(
+            "Projects folder is missing: %s", PROJECTS_FOLDER
+        )
+        return jsonify({
+            'error': 'projects_folder_missing',
+            'message': f'Projects folder not found: {PROJECTS_FOLDER}',
+        }), 500
     
     for project_name in os.listdir(PROJECTS_FOLDER):
         project_path = os.path.join(PROJECTS_FOLDER, project_name)
@@ -104,9 +117,18 @@ def list_projects():
 def list_projects_with_status():
     """Liste les projets avec leurs informations complètes"""
     projects = []
-    
-    if not os.path.exists(PROJECTS_FOLDER):
-        return jsonify([])
+
+    # Un dossier de projets absent est une anomalie d'installation, pas une
+    # instance sans projet. Répondre 200 avec une liste vide faisait afficher
+    # « 0 site » au lieu de conserver l'affichage précédent côté client.
+    if not os.path.isdir(PROJECTS_FOLDER):
+        current_app.logger.error(
+            "Projects folder is missing: %s", PROJECTS_FOLDER
+        )
+        return jsonify({
+            'error': 'projects_folder_missing',
+            'message': f'Projects folder not found: {PROJECTS_FOLDER}',
+        }), 500
     
     # Obtenir les services depuis l'application
     docker_service = current_app.extensions.get('docker')

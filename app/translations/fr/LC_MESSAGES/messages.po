@@ -585,3 +585,21 @@ msgstr "Clair"
 
 msgid "Dark"
 msgstr "Sombre"
+
+msgid "Update"
+msgstr "Mettre à jour"
+
+msgid "An update is available"
+msgstr "Une mise à jour est disponible"
+
+msgid "Update the application"
+msgstr "Mettre à jour l'application"
+
+msgid "Update now"
+msgstr "Mettre à jour maintenant"
+
+msgid "View release notes"
+msgstr "Voir les notes de version"
+
+msgid "The application will be updated to the latest release, then restarted. Running sites are not affected."
+msgstr "L'application sera mise à jour vers la dernière version, puis redémarrée. Les sites en cours d'exécution ne sont pas affectés."

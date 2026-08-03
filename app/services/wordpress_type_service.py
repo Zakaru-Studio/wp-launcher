@@ -7,6 +7,7 @@ Gère la détection, les limites de ressources et la configuration
 import os
 from pathlib import Path
 from typing import Dict, Optional
+from app.config.docker_config import DockerConfig
 
 
 class WordPressTypeService:
@@ -16,9 +17,10 @@ class WordPressTypeService:
     TYPE_SHOWCASE = 'showcase'
     TYPE_WOOCOMMERCE = 'woocommerce'
     
-    def __init__(self, projects_folder='projets', containers_folder='containers'):
-        self.projects_folder = projects_folder
-        self.containers_folder = containers_folder
+    def __init__(self, projects_folder=None, containers_folder=None):
+        # Défauts absolus — voir app/models/project.py pour le pourquoi.
+        self.projects_folder = projects_folder or DockerConfig.PROJECTS_FOLDER
+        self.containers_folder = containers_folder or DockerConfig.CONTAINERS_FOLDER
     
     def detect_woocommerce(self, project_name: str) -> bool:
         """

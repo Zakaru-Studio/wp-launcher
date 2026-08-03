@@ -52,6 +52,16 @@ function initProgressTracking() {
     socket = sharedSocket;
 
     // IMPORTANT: Attacher les listeners au socket existant (même s'il a été créé ailleurs)
+
+    // Un projet vient d'être créé, ici ou depuis un autre onglet/utilisateur.
+    // C'est le chemin nominal du rafraîchissement ; awaitProjectInList() reste
+    // le filet quand le socket est indisponible.
+    socket.on('project_created', function (data) {
+        const name = data && data.project_name;
+        console.log('📡 Projet créé:', name);
+        loadProjects({ silent: true });
+    });
+
     // Écouter les événements de création de projet
     socket.on('project_creation', function (data) {
 
@@ -468,6 +478,33 @@ async function loadProjects({ silent = false } = {}) {
 // Tracks consecutive loadProjects() failures so we don't spam the
 // notification bell with identical "Erreur" entries.
 let _loadProjectsErrorCount = 0;
+
+/**
+ * Recharge la liste jusqu'à ce que `name` y apparaisse.
+ *
+ * Le rafraîchissement après création se contentait d'un `setTimeout` d'une
+ * seconde : trop court dès que la création se termine plus tard, et sans
+ * seconde chance avant le sondage de 30 s. Le site restait alors invisible
+ * jusqu'à un rechargement manuel.
+ *
+ * Intervalles croissants pour ne pas marteler l'API pendant que Docker
+ * travaille encore.
+ */
+const _AWAIT_PROJECT_DELAYS_MS = [400, 800, 1500, 2500, 4000, 6000];
+
+async function awaitProjectInList(name) {
+    for (const delay of _AWAIT_PROJECT_DELAYS_MS) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+        await loadProjects({ silent: true });
+        if (!name) return;
+        if (Array.isArray(projects) && projects.some(p => p && p.name === name)) {
+            return;
+        }
+    }
+    // Toujours absent : le sondage périodique finira par le rattraper.
+    console.warn(`Projet "${name}" toujours absent de la liste après attente.`);
+}
+window.awaitProjectInList = awaitProjectInList;
 
 // Poll interval handle — owned by the bottom boot section, exposed
 // here so _handleSessionExpired can cancel it without importing it.
@@ -2269,8 +2306,10 @@ function initCreateProjectForm() {
                     // Réinitialiser le formulaire
                     form.reset();
                     clearFile();
-                    // Recharger les projets
-                    setTimeout(() => loadProjects(), 1000);
+                    // Recharger jusqu'à ce que le projet apparaisse. Le
+                    // serveur diffuse aussi `project_created`, mais on ne
+                    // dépend pas de la présence du socket.
+                    awaitProjectInList(data.project_name || projectName);
                 } else {
                     if (task && typeof taskManager !== 'undefined') {
                         taskManager.completeTask(task.id, data.message || 'Erreur lors de la création du projet', false);

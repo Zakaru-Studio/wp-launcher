@@ -3,7 +3,7 @@
 Routes pour la gestion du système
 """
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from app.utils.logger import wp_logger
 import os
 import subprocess
@@ -68,3 +68,27 @@ def restart_app():
 
 
 
+
+
+@system_bp.route('/api/system/update/check', methods=['GET'])
+@admin_required
+def check_update():
+    """
+    État de mise à jour (version courante, dernière release, disponibilité).
+
+    Interrogé à chaque chargement de page : le service met le résultat en
+    cache une heure pour ne pas épuiser le quota de l'API GitHub.
+    """
+    from app.services import update_service
+    force = request.args.get('force') == '1'
+    return jsonify(update_service.check_for_update(force=force))
+
+
+@system_bp.route('/api/system/update/apply', methods=['POST'])
+@admin_required
+def apply_update():
+    """Applique la dernière release puis redémarre le service."""
+    from app.services import update_service
+    payload = request.get_json(silent=True) or {}
+    result = update_service.apply_update(target=payload.get('version'))
+    return jsonify(result), (200 if result.get('success') else 409)

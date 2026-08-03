@@ -5396,6 +5396,78 @@ a.instance-icon-btn:hover { text-decoration: none; }
     animation: spin 1s linear infinite;
 }
 
+/* ── Bouton « Update » (au-dessus du menu profil) ──
+   Masqué par défaut via l'attribut [hidden] du template ; update-manager.js
+   le révèle uniquement si une release plus récente existe. */
+.sidebar-update-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    background: var(--al-secondary-container);
+    color: var(--al-on-secondary-container);
+    border: none;
+    border-radius: 10px;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.18s ease, transform 0.18s ease;
+}
+.sidebar-update-btn[hidden] { display: none; }
+.sidebar-update-btn:hover { transform: translateY(-1px); }
+.sidebar-update-btn .material-symbols-outlined {
+    font-size: 1.2rem;
+    flex-shrink: 0;
+}
+.sidebar-update-text { flex: 1; text-align: left; }
+.sidebar-update-version {
+    font-size: 0.72rem;
+    font-weight: 500;
+    opacity: 0.8;
+    white-space: nowrap;
+}
+
+/* Thème sombre : --al-secondary-container y est un gris neutre (#444650),
+   on repasse sur la primaire turquoise pour que l'appel à l'action ressorte. */
+[data-theme="dark"] .sidebar-update-btn {
+    background: color-mix(in srgb, var(--al-primary) 18%, var(--al-surface-container));
+    color: var(--al-primary);
+}
+[data-theme="dark"] .sidebar-update-btn:hover {
+    background: color-mix(in srgb, var(--al-primary) 28%, var(--al-surface-container));
+}
+
+/* Message d'erreur de la modale de mise à jour */
+.update-error {
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--al-error) 14%, transparent);
+    color: var(--al-error);
+    font-size: 0.82rem;
+    white-space: pre-wrap;
+}
+.update-error[hidden] { display: none; }
+
+.update-release-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 10px;
+    font-size: 0.82rem;
+    color: var(--al-secondary);
+    text-decoration: none;
+}
+.update-release-link:hover { text-decoration: underline; }
+.update-release-link[hidden] { display: none; }
+.update-release-link .material-symbols-outlined { font-size: 1rem; }
+
+#confirm-update-app.is-busy .material-symbols-outlined {
+    animation: spin 1s linear infinite;
+}
+
 /* ── Pied de sidebar ── */
 .sidebar-footer { flex-wrap: nowrap; }
 

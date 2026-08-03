@@ -38,6 +38,17 @@
         {% endif %}
     </nav>
 
+    {% if g.current_user.role == 'admin' %}
+    {# Masqué tant qu'aucune release plus récente n'est publiée (cf. update-manager.js) #}
+    <button type="button" class="sidebar-update-btn" id="sidebar-update-btn" hidden
+            onclick="openUpdateModal()"
+            title="{{ _('An update is available') }}">
+        <span class="material-symbols-outlined">system_update_alt</span>
+        <span class="sidebar-update-text">{{ _('Update') }}</span>
+        <span class="sidebar-update-version" id="sidebar-update-version"></span>
+    </button>
+    {% endif %}
+
     <div class="sidebar-footer">
         {% with variant = 'sidebar' %}{% include '_profile_menu.html' %}{% endwith %}
     </div>
@@ -118,4 +129,39 @@
         </div>
     </div>
 </div>
+
+{% if g.current_user.role == 'admin' %}
+<!-- Confirmation de mise à jour de l'application -->
+<div class="modal fade" id="updateAppModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title d-flex align-items-center gap-2">
+                    <span class="material-symbols-outlined">system_update_alt</span>
+                    <span>{{ _('Update the application') }}</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ _('Close') }}"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-2" id="update-modal-summary">—</p>
+                <p class="profile-field-hint mb-2">
+                    {{ _('The application will be updated to the latest release, then restarted. Running sites are not affected.') }}
+                </p>
+                <div class="update-error" id="update-modal-error" hidden></div>
+                <a href="#" id="update-release-link" class="update-release-link" target="_blank" rel="noopener" hidden>
+                    <span class="material-symbols-outlined">open_in_new</span>
+                    <span>{{ _('View release notes') }}</span>
+                </a>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="ghost-btn" data-bs-dismiss="modal">{{ _('Cancel') }}</button>
+                <button type="button" class="btn-primary-teal" id="confirm-update-app">
+                    <span class="material-symbols-outlined">system_update_alt</span>
+                    <span>{{ _('Update now') }}</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endif %}

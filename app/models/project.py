@@ -14,10 +14,13 @@ from app.config.docker_config import DockerConfig
 class Project:
     """Modèle pour la gestion des projets WordPress avec architecture containers/projets séparée"""
     
-    def __init__(self, name, projects_folder='projets', containers_folder='containers'):
+    def __init__(self, name, projects_folder=None, containers_folder=None):
+        # Défauts absolus : le service Docker fait des os.chdir pendant les
+        # opérations sur les conteneurs. Un chemin relatif capturé ici
+        # pointerait ailleurs le temps de cette fenêtre.
         self.name = name
-        self.projects_folder = projects_folder
-        self.containers_folder = containers_folder
+        self.projects_folder = projects_folder or DockerConfig.PROJECTS_FOLDER
+        self.containers_folder = containers_folder or DockerConfig.CONTAINERS_FOLDER
         self.path = os.path.join(projects_folder, name)  # Fichiers éditables
         self.container_path = os.path.join(containers_folder, name)  # Configuration Docker
     

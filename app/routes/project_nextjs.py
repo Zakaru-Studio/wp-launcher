@@ -15,8 +15,13 @@ from app.middleware.auth_middleware import login_required, admin_required
 project_nextjs_bp = Blueprint('project_nextjs', __name__)
 
 # Configuration des constantes
-PROJECTS_FOLDER = 'projets'
-CONTAINERS_FOLDER = 'containers'
+# Chemins ABSOLUS, jamais relatifs : le service Docker change le répertoire
+# courant du processus (os.chdir) pendant les opérations sur les conteneurs,
+# et l'app tourne dans un seul worker. Un chemin relatif évalué pendant cette
+# fenêtre pointe ailleurs — c'est ce qui faisait retourner une liste de sites
+# vide en plein milieu d'une création.
+PROJECTS_FOLDER = DockerConfig.PROJECTS_FOLDER
+CONTAINERS_FOLDER = DockerConfig.CONTAINERS_FOLDER
 
 @project_nextjs_bp.route('/nextjs_npm/<project_name>/<command>', methods=['POST'])
 @login_required

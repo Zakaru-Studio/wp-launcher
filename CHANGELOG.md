@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The site list could briefly show **zero sites** while a project was being
+  created or started. The routes resolved `projets/` and `containers/` as
+  *relative* paths, while `docker_service` calls `os.chdir()` around every
+  compose command and the app runs a single worker — so a concurrent request
+  evaluated those paths from inside a container directory, found nothing, and
+  returned `200` with an empty list. All route modules, `port_utils`,
+  `Project` and `wordpress_type_service` now use absolute paths.
+  The same race silently skipped occupied ports during allocation.
+- A missing projects folder now answers `500` instead of an empty list, so the
+  UI keeps the previous list instead of rendering "no sites" on a broken
+  install.
+- A newly created site appears immediately: the server broadcasts
+  `project_created` over Socket.IO, and the client also retries the listing
+  with growing back-off instead of a single fixed one-second reload.
+
 ## [1.4.1] - 2026-08-03
 
 ### Added

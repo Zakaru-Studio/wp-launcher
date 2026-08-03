@@ -133,8 +133,13 @@ def get_used_ports():
     except Exception:
         pass
 
-    # Ports des projets existants dans containers/
-    containers_folder = 'containers'
+    # Ports des projets existants dans containers/.
+    # Chemin ABSOLU : le service Docker fait des os.chdir pendant les
+    # opérations sur les conteneurs, et l'allocation de ports tourne
+    # justement pendant une création. Avec un chemin relatif, le dossier
+    # paraît absent, la boucle est sautée en silence et on peut réattribuer
+    # un port déjà pris.
+    containers_folder = DockerConfig.CONTAINERS_FOLDER
     if os.path.exists(containers_folder):
         for project in os.listdir(containers_folder):
             project_path = os.path.join(containers_folder, project)
@@ -199,8 +204,10 @@ def get_project_port(project_path):
 class PortConflictResolver:
     """Résout automatiquement les conflits de ports entre conteneurs"""
 
-    def __init__(self, containers_folder='containers'):
-        self.containers_folder = containers_folder
+    def __init__(self, containers_folder=None):
+        # Voir plus haut : jamais de chemin relatif, un os.chdir concurrent
+        # le ferait pointer ailleurs.
+        self.containers_folder = containers_folder or DockerConfig.CONTAINERS_FOLDER
 
     def get_active_docker_ports(self) -> Set[int]:
         """Récupère les ports utilisés par les conteneurs Docker actifs"""

@@ -31,8 +31,13 @@ from app.middleware.auth_middleware import login_required, admin_required
 project_lifecycle_bp = Blueprint('project_lifecycle', __name__)
 
 # Configuration des constantes
-PROJECTS_FOLDER = 'projets'
-CONTAINERS_FOLDER = 'containers'
+# Chemins ABSOLUS, jamais relatifs : le service Docker change le répertoire
+# courant du processus (os.chdir) pendant les opérations sur les conteneurs,
+# et l'app tourne dans un seul worker. Un chemin relatif évalué pendant cette
+# fenêtre pointe ailleurs — c'est ce qui faisait retourner une liste de sites
+# vide en plein milieu d'une création.
+PROJECTS_FOLDER = DockerConfig.PROJECTS_FOLDER
+CONTAINERS_FOLDER = DockerConfig.CONTAINERS_FOLDER
 
 
 @project_lifecycle_bp.route('/create_project', methods=['POST'])
@@ -582,6 +587,8 @@ def _create_wordpress_project(project_name, editable_path, container_path, enabl
                                   enable_nextjs=enable_nextjs,
                                   urls=_get_project_urls(project_name, ports))
     
+    _broadcast_project_created(project_name)
+
     return jsonify({
         'success': True, 
         'message': success_message,
@@ -637,6 +644,8 @@ def _create_nextjs_project(project_name, editable_path, container_path, database
                                   database_type=database_type,
                                   permissions_success=permissions_success)
     
+    _broadcast_project_created(project_name)
+
     return jsonify({
         'success': True, 
         'message': success_message,
@@ -808,6 +817,27 @@ def _configure_nextjs_ports(project_name, database_type):
     
     print(f"📋 Ports alloués pour {project_name}: {ports}")
     return ports
+
+
+def _broadcast_project_created(project_name):
+    """Signale à tous les clients connectés qu'un projet vient d'apparaître.
+
+    Sans ça, le front n'a aucun moyen de savoir quand recharger : il se
+    contentait d'un délai fixe d'une seconde après la réponse HTTP, trop court
+    quand la création se termine plus tard, et sans nouvelle tentative avant
+    le sondage suivant — trente secondes.
+
+    Best-effort : un échec de diffusion ne doit pas faire échouer une création
+    qui a réussi.
+    """
+    try:
+        socketio = current_app.extensions.get('socketio')
+        if socketio:
+            socketio.emit('project_created', {'project_name': project_name})
+    except Exception:  # noqa: BLE001
+        current_app.logger.exception(
+            "Could not broadcast project_created for %s", project_name
+        )
 
 
 def _get_project_urls(project_name, ports):
