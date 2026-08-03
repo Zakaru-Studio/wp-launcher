@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-08-03
+
+### Added
+- Pre-commit hook blocking secrets before they reach a commit, instead of
+  only catching them in CI
+
+### Changed
+- `cryptography` 48.0.1 → 50.0.0
+
+### Removed
+- One-off migration and retrofit scripts, all already applied: dev-instance
+  layout, unified database, WordPress type detection, WP-CLI protection and
+  Docker limits. Several hardcoded absolute paths and client project names.
+- `init_multidev_system.py` — redundant with the `CREATE TABLE IF NOT EXISTS`
+  the services already run at startup
+- `dev-instances.js` — never loaded by any template, superseded by
+  `instances-ui-manager.js`
+
 ## [1.4.0] - 2026-08-03
 
 ### ⚠️ Upgrading from 1.3.0

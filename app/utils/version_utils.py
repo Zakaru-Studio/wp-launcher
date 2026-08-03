@@ -9,7 +9,7 @@ from typing import Optional
 # Version déclarée de l'application : source de vérité pour l'affichage.
 # À incrémenter à chaque release, en cohérence avec le tag Git `vX.Y.Z`
 # et l'entrée correspondante du CHANGELOG.
-__version__ = "1.4.0"
+__version__ = "1.4.1"
 
 
 def get_app_version() -> str:
