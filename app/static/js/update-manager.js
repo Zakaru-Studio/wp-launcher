@@ -31,14 +31,57 @@
         btn.hidden = false;
     }
 
-    function checkForUpdate() {
+    function hideButton() {
+        var btn = el('sidebar-update-btn');
+        if (btn) btn.hidden = true;
+    }
+
+    /**
+     * Revalide l'état du bouton.
+     *
+     * L'affichage ET le masquage doivent être pilotés ici : la version de la
+     * barre latérale est rafraîchie en direct par l'événement Socket.IO
+     * `app_version` après un redémarrage, donc sans rechargement de page. Un
+     * check qui ne saurait qu'afficher laisserait le bouton en place une fois
+     * la mise à jour appliquée.
+     *
+     * `force` contourne le cache d'une heure du serveur — indispensable juste
+     * après une mise à jour, sinon la réponse « mise à jour disponible » mise
+     * en cache avant le redémarrage serait resservie.
+     */
+    function checkForUpdate(force) {
         // Réservé aux admins : la route répond 403 aux autres, on ignore.
-        fetch('/api/system/update/check', { headers: { 'Accept': 'application/json' } })
+        fetch('/api/system/update/check' + (force ? '?force=1' : ''),
+              { headers: { 'Accept': 'application/json' }, cache: 'no-store' })
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (info) {
                 if (info && info.update_available) showButton(info);
+                else hideButton();
             })
-            .catch(function () { /* hors ligne : on laisse le bouton masqué */ });
+            .catch(function () { /* hors ligne : on laisse l'état courant */ });
+    }
+
+    /**
+     * Le serveur annonce sa version à chaque connexion Socket.IO. Après le
+     * redémarrage qui suit une mise à jour, le socket se reconnecte : c'est
+     * le signal fiable pour revalider le bouton, y compris si l'onglet n'a
+     * jamais été rechargé.
+     */
+    function watchVersionBroadcast(attempt) {
+        attempt = attempt || 0;
+        if (typeof window.getSocketIO !== 'function' || !window.getSocketIO()) {
+            // main.js branche le socket peu après le DOMContentLoaded.
+            if (attempt < 10) setTimeout(function () { watchVersionBroadcast(attempt + 1); }, 300);
+            return;
+        }
+        var socket = window.getSocketIO();
+        var known = null;
+        socket.on('app_version', function (data) {
+            var version = data && data.version;
+            if (!version) return;
+            if (known !== null && version !== known) checkForUpdate(true);
+            known = version;
+        });
     }
 
     window.openUpdateModal = function () {
@@ -121,6 +164,7 @@
     document.addEventListener('DOMContentLoaded', function () {
         if (!el('sidebar-update-btn')) return;   // non-admin : rien à faire
         checkForUpdate();
+        watchVersionBroadcast();
         var confirm = el('confirm-update-app');
         if (confirm) confirm.addEventListener('click', applyUpdate);
     });

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The Update button stayed visible after a successful update. The check only
+  ever *showed* it, never hid it — harmless while the page reloaded afterwards,
+  but the sidebar version is now refreshed live over Socket.IO, so nothing made
+  the button go away. The check is symmetric, and it re-runs when the server
+  announces a different version, bypassing the one-hour cache that would
+  otherwise replay the pre-restart answer.
+
 ## [1.5.1] - 2026-08-04
 
 ### Added
