@@ -12,11 +12,12 @@ Ce dossier contient les scripts shell utilisés par l'application WordPress Laun
   - Lance l'application
   - Utilisé par : systemd service (`wp-launcher.service`)
 
-- **`restart_app.sh`** - Redémarre l'application
-  - Arrête les processus existants
-  - Nettoie les caches Python
-  - Relance l'application en arrière-plan
-  - Utilisé par : Interface web (bouton de redémarrage)
+> Le redémarrage n'a plus de script dédié. `restart_app.sh` datait de
+> l'époque `python3 run.py` : sous gunicorn + systemd, son `pkill` ne
+> trouvait plus le processus et il relançait un serveur de développement
+> Werkzeug sur un port déjà occupé. Le bouton de l'interface et la mise à
+> jour automatique passent désormais par `app/services/service_control.py`
+> (systemd, puis SIGHUP gunicorn, puis arrêt du processus en dernier recours).
 
 - **`stop_app.sh`** - Arrête l'application
   - Termine proprement tous les processus Python
@@ -48,7 +49,7 @@ Ce dossier contient les scripts shell utilisés par l'application WordPress Laun
 
 ### Redémarrer l'application
 ```bash
-./scripts/restart_app.sh
+sudo systemctl restart wp-launcher
 ```
 
 ### Arrêter l'application

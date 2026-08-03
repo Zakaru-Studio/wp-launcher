@@ -182,25 +182,10 @@ def preflight() -> dict:
 
 
 def _restart_service():
-    """
-    Redémarre le service.
-
-    Le service systemd est configuré en `Restart=always` : si `systemctl`
-    n'est pas disponible (droits, conteneur…), terminer le processus suffit,
-    systemd le relance avec le nouveau code.
-    """
+    """Redémarre via le mécanisme commun (cf. app/services/service_control)."""
     time.sleep(1)  # laisser la réponse HTTP partir
-    unit = os.environ.get('WPL_SERVICE_NAME', 'wp-launcher')
-
-    ok, out = _run(['sudo', '-n', 'systemctl', 'restart', unit], timeout=60)
-    if ok:
-        wp_logger.log_system_info(f'Service {unit} redémarré après mise à jour')
-        return
-
-    wp_logger.logger.warning(
-        f'systemctl indisponible ({out}) — arrêt du processus, systemd prendra le relais'
-    )
-    os._exit(0)
+    from app.services.service_control import restart_service
+    restart_service()
 
 
 def apply_update(target: str = None) -> dict:

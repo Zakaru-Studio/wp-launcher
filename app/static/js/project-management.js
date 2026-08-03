@@ -62,6 +62,11 @@ function initProgressTracking() {
         loadProjects({ silent: true });
     });
 
+    socket.on('project_deleted', function (data) {
+        console.log('📡 Projet supprimé:', data && data.project_name);
+        loadProjects({ silent: true });
+    });
+
     // Écouter les événements de création de projet
     socket.on('project_creation', function (data) {
 
@@ -2017,6 +2022,56 @@ async function rebuildProject(projectName) {
     }
 }
 
+/**
+ * Confirmation de suppression via la modale de l'application.
+ *
+ * Remplace `window.confirm()`, dont l'apparence dépend du navigateur et qui
+ * bloque tout le rendu de la page. Le balisage existe déjà dans index.html
+ * (#deleteModal), traduit et stylé — il n'était simplement jamais utilisé.
+ *
+ * Repli sur confirm() natif si la modale est absente (autre page) ou si
+ * Bootstrap n'est pas encore chargé : mieux vaut une boîte moche qu'une
+ * suppression sans confirmation.
+ *
+ * @returns {Promise<boolean>} true si l'utilisateur confirme.
+ */
+function confirmProjectDeletion(projectName) {
+    const modalEl = document.getElementById('deleteModal');
+    const confirmBtn = modalEl && modalEl.querySelector('#confirm-delete');
+
+    if (!modalEl || !confirmBtn || typeof bootstrap === 'undefined') {
+        return Promise.resolve(
+            window.confirm(`Êtes-vous sûr de vouloir supprimer le projet ${projectName} ?`)
+        );
+    }
+
+    return new Promise(resolve => {
+        const nameEl = modalEl.querySelector('#delete-project-name');
+        if (nameEl) nameEl.textContent = projectName;
+
+        // Le bouton est remplacé par un clone à chaque ouverture : sans ça,
+        // les écouteurs des suppressions précédentes s'accumuleraient et une
+        // seule confirmation en déclencherait plusieurs.
+        const freshBtn = confirmBtn.cloneNode(true);
+        confirmBtn.replaceWith(freshBtn);
+
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        let confirmed = false;
+
+        freshBtn.addEventListener('click', () => {
+            confirmed = true;
+            modal.hide();
+        }, { once: true });
+
+        // On résout sur hidden plutôt que sur le clic : l'utilisateur peut
+        // aussi fermer par Échap, le fond, ou le bouton Annuler.
+        modalEl.addEventListener('hidden.bs.modal', () => resolve(confirmed), { once: true });
+
+        modal.show();
+    });
+}
+window.confirmProjectDeletion = confirmProjectDeletion;
+
 async function deleteProject(projectName) {
     console.log('deleteProject called with:', projectName);
     
@@ -2060,9 +2115,7 @@ async function deleteProject(projectName) {
     }
     
     // Sinon, supprimer le projet normalement
-    const itemType = 'le projet';
-
-    if (!confirm(`Êtes-vous sûr de vouloir supprimer ${itemType} ${projectName} ?`)) {
+    if (!await confirmProjectDeletion(projectName)) {
         return;
     }
 

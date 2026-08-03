@@ -22,6 +22,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A newly created site appears immediately: the server broadcasts
   `project_created` over Socket.IO, and the client also retries the listing
   with growing back-off instead of a single fixed one-second reload.
+- Creation progress is now reported. The client had always listened for
+  `project_creation`, but the server never emitted it, so the notification sat
+  at 10% with a spinner until the whole synchronous request returned — long
+  after the site was usable. Seven steps are broadcast, and the final one
+  completes the task without waiting for the HTTP response.
+- Deleting a site no longer blocks unrelated actions. Task exclusivity was a
+  single global flag, so one slow delete left every other project's task
+  "pending"; it is now scoped per project, and the queue drains every task
+  whose own project is free.
+- Deleting a site is confirmed through the application's modal instead of the
+  browser's `confirm()`. The markup already existed in `index.html`, fully
+  translated — nothing referenced it.
 
 ## [1.4.1] - 2026-08-03
 

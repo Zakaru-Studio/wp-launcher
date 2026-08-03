@@ -16,45 +16,29 @@ system_bp = Blueprint('system', __name__)
 @system_bp.route('/api/system/restart', methods=['POST'])
 @admin_required
 def restart_app():
-    """Redémarre l'application en utilisant le script restart_app.sh"""
+    """
+    Redémarre l'application via systemd (cf. app/services/service_control).
+
+    Passait auparavant par `scripts/restart_app.sh`, hérité de l'époque
+    `python3 run.py` : depuis gunicorn + systemd, son `pkill` ne trouvait
+    plus le processus et il relançait un serveur Werkzeug sur un port déjà
+    pris. Le redémarrage est désormais mutualisé avec la mise à jour.
+    """
     try:
         wp_logger.log_system_info("Redémarrage de l'application demandé")
-        
-        # Chemin vers le script de redémarrage
-        # Le script est dans scripts/ à la racine du projet
-        script_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'scripts', 'restart_app.sh')
-        
-        if not os.path.exists(script_path):
-            error_msg = f"Script de redémarrage non trouvé: {script_path}"
-            wp_logger.logger.error(error_msg)
-            return jsonify({
-                'success': False,
-                'message': 'Script de redémarrage non trouvé'
-            }), 404
-        
+
+        from app.services.service_control import restart_service
+
         def restart():
             import time
-            time.sleep(1)  # Laisser le temps de répondre à la requête
-            wp_logger.log_system_info("Lancement du script de redémarrage...")
-            
+            time.sleep(1)  # laisser la réponse HTTP partir avant de couper
             try:
-                # Rendre le script exécutable
-                os.chmod(script_path, 0o755)
-                
-                # Lancer le script de redémarrage en arrière-plan
-                subprocess.Popen(
-                    ['bash', script_path],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    start_new_session=True
-                )
-                wp_logger.log_system_info("Script de redémarrage lancé avec succès")
+                restart_service()
             except Exception as e:
-                wp_logger.logger.error(f"Erreur lors du lancement du script: {e}")
-        
-        # Lancer le redémarrage dans un thread séparé
+                wp_logger.logger.error(f"Erreur lors du redémarrage: {e}")
+
         threading.Thread(target=restart, daemon=True).start()
-        
+
         return jsonify({
             'success': True,
             'message': 'Redémarrage en cours... La page se rechargera automatiquement.'

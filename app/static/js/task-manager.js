@@ -7,7 +7,11 @@ class TaskManager {
     constructor() {
         this.tasks = new Map();
         this.exclusiveQueue = []; // Queue simple pour tâches exclusives
-        this.isExclusiveTaskRunning = false;
+        // Exclusivité PAR PROJET, pas globale : un drapeau unique faisait
+        // qu'une suppression longue sur un site laissait toutes les actions
+        // des autres sites en « pending ». Deux projets différents n'ont
+        // aucune raison de s'attendre.
+        this.busyProjects = new Set();
 
         // Éléments DOM
         this.sidebarContainer = null;
@@ -329,6 +333,16 @@ class TaskManager {
     /**
      * Types de tâches exclusives qui ne peuvent pas s'exécuter simultanément
      */
+    /** Clé d'exclusivité : le projet concerné, ou une clé globale à défaut. */
+    exclusiveKey(task) {
+        return (task && task.projectName) || '__global__';
+    }
+
+    /** Une tâche exclusive tourne-t-elle déjà sur ce projet ? */
+    isProjectBusy(projectName) {
+        return this.busyProjects.has(projectName || '__global__');
+    }
+
     isExclusiveTaskType(taskType) {
         const exclusiveTypes = ['start_project', 'stop_project', 'delete_project', 'create_project'];
         return exclusiveTypes.includes(taskType);
@@ -384,7 +398,7 @@ class TaskManager {
         this.openSidebar(); // Ouvrir la sidebar IMMÉDIATEMENT
 
         if (task.isExclusive) {
-            if (this.isExclusiveTaskRunning) {
+            if (this.isProjectBusy(this.exclusiveKey(task))) {
                 // Mettre en queue
                 task.status = 'queued';
                 task.message = `En attente (position ${this.exclusiveQueue.length + 1})`;
@@ -421,7 +435,7 @@ class TaskManager {
         const task = this.tasks.get(taskId);
         if (!task) return;
 
-        this.isExclusiveTaskRunning = true;
+        this.busyProjects.add(this.exclusiveKey(task));
         task.status = 'running';
         task.message = 'Initialisation...';
         task.startTime = Date.now();
@@ -671,7 +685,7 @@ class TaskManager {
 
         // Si c'était une tâche exclusive, traiter la queue
         if (task.isExclusive) {
-            this.isExclusiveTaskRunning = false;
+            this.busyProjects.delete(this.exclusiveKey(task));
             this.processExclusiveQueue();
         }
 
@@ -685,12 +699,22 @@ class TaskManager {
      * Traiter la queue des tâches exclusives
      */
     processExclusiveQueue() {
-        if (this.exclusiveQueue.length === 0 || this.isExclusiveTaskRunning) {
+        if (this.exclusiveQueue.length === 0) {
             return;
         }
 
-        // Prendre la première tâche de la queue
-        const nextTaskId = this.exclusiveQueue.shift();
+        // Prendre la première tâche dont le PROJET est libre, pas simplement
+        // la première de la file : sinon une tâche en attente sur un projet
+        // occupé bloquerait toutes celles qui la suivent sur d'autres projets.
+        const readyIndex = this.exclusiveQueue.findIndex(id => {
+            const queued = this.tasks.get(id);
+            return !queued || !this.isProjectBusy(this.exclusiveKey(queued));
+        });
+        if (readyIndex === -1) {
+            return;
+        }
+
+        const nextTaskId = this.exclusiveQueue.splice(readyIndex, 1)[0];
         const nextTask = this.tasks.get(nextTaskId);
 
         if (!nextTask) {
@@ -711,6 +735,12 @@ class TaskManager {
 
         // Démarrer la tâche suivante
         this.startExclusiveTask(nextTaskId);
+
+        // Continuer à vidanger : d'autres tâches en attente peuvent porter
+        // sur des projets encore libres et démarrer en parallèle. L'appel
+        // s'arrête de lui-même quand plus aucune tâche prête ne reste, le
+        // projet qu'on vient de démarrer étant désormais marqué occupé.
+        this.processExclusiveQueue();
     }
 
     /**
@@ -765,8 +795,8 @@ class TaskManager {
     /**
      * Vérifier si une tâche exclusive peut démarrer
      */
-    canStartExclusiveTask() {
-        return !this.isExclusiveTaskRunning;
+    canStartExclusiveTask(projectName = null) {
+        return !this.isProjectBusy(projectName);
     }
 
     /**

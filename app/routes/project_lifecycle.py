@@ -221,6 +221,7 @@ def _create_wordpress_project(project_name, editable_path, container_path, enabl
     
     # Configurer les ports
     if debug_logger:
+        _emit_creation_progress(1, "Allocation des ports…", project_name=project_name)
         debug_logger.step("CONFIGURE_PORTS", "Configuring project ports")
     
     ports = _configure_wordpress_ports(project_name, enable_nextjs)
@@ -239,6 +240,7 @@ def _create_wordpress_project(project_name, editable_path, container_path, enabl
     
     print(f"📋 Copie du template Docker pour WordPress...")
     if debug_logger:
+        _emit_creation_progress(2, "Copie du template Docker…", project_name=project_name)
         debug_logger.step("COPY_DOCKER_TEMPLATE", f"Copying Docker template, NextJS enabled: {enable_nextjs}")
     
     try:
@@ -345,6 +347,7 @@ def _create_wordpress_project(project_name, editable_path, container_path, enabl
         
         # Créer les fichiers de base WordPress (.htaccess et wp-config.php)
         if debug_logger:
+            _emit_creation_progress(3, "Création des fichiers WordPress…", project_name=project_name)
             debug_logger.step("CREATE_WP_BASE_FILES", "Creating WordPress base files")
         
         if not create_wordpress_base_files(editable_path):
@@ -397,6 +400,7 @@ def _create_wordpress_project(project_name, editable_path, container_path, enabl
         docker_service = current_app.extensions.get('docker')
         if docker_service:
             if debug_logger:
+                _emit_creation_progress(4, "Démarrage des conteneurs Docker…", project_name=project_name)
                 debug_logger.step("START_CONTAINERS", "Starting Docker containers")
             
             print(f"🚀 Démarrage des conteneurs...")
@@ -409,6 +413,7 @@ def _create_wordpress_project(project_name, editable_path, container_path, enabl
                     print(f"✅ Conteneurs démarrés, lancement de l'installation automatique...")
                     
                     if debug_logger:
+                        _emit_creation_progress(5, "Installation de WordPress…", project_name=project_name)
                         debug_logger.step("AUTO_INSTALL_WP", "Starting automatic WordPress installation")
                     
                     # Utiliser la fonction robuste d'installation automatique
@@ -426,6 +431,7 @@ def _create_wordpress_project(project_name, editable_path, container_path, enabl
                             # AJOUT: Application automatique des permissions SEULEMENT après installation réussie
                             print(f"🔍 [DEBUG] Démarrage application permissions automatiques...")
                             if debug_logger:
+                                _emit_creation_progress(6, "Application des permissions…", project_name=project_name)
                                 debug_logger.step("AUTO_PERMISSIONS", "Applying automatic file permissions after successful installation")
                             
                             print(f"🔧 Application des permissions automatiques après installation...")
@@ -587,6 +593,11 @@ def _create_wordpress_project(project_name, editable_path, container_path, enabl
                                   enable_nextjs=enable_nextjs,
                                   urls=_get_project_urls(project_name, ports))
     
+    # 'completed' termine la tâche côté client immédiatement, ce qui libère
+    # aussi la file des tâches exclusives — sans attendre que la réponse HTTP
+    # ait fini de traverser le réseau.
+    _emit_creation_progress(_CREATE_TOTAL_STEPS, success_message,
+                            status='completed', project_name=project_name)
     _broadcast_project_created(project_name)
 
     return jsonify({
@@ -644,6 +655,11 @@ def _create_nextjs_project(project_name, editable_path, container_path, database
                                   database_type=database_type,
                                   permissions_success=permissions_success)
     
+    # 'completed' termine la tâche côté client immédiatement, ce qui libère
+    # aussi la file des tâches exclusives — sans attendre que la réponse HTTP
+    # ait fini de traverser le réseau.
+    _emit_creation_progress(_CREATE_TOTAL_STEPS, success_message,
+                            status='completed', project_name=project_name)
     _broadcast_project_created(project_name)
 
     return jsonify({
@@ -817,6 +833,45 @@ def _configure_nextjs_ports(project_name, database_type):
     
     print(f"📋 Ports alloués pour {project_name}: {ports}")
     return ports
+
+
+#: Nombre d'étapes annoncées au client pendant une création WordPress.
+#: Sert uniquement à calculer un pourcentage lisible côté notification.
+_CREATE_TOTAL_STEPS = 7
+
+
+def _emit_creation_progress(step, message, status=None, project_name=None):
+    """Pousse l'avancement d'une création vers la notification du client.
+
+    Le front écoutait déjà `project_creation` depuis toujours, mais le serveur
+    ne l'émettait jamais : la notification restait donc à 10 % avec un
+    spinner jusqu'au retour HTTP, c'est-à-dire jusqu'à la fin de
+    l'installation WordPress. L'opération paraissait figée alors que le site
+    apparaissait déjà dans la liste.
+
+    Contrat attendu par le client (project-management.js) :
+        status  — 'completed' | 'error' | 'warning', sinon progression
+        step / total_steps — pour le pourcentage
+        message — texte affiché
+
+    Best-effort : un échec de diffusion ne doit pas interrompre la création.
+    """
+    try:
+        socketio = current_app.extensions.get('socketio')
+        if not socketio:
+            return
+        payload = {
+            'step': step,
+            'total_steps': _CREATE_TOTAL_STEPS,
+            'message': message,
+        }
+        if status:
+            payload['status'] = status
+        if project_name:
+            payload['project_name'] = project_name
+        socketio.emit('project_creation', payload)
+    except Exception:  # noqa: BLE001
+        current_app.logger.exception("Could not emit project_creation progress")
 
 
 def _broadcast_project_created(project_name):
@@ -1258,8 +1313,18 @@ def delete_project(project_name):
         print(f"🗑️ [DELETE API] Suppression du projet {project_name}")
         
         result = project_service.delete_project(project_name)
-        
+
         if result['success']:
+            # Prévenir tous les clients : les autres onglets rafraîchissent
+            # leur liste sans attendre le sondage de 30 s.
+            try:
+                socketio = current_app.extensions.get('socketio')
+                if socketio:
+                    socketio.emit('project_deleted', {'project_name': project_name})
+            except Exception:  # noqa: BLE001
+                current_app.logger.exception(
+                    "Could not broadcast project_deleted for %s", project_name
+                )
             return jsonify(result)
         else:
             return jsonify(result), 500
