@@ -3882,13 +3882,22 @@ body.app-shell {
     padding: 28px 16px;
     gap: 20px;
     z-index: 50;
+    border-right:1px solid var(--al-surface-container-high);
 }
 
 .sidebar-brand {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 0 8px 4px;
+    /* Bordure bord à bord : on annule les 16px de padding latéral de
+       .app-sidebar par une marge négative, puis on les restitue en padding
+       (16 + 8 = 24px) pour que le contenu reste aligné comme avant. */
+    margin-left: -16px;
+    margin-right: -16px;
+    /* 20px sous le contenu = le `gap: 20px` de .app-sidebar qui suit la
+       bordure : même respiration de part et d'autre du trait. */
+    padding: 0 24px 20px;
+    border-bottom: 1px solid var(--al-surface-container-high);
 }
 
 .brand-icon {
@@ -3924,7 +3933,9 @@ body.app-shell {
     display: flex;
     flex-direction: column;
     gap: 4px;
-    margin-top: 8px;
+    /* Pas de margin-top : l'espace au-dessus vient du `gap: 20px` de
+       .app-sidebar, qui répond exactement au padding-bottom de la marque.
+       Un margin ici s'y ajouterait et désaxerait la bordure. */
     flex: 1;
 }
 
