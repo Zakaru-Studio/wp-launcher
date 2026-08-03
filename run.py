@@ -27,13 +27,25 @@ init_app_services(app, socketio)
 register_socketio_handlers(socketio)
 
 if __name__ == '__main__':
+    from app.utils import security_config
+
     port = int(os.getenv('APP_PORT', '5000'))
-    print(f"🚀 Starting WP Launcher on port {port}...")
+    # Loopback par défaut : ce chemin utilise le serveur de développement
+    # Werkzeug, qui n'a rien à faire face à Internet. La production passe
+    # par scripts/start.sh (gunicorn + eventlet).
+    host = os.getenv('WPL_BIND') or (
+        '0.0.0.0' if security_config.is_local_mode() else '127.0.0.1'
+    )
+
+    print(f"🚀 Starting WP Launcher on {host}:{port}...")
+    if host != '127.0.0.1':
+        print("⚠️  Serveur de développement exposé au-delà de la loopback — "
+              "utilisez scripts/start.sh (gunicorn) pour un déploiement réel.")
 
     socketio.run(
         app,
         debug=False,
-        host='0.0.0.0',
+        host=host,
         port=port,
         allow_unsafe_werkzeug=True,
         use_reloader=False

@@ -20,8 +20,12 @@ from __future__ import annotations
 import logging
 import os
 import re
+import secrets
+import shlex
+import shutil
 import socket
 import sqlite3
+import tempfile
 import threading
 import time
 from datetime import datetime, timezone
@@ -30,13 +34,18 @@ from typing import Callable, List, Optional, Tuple
 import paramiko
 from flask import Flask, current_app
 
-from app.services import deployments_schema, ssh_service
+from app.config.docker_config import DockerConfig
+from app.services import db_push, deployments_schema, media_push, ssh_service
+from app.services.push_common import PushError
 
 log = logging.getLogger(__name__)
 
 _DEFAULT_DB_PATH = "data/deployments.db"
 _LOG_DIR = "logs/deployments"
 _DEPLOY_TIMEOUT_SECONDS = 600  # 10 minutes
+# A database push moves a full dump over the wire twice (export + import)
+# so it gets a much wider budget than a git fetch/reset.
+_DB_PUSH_TIMEOUT_SECONDS = 7200  # 2 hours
 # Branch names: git refs minus the dangerous bits. `..` is explicitly
 # banned even though the regex wouldn't match a pure `..` alone, since
 # we interpolate `origin/<branch>` into a shell pipeline.
@@ -44,6 +53,14 @@ _BRANCH_RE = re.compile(r"^[A-Za-z0-9._/-]{1,100}$")
 # Keep at most this many log files on disk. Older ones are pruned on
 # each _finalize call so an unattended worker can't fill the volume.
 _MAX_LOG_FILES = 500
+# Where the launcher keeps each project's bind-mounted WordPress tree —
+# the media push reads wp-content/uploads straight off the host.
+# Absolu : le push média lit des fichiers sur ce chemin, et l'app change de
+# répertoire courant à plusieurs endroits. Un chemin relatif ferait échouer
+# la synchro sur un « No local uploads directory » trompeur.
+PROJECTS_FOLDER = os.path.abspath(
+    os.environ.get("WP_PROJECTS_FOLDER") or DockerConfig.PROJECTS_FOLDER
+)
 
 
 class DeploymentCancelled(Exception):
@@ -541,10 +558,96 @@ class DeploymentService:
     ) -> int:
         """Insert the deployment row and fire off the worker thread."""
         self._validate_branch(branch)
+        server = self._server_for_run(server_id)
+        deployment_id, log_path = self._insert_run_row(
+            project_name=project_name,
+            server_id=server_id,
+            branch=branch,
+            triggered_by=triggered_by,
+            kind="git",
+        )
 
+        thread = threading.Thread(
+            target=self._execute_wrapped,
+            args=(app, deployment_id, server, project_name, branch, log_path),
+            daemon=True,
+            name=f"deploy-{deployment_id}",
+        )
+        thread.start()
+        return deployment_id
+
+    def run_db_push(
+        self,
+        *,
+        project_name: str,
+        server_id: int,
+        branch: str,
+        triggered_by: Optional[int],
+        app: Flask,
+    ) -> int:
+        """Push the project's dev database to the server's WordPress site.
+
+        Shares the deployments table, log files, socket rooms and the
+        "one run at a time per (project, server)" guard with git
+        deploys — only ``kind`` differs. ``branch`` is carried along so
+        the run shows up in the originating connection's history.
+        """
+        self._validate_branch(branch)
+        server = self._server_for_run(server_id)
+        deployment_id, log_path = self._insert_run_row(
+            project_name=project_name,
+            server_id=server_id,
+            branch=branch,
+            triggered_by=triggered_by,
+            kind="db",
+        )
+
+        thread = threading.Thread(
+            target=self._execute_db_push_wrapped,
+            args=(app, deployment_id, server, project_name, log_path),
+            daemon=True,
+            name=f"dbpush-{deployment_id}",
+        )
+        thread.start()
+        return deployment_id
+
+    def run_media_push(
+        self,
+        *,
+        project_name: str,
+        server_id: int,
+        branch: str,
+        triggered_by: Optional[int],
+        app: Flask,
+    ) -> int:
+        """Sync the project's dev ``wp-content/uploads`` to the server.
+
+        Additive only — nothing is ever deleted on the remote side.
+        Shares the run bookkeeping with git deploys and DB pushes.
+        """
+        self._validate_branch(branch)
+        server = self._server_for_run(server_id)
+        deployment_id, log_path = self._insert_run_row(
+            project_name=project_name,
+            server_id=server_id,
+            branch=branch,
+            triggered_by=triggered_by,
+            kind="media",
+        )
+
+        thread = threading.Thread(
+            target=self._execute_media_push_wrapped,
+            args=(app, deployment_id, server, project_name, log_path),
+            daemon=True,
+            name=f"mediapush-{deployment_id}",
+        )
+        thread.start()
+        return deployment_id
+
+    def _server_for_run(self, server_id: int):
+        """Resolve + sanity-check the target server before any run."""
         if self.server_service is None:
             raise RuntimeError("DeploymentService is missing its ServerService dependency.")
-
         server = self.server_service.get_by_id(server_id)
         if not server:
             raise ValueError(f"Server id={server_id} does not exist.")
@@ -553,13 +656,26 @@ class DeploymentService:
                 "Server has no pinned host fingerprint. "
                 "Run Test connection and save the fingerprint first."
             )
+        return server
 
-        # Single transaction: refuse if a deploy is already running for
-        # this (project, server) couple, then insert the row, capture
-        # the rowid, and patch the log_file path using the known id —
-        # without ever leaving the row in the `log_file=''` state
-        # visible to readers. The running-check lives inside the same
-        # transaction so two simultaneous POSTs can't both pass it.
+    def _insert_run_row(
+        self,
+        *,
+        project_name: str,
+        server_id: int,
+        branch: str,
+        triggered_by: Optional[int],
+        kind: str,
+    ) -> Tuple[int, str]:
+        """Create the `running` row and register its cancel event.
+
+        Single transaction: refuse if a run is already in flight for
+        this (project, server) couple, then insert the row, capture the
+        rowid, and patch the log_file path using the known id — without
+        ever leaving the row in the `log_file=''` state visible to
+        readers. The running-check lives inside the same transaction so
+        two simultaneous POSTs can't both pass it.
+        """
         now = self._now()
         with self._connect() as conn:
             cur = conn.cursor()
@@ -579,11 +695,11 @@ class DeploymentService:
             cur.execute(
                 """
                 INSERT INTO deployments
-                    (project_name, server_id, branch, status,
+                    (project_name, server_id, branch, status, kind,
                      triggered_by, started_at, log_file)
-                VALUES (?, ?, ?, 'running', ?, ?, ?)
+                VALUES (?, ?, ?, 'running', ?, ?, ?, ?)
                 """,
-                (project_name, int(server_id), branch, triggered_by, now, ""),
+                (project_name, int(server_id), branch, kind, triggered_by, now, ""),
             )
             deployment_id = cur.lastrowid
             log_path = os.path.join(self.log_dir, f"{deployment_id}.log")
@@ -595,15 +711,7 @@ class DeploymentService:
 
         with self._cancel_lock:
             self._cancel_events[deployment_id] = threading.Event()
-
-        thread = threading.Thread(
-            target=self._execute_wrapped,
-            args=(app, deployment_id, server, project_name, branch, log_path),
-            daemon=True,
-            name=f"deploy-{deployment_id}",
-        )
-        thread.start()
-        return deployment_id
+        return deployment_id, log_path
 
     def cancel(self, deployment_id: int) -> bool:
         """Request cancellation of a running deployment.
@@ -658,16 +766,18 @@ class DeploymentService:
         finally:
             self._pop_cancel_event(deployment_id)
 
-    def _execute(self, deployment_id, server, project_name, branch, log_path):
-        start = time.monotonic()
+    def _open_server_client(self, deployment_id, log_path, server):
+        """Decrypt the server key and open a fingerprint-pinned client.
 
+        Emits its own failure lines and returns None when the caller
+        should finalize the run as failed.
+        """
         secret_key = current_app.config.get("SECRET_KEY") or ""
         try:
             pem = ssh_service.decrypt_private_key(secret_key, bytes(server.ssh_private_key_enc))
         except Exception as exc:  # noqa: BLE001
             self._emit(deployment_id, log_path, f"[cannot decrypt server key: {exc}]", stream="stderr")
-            self._finalize(deployment_id, status="failed", commit_sha=None)
-            return
+            return None
 
         self._emit(
             deployment_id,
@@ -677,7 +787,7 @@ class DeploymentService:
         )
 
         try:
-            client = ssh_service.open_client(
+            return ssh_service.open_client(
                 pem=pem,
                 hostname=server.hostname,
                 ssh_port=server.ssh_port,
@@ -687,6 +797,13 @@ class DeploymentService:
             )
         except Exception as exc:  # noqa: BLE001
             self._emit(deployment_id, log_path, f"[SSH connect failed: {exc}]", stream="stderr")
+            return None
+
+    def _execute(self, deployment_id, server, project_name, branch, log_path):
+        start = time.monotonic()
+
+        client = self._open_server_client(deployment_id, log_path, server)
+        if client is None:
             self._finalize(deployment_id, status="failed", commit_sha=None)
             return
 
@@ -780,6 +897,192 @@ class DeploymentService:
 
         self._finalize(deployment_id, status=status, commit_sha=commit_sha)
 
+    # ─── database push ───────────────────────────────────────────────
+
+    def _execute_db_push_wrapped(self, app, deployment_id, server, project_name, log_path):
+        """Thread target for a DB push: app context, then delegate."""
+        try:
+            with app.app_context():
+                try:
+                    self._execute_db_push(deployment_id, server, project_name, log_path)
+                except Exception as exc:  # noqa: BLE001
+                    log.exception("DB push %s crashed", deployment_id)
+                    self._emit(deployment_id, log_path, f"[db push crashed: {exc}]", stream="stderr")
+                    self._finalize(deployment_id, status="failed", commit_sha=None)
+        finally:
+            self._pop_cancel_event(deployment_id)
+
+    def _execute_db_push(self, deployment_id, server, project_name, log_path):
+        start = time.monotonic()
+
+        client = self._open_server_client(deployment_id, log_path, server)
+        if client is None:
+            self._finalize(deployment_id, status="failed", commit_sha=None)
+            return
+
+        deploy_path = self.resolve_deploy_path(project_name, server)
+        cancel_event = self._cancel_event_for(deployment_id)
+        token = secrets.token_hex(6)
+
+        def emit(line: str, stream: str = "stdout") -> None:
+            self._emit(deployment_id, log_path, line, stream=stream)
+
+        def cancel_check() -> None:
+            """Poll cancellation outside the streaming loop — the local
+            export and the SFTP upload would otherwise run to completion
+            before a cancel request was ever noticed."""
+            if cancel_event is not None and cancel_event.is_set():
+                raise DeploymentCancelled()
+
+        def run_streaming(script: str, args, timeout: float = _DB_PUSH_TIMEOUT_SECONDS) -> int:
+            """Feed a bash script on stdin (so nothing sensitive reaches
+            the remote argv) and stream its output into the run log."""
+            cmd = "bash -s -- " + " ".join(shlex.quote(str(a)) for a in args)
+            stdin, stdout, _stderr = client.exec_command(cmd, get_pty=False)
+            stdin.write(script)
+            stdin.flush()
+            try:
+                stdin.channel.shutdown_write()
+            except Exception:  # noqa: BLE001
+                pass
+            channel = stdout.channel
+            budget = min(timeout, _DB_PUSH_TIMEOUT_SECONDS - (time.monotonic() - start))
+            self._stream_channel(
+                channel,
+                lambda line, stream: emit(line, stream),
+                time.monotonic(),
+                deployment_id,
+                cancel_event=cancel_event,
+                timeout_seconds=max(budget, 1),
+            )
+            return channel.recv_exit_status()
+
+        emit(f"== DB push — {project_name} → {server.label} ({server.env})")
+        emit(f"   deploy path: {deploy_path}")
+
+        status = "failed"
+        work_dir = None
+        try:
+            work_dir = tempfile.mkdtemp(prefix="wp-launcher-dbpush-")
+            db_push.push(
+                emit=emit,
+                run_streaming=run_streaming,
+                cancel_check=cancel_check,
+                client=client,
+                project_name=project_name,
+                deploy_path=deploy_path,
+                token=token,
+                work_dir=work_dir,
+            )
+            status = "success"
+        except DeploymentCancelled:
+            emit("[db push cancelled by user]", "stderr")
+            status = "cancelled"
+        except PushError as exc:
+            emit(f"[{exc}]", "stderr")
+            status = "failed"
+        except TimeoutError:
+            emit("[db push timed out]", "stderr")
+            status = "timeout"
+        except socket.timeout:
+            emit("[db push timed out]", "stderr")
+            status = "timeout"
+        except paramiko.SSHException as exc:
+            if "timeout" in str(exc).lower():
+                emit("[db push timed out]", "stderr")
+                status = "timeout"
+            else:
+                emit(f"[SSH error: {exc}]", "stderr")
+                status = "failed"
+        except Exception as exc:  # noqa: BLE001
+            log.exception("DB push %s failed", deployment_id)
+            emit(f"[unexpected error: {exc}]", "stderr")
+            status = "failed"
+        finally:
+            try:
+                client.close()
+            except Exception:  # noqa: BLE001
+                pass
+            if work_dir:
+                shutil.rmtree(work_dir, ignore_errors=True)
+
+        self._finalize(deployment_id, status=status, commit_sha=None)
+
+    # ─── media push ──────────────────────────────────────────────────
+
+    def _execute_media_push_wrapped(self, app, deployment_id, server, project_name, log_path):
+        """Thread target for a media push: app context, then delegate."""
+        try:
+            with app.app_context():
+                try:
+                    self._execute_media_push(deployment_id, server, project_name, log_path)
+                except Exception as exc:  # noqa: BLE001
+                    log.exception("Media push %s crashed", deployment_id)
+                    self._emit(deployment_id, log_path, f"[media push crashed: {exc}]", stream="stderr")
+                    self._finalize(deployment_id, status="failed", commit_sha=None)
+        finally:
+            self._pop_cancel_event(deployment_id)
+
+    def _execute_media_push(self, deployment_id, server, project_name, log_path):
+        client = self._open_server_client(deployment_id, log_path, server)
+        if client is None:
+            self._finalize(deployment_id, status="failed", commit_sha=None)
+            return
+
+        deploy_path = self.resolve_deploy_path(project_name, server)
+        cancel_event = self._cancel_event_for(deployment_id)
+
+        def emit(line: str, stream: str = "stdout") -> None:
+            self._emit(deployment_id, log_path, line, stream=stream)
+
+        def cancel_check() -> None:
+            if cancel_event is not None and cancel_event.is_set():
+                raise DeploymentCancelled()
+
+        emit(f"== Media push — {project_name} → {server.label} ({server.env})")
+        emit(f"   deploy path: {deploy_path}")
+
+        status = "failed"
+        try:
+            remote_uploads = media_push.resolve_remote_uploads(client, deploy_path)
+            emit(f"   remote uploads: {remote_uploads}")
+            media_push.push(
+                emit=emit,
+                cancel_check=cancel_check,
+                client=client,
+                project_name=project_name,
+                projects_folder=PROJECTS_FOLDER,
+                remote_uploads=remote_uploads,
+            )
+            status = "success"
+        except DeploymentCancelled:
+            emit("[media push cancelled by user]", "stderr")
+            status = "cancelled"
+        except PushError as exc:
+            emit(f"[{exc}]", "stderr")
+            status = "failed"
+        except (TimeoutError, socket.timeout):
+            emit("[media push timed out]", "stderr")
+            status = "timeout"
+        except paramiko.SSHException as exc:
+            if "timeout" in str(exc).lower():
+                emit("[media push timed out]", "stderr")
+                status = "timeout"
+            else:
+                emit(f"[SSH error: {exc}]", "stderr")
+                status = "failed"
+        except Exception as exc:  # noqa: BLE001
+            log.exception("Media push %s failed", deployment_id)
+            emit(f"[unexpected error: {exc}]", "stderr")
+            status = "failed"
+        finally:
+            try:
+                client.close()
+            except Exception:  # noqa: BLE001
+                pass
+
+        self._finalize(deployment_id, status=status, commit_sha=None)
+
     def _stream_channel(
         self,
         channel,
@@ -787,6 +1090,7 @@ class DeploymentService:
         start_time: float,
         deployment_id: int,
         cancel_event: Optional[threading.Event] = None,
+        timeout_seconds: float = _DEPLOY_TIMEOUT_SECONDS,
     ):
         """Stream stdout/stderr lines until the channel closes, the global
         timeout fires, or a cancellation is requested."""
@@ -801,7 +1105,7 @@ class DeploymentService:
                     pass
                 raise DeploymentCancelled()
 
-            if time.monotonic() - start_time > _DEPLOY_TIMEOUT_SECONDS:
+            if time.monotonic() - start_time > timeout_seconds:
                 try:
                     channel.close()
                 except Exception:  # noqa: BLE001

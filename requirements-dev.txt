@@ -1,0 +1,1 @@
+pyflakes  # lint des modules de push (tests de non-régression)

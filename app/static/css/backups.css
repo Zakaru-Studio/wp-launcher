@@ -68,8 +68,8 @@
 }
 
 .backup-btn.success {
-    background: linear-gradient(180deg, #86f2e4 0%, #006a61 100%);
-    color: #ffffff;
+    background: var(--al-secondary);
+    color: var(--al-on-secondary);
     font-weight: 700;
 }
 

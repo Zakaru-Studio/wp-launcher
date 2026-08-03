@@ -1,0 +1,14 @@
+{#
+  Cloche de notifications, placée à droite des boutons d'action de chaque page.
+
+  L'id `notif-bell-badge` est celui que task-manager.js met à jour ; il ne doit
+  donc apparaître qu'une seule fois par page (la topbar mobile utilise le
+  suffixe `-mobile`).
+#}
+<button class="topbar-action notif-bell page-notif-bell" id="notif-bell" type="button"
+        onclick="toggleTaskSidebar()"
+        title="{{ _('Notifications') }}" aria-label="{{ _('Notifications') }}"
+        aria-haspopup="true" aria-expanded="false">
+    <span class="material-symbols-outlined">notifications</span>
+    <span class="notif-bell-badge" id="notif-bell-badge" hidden>0</span>
+</button>

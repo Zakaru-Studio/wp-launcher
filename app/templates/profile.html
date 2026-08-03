@@ -8,6 +8,9 @@
         <h1 class="page-title">{{ _('Profile Settings') }}</h1>
         <p class="page-subtitle">{{ _('Manage your personal information and architectural access levels.') }}</p>
     </div>
+    <div class="page-header-actions">
+        {% include '_notif_bell.html' %}
+    </div>
 </header>
 
 {% with messages = get_flashed_messages(with_categories=true) %}

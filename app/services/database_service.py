@@ -10,6 +10,7 @@ import threading
 import time
 from app.utils.file_utils import extract_zip, get_file_size_mb
 from app.utils.database_utils import detect_file_encoding
+from app.utils.project_credentials import get_mysql_credentials, get_root_password
 from app.services.docker_service import DockerService
 from app.utils.logger import wp_logger
 from app.config.docker_config import DockerConfig
@@ -270,13 +271,17 @@ class DatabaseService:
             print(f"✅ [STANDARD_IMPORT] Conteneur {container_name} trouvé et actif")
             
             # Étape 1: Supprimer et recréer la base de données
+            _creds = get_mysql_credentials(project_name)
             print(f"🗑️ [STANDARD_IMPORT] Suppression et recréation de la base de données...")
             drop_success, drop_stdout, drop_stderr = self.docker_service.execute_command_in_container(
                 project_name, 'mysql',
-                ['mysql', '-u', 'root', '-prootpassword', '-e', '''
-                DROP DATABASE IF EXISTS wordpress;
-                CREATE DATABASE wordpress CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-                GRANT ALL PRIVILEGES ON wordpress.* TO 'wordpress'@'%';
+                # Base et utilisateur ne sont pas forcément 'wordpress' :
+                # la stack Next.js+MySQL les nomme d'après le projet. Les
+                # coder en dur ici détruirait la mauvaise base.
+                ['mysql', '-u', 'root', f'-p{_creds["root_password"]}', '-e', f'''
+                DROP DATABASE IF EXISTS `{_safe_ident(_creds["database"])}`;
+                CREATE DATABASE `{_safe_ident(_creds["database"])}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+                GRANT ALL PRIVILEGES ON `{_safe_ident(_creds["database"])}`.* TO '{_safe_ident(_creds["user"])}'@'%';
                 FLUSH PRIVILEGES;
                 '''],
                 timeout=60
@@ -379,13 +384,17 @@ class DatabaseService:
             print(f"✅ [LARGE_IMPORT] Conteneur {container_name} trouvé et actif")
             
             # Étape 1: Supprimer et recréer la base de données
+            _creds = get_mysql_credentials(project_name)
             print(f"🗑️ [LARGE_IMPORT] Suppression et recréation de la base de données...")
             drop_success, drop_stdout, drop_stderr = self.docker_service.execute_command_in_container(
                 project_name, 'mysql',
-                ['mysql', '-u', 'root', '-prootpassword', '-e', '''
-                DROP DATABASE IF EXISTS wordpress;
-                CREATE DATABASE wordpress CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-                GRANT ALL PRIVILEGES ON wordpress.* TO 'wordpress'@'%';
+                # Base et utilisateur ne sont pas forcément 'wordpress' :
+                # la stack Next.js+MySQL les nomme d'après le projet. Les
+                # coder en dur ici détruirait la mauvaise base.
+                ['mysql', '-u', 'root', f'-p{_creds["root_password"]}', '-e', f'''
+                DROP DATABASE IF EXISTS `{_safe_ident(_creds["database"])}`;
+                CREATE DATABASE `{_safe_ident(_creds["database"])}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+                GRANT ALL PRIVILEGES ON `{_safe_ident(_creds["database"])}`.* TO '{_safe_ident(_creds["user"])}'@'%';
                 FLUSH PRIVILEGES;
                 '''],
                 timeout=60
@@ -943,7 +952,9 @@ class DatabaseService:
             with tempfile.NamedTemporaryFile(mode='w', suffix='.cnf', delete=False) as config_file:
                 config_file.write("[client]\n")
                 config_file.write("user=root\n")
-                config_file.write("password=rootpassword\n")
+                config_file.write(
+                    f"password={get_root_password(source_project, container_name=mysql_container)}\n"
+                )
                 config_path = config_file.name
 
             container_cnf = '/tmp/.mysqldump_clone.cnf'
@@ -986,7 +997,8 @@ class DatabaseService:
             subprocess.run(
                 [
                     'docker', 'exec', mysql_container,
-                    'mysql', '-u', 'root', '-prootpassword',
+                    'mysql', '-u', 'root',
+                    f'-p{get_root_password(source_project, container_name=mysql_container)}',
                     '--execute',
                     f'CREATE DATABASE IF NOT EXISTS `{target_db_name}` '
                     f'CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;'

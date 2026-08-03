@@ -52,11 +52,14 @@ class DockerConfig:
     LOCAL_IP = os.getenv('APP_HOST', _detect_local_ip())
     APP_PORT = os.getenv('APP_PORT', '5000')
 
-    # WordPress admin defaults
-    WP_ADMIN_USER = os.getenv('WP_ADMIN_USER', 'admin')
-    WP_ADMIN_PASSWORD = os.getenv('WP_ADMIN_PASSWORD', 'admin')
-    WP_ADMIN_EMAIL = os.getenv('WP_ADMIN_EMAIL', 'admin@example.com')
-    WP_LOCALE = os.getenv('WP_LOCALE', 'en_US')
+    # WordPress admin defaults.
+    # `or default` et non `getenv(k, default)` : une variable définie mais
+    # vide (cas classique d'un .env copié tel quel) renverrait '' et
+    # provisionnerait des sites WordPress au mot de passe vide.
+    WP_ADMIN_USER = os.getenv('WP_ADMIN_USER') or 'admin'
+    WP_ADMIN_PASSWORD = os.getenv('WP_ADMIN_PASSWORD') or 'admin'
+    WP_ADMIN_EMAIL = os.getenv('WP_ADMIN_EMAIL') or 'admin@example.com'
+    WP_LOCALE = os.getenv('WP_LOCALE') or 'en_US'
     
     # Noms des services Docker standards
     SERVICES = {

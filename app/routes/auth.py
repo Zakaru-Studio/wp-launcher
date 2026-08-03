@@ -8,9 +8,26 @@ from werkzeug.utils import secure_filename
 
 from app import csrf
 from app.middleware.auth_middleware import login_required
+from app.utils import login_throttle
 
 
 auth_bp = Blueprint('auth', __name__)
+
+
+def _reset_session_on_login(user_id):
+    """Repartir d'une session vierge au moment où l'utilisateur s'authentifie.
+
+    Contre la fixation de session : un identifiant planté par un tiers avant
+    l'authentification ne doit pas survivre à l'élévation de privilège. La
+    langue choisie sur la page de login est le seul élément réinjecté — la
+    perdre renverrait l'utilisateur au défaut du navigateur juste après
+    l'avoir changée.
+    """
+    locale = session.get('locale')
+    session.clear()
+    if locale:
+        session['locale'] = locale
+    session['user_id'] = user_id
 
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
@@ -19,17 +36,44 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        
+
+        ip = login_throttle.client_ip()
+
+        wait = login_throttle.check(ip, username)
+        if wait:
+            current_app.logger.warning(
+                "Login blocked by throttle: user=%r ip=%s wait=%ss", username, ip, wait
+            )
+            flash(
+                f'Too many failed attempts. Try again in {_format_wait(wait)}.',
+                'error'
+            )
+            return render_template('login.html'), 429
+
         user_service = current_app.extensions['user_service']
         user = user_service.authenticate(username, password)
-        
+
         if user:
-            session['user_id'] = user.id
+            login_throttle.record_success(ip, username)
+            _reset_session_on_login(user.id)
             return redirect(url_for('main.index'))
         else:
+            penalty = login_throttle.record_failure(ip, username)
+            current_app.logger.warning(
+                "Failed login: user=%r ip=%s%s",
+                username, ip, f" — locked for {penalty}s" if penalty else ""
+            )
             flash('Invalid username or password', 'error')
-    
+
     return render_template('login.html')
+
+
+def _format_wait(seconds: int) -> str:
+    """Human-readable lockout delay for the flash message."""
+    if seconds < 60:
+        return f'{seconds} seconds'
+    minutes = (seconds + 59) // 60
+    return f'{minutes} minute{"s" if minutes > 1 else ""}'
 
 
 @auth_bp.route('/login/github')
@@ -91,10 +135,11 @@ def github_callback():
     # Save OAuth token
     user_service.save_oauth_token(user.id, 'github', access_token)
     
-    # Login user
-    session['user_id'] = user.id
-    session.pop('oauth_state', None)
-    
+    # Login user — nouvelle session sur élévation de privilège, comme sur le
+    # chemin mot de passe : sinon un identifiant de session planté par un
+    # tiers avant l'authentification reste valide après.
+    _reset_session_on_login(user.id)
+
     return redirect(url_for('main.index'))
 
 

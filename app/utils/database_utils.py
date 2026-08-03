@@ -27,6 +27,19 @@ def _safe_ident(name):
     return name
 
 
+_CREDENTIALS_WARNING = """
+Several helpers below still hard-code ``-u wordpress -pwordpress`` /
+``rootpassword``. They predate per-project credential randomisation and are
+currently unreachable from outside this module (``create_clean_wordpress_database``,
+``smart_mysql_check``, ``intelligent_mysql_wait``, ``execute_mysql_command``,
+``backup_database``, ``update_wordpress_urls``). Before wiring any of them
+back into a live path, route them through
+``app.utils.project_credentials.get_mysql_credentials`` — on a project created
+after randomisation they authenticate with the wrong password and fail
+silently (a 60 s readiness wait that always times out).
+"""
+
+
 def _escape_sql_string(value):
     """Échappe une valeur destinée à être interpolée entre quotes simples en SQL."""
     if value is None:

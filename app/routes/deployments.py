@@ -18,6 +18,8 @@ Routes:
   PATCH  /api/deployment-targets/<id>                (login + can_user_deploy)
   DELETE /api/deployment-targets/<id>                (login + can_user_deploy)
   POST   /api/deployment-targets/<id>/deploy         (login + can_user_deploy)
+  POST   /api/deployment-targets/<id>/push-db        (login + can_user_deploy)
+  POST   /api/deployment-targets/<id>/push-media     (login + can_user_deploy)
 
   GET    /api/deployments?project=&server_id=&branch= (login)
   GET    /api/deployments/<id>                       (login + owner/admin)
@@ -38,6 +40,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+from typing import Optional
 
 from flask import (
     Blueprint,
@@ -715,6 +718,94 @@ def api_deploy_target(target_id: int):
         project=project_name,
         branch=target["branch"],
         server_id=target["server_id"],
+    ), 202
+
+
+@deployments_bp.route("/api/deployment-targets/<int:target_id>/push-db", methods=["POST"])
+@login_required
+def api_push_db_target(target_id: int):
+    """Push the project's dev database onto the connection's server.
+
+    The remote DB credentials are read from the site's own wp-config.php
+    at run time, so nothing has to be configured here. Same permission
+    gate as a code deploy — this overwrites the remote database (a
+    timestamped backup is taken remotely first).
+    """
+    svc, err = _require("deployment_service")
+    if err:
+        return err
+    target = svc.get_target(target_id)
+    if not target:
+        return jsonify(error="Target not found."), 404
+    project_name = target["project_name"]
+    if not _user_can_deploy(project_name):
+        return jsonify(error="You don't have permission to deploy this project."), 403
+    if project_name not in _list_all_projects():
+        return jsonify(error="Unknown project."), 404
+
+    try:
+        deployment_id = svc.run_db_push(
+            project_name=project_name,
+            server_id=target["server_id"],
+            branch=target["branch"],
+            triggered_by=getattr(g.current_user, "id", None),
+            app=current_app._get_current_object(),
+        )
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+    except RuntimeError as exc:
+        msg = str(exc)
+        status = 409 if "already running" in msg else 400
+        return jsonify(error=msg), status
+
+    return jsonify(
+        deployment_id=deployment_id,
+        project=project_name,
+        server_id=target["server_id"],
+        kind="db",
+    ), 202
+
+
+@deployments_bp.route("/api/deployment-targets/<int:target_id>/push-media", methods=["POST"])
+@login_required
+def api_push_media_target(target_id: int):
+    """Sync the project's dev wp-content/uploads onto the server.
+
+    Additive: files are created and updated, never deleted remotely, so
+    media uploaded straight onto the target survive the sync.
+    """
+    svc, err = _require("deployment_service")
+    if err:
+        return err
+    target = svc.get_target(target_id)
+    if not target:
+        return jsonify(error="Target not found."), 404
+    project_name = target["project_name"]
+    if not _user_can_deploy(project_name):
+        return jsonify(error="You don't have permission to deploy this project."), 403
+    if project_name not in _list_all_projects():
+        return jsonify(error="Unknown project."), 404
+
+    try:
+        deployment_id = svc.run_media_push(
+            project_name=project_name,
+            server_id=target["server_id"],
+            branch=target["branch"],
+            triggered_by=getattr(g.current_user, "id", None),
+            app=current_app._get_current_object(),
+        )
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+    except RuntimeError as exc:
+        msg = str(exc)
+        status = 409 if "already running" in msg else 400
+        return jsonify(error=msg), status
+
+    return jsonify(
+        deployment_id=deployment_id,
+        project=project_name,
+        server_id=target["server_id"],
+        kind="media",
     ), 202
 
 

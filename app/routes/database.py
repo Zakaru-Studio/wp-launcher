@@ -132,15 +132,19 @@ def export_database(project_name):
 
     mysql_container = f"{project_name}_mysql_1"
 
-    # Project type detection — Next.js uses per-project DB/user, WP uses fixed.
+    # Identifiants relus depuis le conteneur (ou son compose) : le mot de
+    # passe est propre au projet, seul le nom d'utilisateur/base suit encore
+    # la convention Next.js = nom du projet / WordPress = 'wordpress'.
+    from app.utils.project_credentials import get_mysql_credentials
+    _creds = get_mysql_credentials(project_name, container_name=mysql_container)
+
     if os.path.exists(os.path.join(project_path, 'client')):
-        db_user = project_name
-        db_password = 'projectpassword'
-        db_name = project_name
+        db_user = _creds['user'] if _creds['user'] != 'wordpress' else project_name
+        db_name = _creds['database'] if _creds['database'] != 'wordpress' else project_name
     else:
-        db_user = 'wordpress'
-        db_password = 'wordpress'
-        db_name = 'wordpress'
+        db_user = _creds['user']
+        db_name = _creds['database']
+    db_password = _creds['password']
 
     config_cmd = (
         "printf '[mysqldump]\\nuser=%s\\npassword=%s\\n' "

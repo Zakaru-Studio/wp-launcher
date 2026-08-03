@@ -7,7 +7,7 @@ services:
     restart: unless-stopped
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: adminpassword
+      MONGO_INITDB_ROOT_PASSWORD: "{mongo_password}"
       MONGO_INITDB_DATABASE: PROJECT_NAME
     volumes:
       - mongodb_data:/data/db
@@ -15,7 +15,7 @@ services:
     networks:
       - app_network
     ports:
-      - "0.0.0.0:{mongodb_port}:27017"  # Port MongoDB exposé
+      - "{admin_bind}:{mongodb_port}:27017"  # MongoDB — loopback (WPL_ADMIN_BIND)
     command: ["mongod", "--auth", "--bind_ip_all"]
     # Allocations raisonnables pour MongoDB
     mem_limit: 384m
@@ -38,7 +38,7 @@ services:
     networks:
       - app_network
     ports:
-      - "0.0.0.0:{nextjs_port}:3000"  # Port Next.js frontend
+      - "{site_bind}:{nextjs_port}:3000"  # Port Next.js frontend
     environment:
       - NODE_ENV=development
       - NEXT_TELEMETRY_DISABLED=1
@@ -68,15 +68,15 @@ services:
     networks:
       - app_network
     ports:
-      - "0.0.0.0:{api_port}:3001"  # Port API Express
+      - "{site_bind}:{api_port}:3001"  # Port API Express
     environment:
       - NODE_ENV=development
-      - MONGODB_URI=mongodb://admin:adminpassword@mongodb:27017/PROJECT_NAME?authSource=admin
+      - MONGODB_URI=mongodb://admin:{mongo_password}@mongodb:27017/PROJECT_NAME?authSource=admin
       - DB_HOST=mongodb
       - DB_PORT=27017
       - DB_NAME=PROJECT_NAME
       - DB_USER=admin
-      - DB_PASSWORD=adminpassword
+      - DB_PASSWORD={mongo_password}
       - JWT_SECRET=your-jwt-secret-key-here-PROJECT_NAME
       - CORS_ORIGIN=http://{local_ip}:{nextjs_port}
       - API_PORT=3001
@@ -105,8 +105,8 @@ services:
     networks:
       - app_network
     ports:
-      - "0.0.0.0:{mailpit_port}:8025"  # Port interface web Mailpit
-      - "0.0.0.0:{smtp_port}:1025"     # Port SMTP Mailpit
+      - "{admin_bind}:{mailpit_port}:8025"  # Port interface web Mailpit
+      - "{admin_bind}:{smtp_port}:1025"     # Port SMTP Mailpit
     # Allocations légères
     mem_limit: 48m
     cpus: '0.25'
@@ -117,14 +117,14 @@ services:
     restart: unless-stopped
     environment:
       ME_CONFIG_MONGODB_ADMINUSERNAME: admin
-      ME_CONFIG_MONGODB_ADMINPASSWORD: adminpassword
-      ME_CONFIG_MONGODB_URL: mongodb://admin:adminpassword@mongodb:27017/
+      ME_CONFIG_MONGODB_ADMINPASSWORD: "{mongo_password}"
+      ME_CONFIG_MONGODB_URL: mongodb://admin:{mongo_password}@mongodb:27017/
       ME_CONFIG_BASICAUTH_USERNAME: admin
-      ME_CONFIG_BASICAUTH_PASSWORD: adminpassword
+      ME_CONFIG_BASICAUTH_PASSWORD: "{mongo_password}"
     networks:
       - app_network
     ports:
-      - "0.0.0.0:{mongo_express_port}:8081"  # Port Mongo Express
+      - "{admin_bind}:{mongo_express_port}:8081"  # Port Mongo Express
     depends_on:
       mongodb:
         condition: service_started

@@ -402,6 +402,13 @@ class PortConflictResolver:
         with open(backup_file, 'w') as f:
             f.write(content)
 
+        # Adresse de bind à réécrire, et motif tolérant en lecture (les projets
+        # antérieurs au durcissement portent 0.0.0.0).
+        from app.utils import security_config
+        site_bind = security_config.site_bind_address()
+        admin_bind = security_config.admin_bind_address()
+        bind = security_config.BIND_PREFIX
+
         # Appliquer les changements
         for change in changes:
             old_port = change['old_port']
@@ -411,14 +418,14 @@ class PortConflictResolver:
             # Patterns de remplacement selon le service
             if service == 'wordpress':
                 content = re.sub(
-                    rf'"0\.0\.0\.0:{old_port}:80"',
-                    f'"0.0.0.0:{new_port}:80"',
+                    rf'"{bind}{old_port}:80"',
+                    f'"{site_bind}:{new_port}:80"',
                     content
                 )
             elif service == 'phpmyadmin':
                 content = re.sub(
-                    rf'"0\.0\.0\.0:{old_port}:80"',
-                    f'"0.0.0.0:{new_port}:80"',
+                    rf'"{bind}{old_port}:80"',
+                    f'"{admin_bind}:{new_port}:80"',
                     content
                 )
                 content = re.sub(
@@ -428,20 +435,20 @@ class PortConflictResolver:
                 )
             elif service == 'mailpit':
                 content = re.sub(
-                    rf'"0\.0\.0\.0:{old_port}:8025"',
-                    f'"0.0.0.0:{new_port}:8025"',
+                    rf'"{bind}{old_port}:8025"',
+                    f'"{admin_bind}:{new_port}:8025"',
                     content
                 )
             elif service == 'smtp':
                 content = re.sub(
-                    rf'"0\.0\.0\.0:{old_port}:1025"',
-                    f'"0.0.0.0:{new_port}:1025"',
+                    rf'"{bind}{old_port}:1025"',
+                    f'"{admin_bind}:{new_port}:1025"',
                     content
                 )
             elif service == 'nextjs':
                 content = re.sub(
-                    rf'"0\.0\.0\.0:{old_port}:3000"',
-                    f'"0.0.0.0:{new_port}:3000"',
+                    rf'"{bind}{old_port}:3000"',
+                    f'"{site_bind}:{new_port}:3000"',
                     content
                 )
 

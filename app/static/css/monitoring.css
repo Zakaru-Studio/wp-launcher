@@ -177,11 +177,21 @@
 /* Tabs */
 .monitoring-tabs {
     display: flex;
+    align-items: center;
     gap: 0.35rem;
     margin-bottom: 1.5rem;
     border: none;
     padding-bottom: 0;
     position: relative;
+}
+
+/* Délai de rafraîchissement : même conteneur que les onglets, calé à droite */
+.monitoring-tabs-aside {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: auto;
+    padding-bottom: 0.35rem;
 }
 
 .monitoring-tabs::after {

@@ -38,6 +38,32 @@ def create_app():
     # Créer l'application Flask
     app = _create_app()
 
+    # ==================== REVERSE PROXY ====================
+    # Sans ça, derrière nginx/Caddy toutes les requêtes semblent venir de
+    # 127.0.0.1 : le throttle de login deviendrait global et url_for()
+    # générerait des URLs http:// sur un site servi en https://.
+    # WPL_TRUSTED_PROXIES = nombre de proxies devant l'app (0 = aucun).
+    #
+    # Défaut 0, volontairement : activer ProxyFix sans proxy réel laisserait
+    # n'importe quel client fixer son propre X-Forwarded-For, donc changer
+    # d'adresse à chaque requête et contourner entièrement le verrouillage de
+    # login. À ne mettre à 1 (ou plus) qu'avec un reverse proxy qui réécrit
+    # lui-même l'en-tête.
+    try:
+        _proxy_count = int(os.environ.get('WPL_TRUSTED_PROXIES', '0'))
+    except ValueError:
+        _proxy_count = 0
+
+    if _proxy_count > 0:
+        from werkzeug.middleware.proxy_fix import ProxyFix
+        app.wsgi_app = ProxyFix(
+            app.wsgi_app,
+            x_for=_proxy_count,
+            x_proto=_proxy_count,
+            x_host=_proxy_count,
+            x_prefix=_proxy_count,
+        )
+
     # ==================== CSRF PROTECTION ====================
     # Les tokens durent la session entière (évite de casser les opérations longues)
     app.config['WTF_CSRF_TIME_LIMIT'] = None
@@ -112,7 +138,34 @@ def create_app():
         return {
             'app_version': APP_VERSION
         }
-    
+
+    @app.after_request
+    def set_security_headers(response):
+        """En-têtes de sécurité pour une instance exposée derrière un reverse proxy.
+
+        Pas de CSP ici : l'UI s'appuie sur des styles et handlers inline un peu
+        partout, une politique posée à l'aveugle casserait les pages. Le reste
+        est sans risque de régression.
+        """
+        from app.utils import security_config
+
+        response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+        response.headers.setdefault('X-Frame-Options', 'DENY')
+        response.headers.setdefault('Referrer-Policy', 'same-origin')
+        # L'app n'a besoin d'aucune de ces API navigateur
+        response.headers.setdefault(
+            'Permissions-Policy',
+            'geolocation=(), microphone=(), camera=(), payment=()'
+        )
+
+        if not security_config.is_local_mode():
+            # 1 an, sans preload : le domaine peut servir autre chose
+            response.headers.setdefault(
+                'Strict-Transport-Security', 'max-age=31536000; includeSubDomains'
+            )
+
+        return response
+
     return app
 
 def create_socketio_instance(app):
@@ -240,14 +293,29 @@ def init_app_services(app, socketio):
         app.register_blueprint(admin_bp)
         
         # Config session — durcie
-        app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-me')
+        from app.utils import security_config
+
+        # Pas de repli sur une clé constante : elle signe les cookies ET dérive
+        # le chiffrement des clés SSH stockées (voir ssh_service).
+        app.config['SECRET_KEY'] = security_config.require_secret_key()
         app.config['SESSION_COOKIE_NAME'] = 'wp_launcher_session'
         app.config['SESSION_COOKIE_HTTPONLY'] = True
         # 'Strict' bloque les requêtes cross-site y compris celles initiées par navigation
         app.config['SESSION_COOKIE_SAMESITE'] = 'Strict'
-        # Secure en HTTPS uniquement — en dev HTTP on désactive via env
-        app.config['SESSION_COOKIE_SECURE'] = os.environ.get('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
-        app.config['PERMANENT_SESSION_LIFETIME'] = 2592000  # 30 jours
+        # Secure par défaut — WPL_LOCAL_MODE=true pour un poste de dev en HTTP
+        app.config['SESSION_COOKIE_SECURE'] = security_config.session_cookie_secure()
+        app.config['PERMANENT_SESSION_LIFETIME'] = security_config.session_lifetime_seconds()
+
+        # Le mot de passe admin WordPress est global et voyage dans l'URL de
+        # l'autologin : le laisser à 'admin' sur une instance joignable donne
+        # wp-admin à quiconque trouve un site.
+        from app.config.docker_config import DockerConfig
+        if DockerConfig.WP_ADMIN_PASSWORD == 'admin' and not security_config.is_local_mode():
+            app.logger.warning(
+                "WP_ADMIN_PASSWORD is still 'admin'. Every project created from "
+                "now on gets that password on its WordPress admin account. Set "
+                "WP_ADMIN_PASSWORD in .env before creating projects."
+            )
         
         print("✅ Système multi-dev activé")
         

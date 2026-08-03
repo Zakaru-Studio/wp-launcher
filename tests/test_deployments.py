@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import sys
 import tempfile
 import threading
 import time
@@ -696,3 +697,320 @@ def test_validate_deploy_path_rejects_unsafe(bad_path):
     from app.routes.deployments import _validate_deploy_path
     ok, reason = _validate_deploy_path(bad_path)
     assert ok is False and reason
+
+
+# ─── DB push (dev → remote database) ───
+
+
+def test_schema_v5_migration_adds_kind_column(tmp_path):
+    """A v4 database predates the git/db discriminator. The migration
+    must add `kind` and default every existing row to 'git'."""
+    from app.services import deployments_schema
+
+    db = str(tmp_path / "v4.db")
+    deployments_schema.init(db)
+    with sqlite3.connect(db) as raw:
+        raw.execute("ALTER TABLE deployments DROP COLUMN kind")
+        raw.execute(
+            "INSERT INTO deployments (project_name, server_id, branch, status, "
+            "started_at) VALUES ('p', 1, 'main', 'success', '2026-01-01')"
+        )
+        raw.execute("PRAGMA user_version = 4")
+        raw.commit()
+
+    deployments_schema.init(db)
+
+    with sqlite3.connect(db) as raw:
+        cols = [r[1] for r in raw.execute("PRAGMA table_info('deployments')")]
+        assert "kind" in cols
+        assert raw.execute("SELECT kind FROM deployments").fetchone()[0] == "git"
+        assert raw.execute("PRAGMA user_version").fetchone()[0] == deployments_schema.SCHEMA_VERSION
+
+
+def test_db_push_shares_the_concurrency_guard(tmp_deployment_service, tmp_server_service):
+    """A DB push and a git deploy both mutate the same remote site, so
+    one must not start while the other is running."""
+    from contextlib import nullcontext
+
+    s = tmp_server_service.create(
+        label="pushbox", env="staging", hostname="h", ssh_user="u",
+        ssh_private_key_enc=b"x", deploy_base_path="/p",
+        host_fingerprint="SHA256:fake",
+    )
+    with sqlite3.connect(tmp_deployment_service.db_path) as raw:
+        raw.execute(
+            "INSERT INTO deployments (project_name, server_id, branch, status, kind, "
+            "triggered_by, started_at, log_file) VALUES "
+            "('acme', ?, 'main', 'running', 'git', NULL, '2026-01-01T00:00:00+00:00', '')",
+            (s.id,),
+        )
+        raw.commit()
+
+    class FakeApp:
+        def app_context(self):
+            return nullcontext()
+
+    with pytest.raises(RuntimeError, match="already running"):
+        tmp_deployment_service.run_db_push(
+            project_name="acme", server_id=s.id, branch="main",
+            triggered_by=None, app=FakeApp(),
+        )
+
+
+def test_db_push_requires_pinned_fingerprint(tmp_deployment_service, tmp_server_service):
+    """Same host-key pinning requirement as a code deploy — a DB push
+    ships a full dump, so an unverified host is never acceptable."""
+    from contextlib import nullcontext
+
+    s = tmp_server_service.create(
+        label="nofp", env="staging", hostname="h", ssh_user="u",
+        ssh_private_key_enc=b"x", deploy_base_path="/p",
+    )
+
+    class FakeApp:
+        def app_context(self):
+            return nullcontext()
+
+    with pytest.raises(RuntimeError, match="fingerprint"):
+        tmp_deployment_service.run_db_push(
+            project_name="acme", server_id=s.id, branch="main",
+            triggered_by=None, app=FakeApp(),
+        )
+
+
+def test_push_db_route_rejects_unauth(client):
+    rv = client.post("/api/deployment-targets/1/push-db", follow_redirects=False)
+    assert rv.status_code in (302, 400, 401, 403)
+    assert rv.status_code != 500
+
+
+def test_cleanup_pairs_cover_json_escaped_and_scheme_upgrade():
+    """`wp search-replace` only takes one pair per call, and the dump
+    rewrite only caught `http://<devhost>`. The follow-up passes must
+    cover the bare host plus the JSON-escaped `http:\\/\\/` form that
+    Elementor / WP Rocket payloads use."""
+    from app.services.db_push import _cleanup_pairs
+
+    pairs = _cleanup_pairs("http://192.168.1.21:8248", "https://site.example.com")
+    assert len(pairs) % 2 == 0
+    as_tuples = list(zip(pairs[::2], pairs[1::2]))
+    # bare host, so every scheme / protocol-relative / JSON form matches
+    assert ("192.168.1.21:8248", "site.example.com") in as_tuples
+    # scheme upgrade, plain and JSON-escaped
+    assert ("http://site.example.com", "https://site.example.com") in as_tuples
+    assert ("http:\\/\\/site.example.com", "https:\\/\\/site.example.com") in as_tuples
+
+    # A same-scheme target needs no upgrade passes.
+    same = _cleanup_pairs("http://192.168.1.21:8248", "http://staging.example.com")
+    assert same == ["192.168.1.21:8248", "staging.example.com"]
+
+
+def test_host_of_strips_scheme_and_trailing_slash():
+    from app.services.db_push import _host_of
+
+    assert _host_of("https://example.com/") == "example.com"
+    assert _host_of("http://192.168.1.21:8248") == "192.168.1.21:8248"
+    assert _host_of("https://example.com/blog") == "example.com/blog"
+
+
+def test_db_push_rejects_bogus_project_names():
+    """The project name is interpolated into a docker container name."""
+    from app.services.db_push import DbPushError
+    from app.services.push_common import PushError, container_name
+
+    # DbPushError stays a PushError so one catch site covers both pipelines.
+    assert issubclass(DbPushError, PushError)
+    assert container_name("acme", "wordpress") == "acme_wordpress_1"
+    for bad in ("acme; rm -rf /", "../etc", "a b", ""):
+        with pytest.raises(PushError):
+            container_name(bad, "wordpress")
+
+
+def test_normalize_url_strips_trailing_slash():
+    """A remote siteurl stored as `https://site.tld/` would otherwise be
+    substituted for a slash-less dev URL and double every asset path."""
+    from app.services.db_push import _normalize_url
+
+    assert _normalize_url("https://agci.zakaru.dev/") == "https://agci.zakaru.dev"
+    assert _normalize_url("  http://192.168.1.21:8252\n") == "http://192.168.1.21:8252"
+    assert _normalize_url(None) == ""
+
+
+def test_find_bin_returns_a_resolved_path():
+    """The remote `find_bin` must return the resolved path, not the
+    candidate name: a bare `wp` runs fine when executed directly but
+    fails as `php wp` — PHP does no PATH lookup. That regression made
+    every post-import URL cleanup pass fail on a Plesk host."""
+    import re
+    import subprocess
+
+    from app.services.db_push import _SCRIPT_INSPECT
+
+    body = re.search(r"find_bin\(\) \{.*?\n\}", _SCRIPT_INSPECT, re.S)
+    assert body, "find_bin() not found in the inspect script"
+    proc = subprocess.run(
+        ["bash", "-c", body.group(0) + "\nfind_bin definitely-not-a-binary sh\n"],
+        capture_output=True, text=True,
+    )
+    assert proc.returncode == 0
+    assert proc.stdout.startswith("/"), f"expected an absolute path, got {proc.stdout!r}"
+    assert proc.stdout.endswith("sh")
+
+
+# ─── media push (dev → remote uploads) ───
+
+
+def test_schema_v6_migration_allows_media_kind(tmp_path):
+    """v5 shipped a two-value CHECK on `kind`; the media sync adds a
+    third. Both the fresh-v5 and migrated-from-v4 shapes must converge."""
+    from app.services import deployments_schema
+
+    db = str(tmp_path / "v5.db")
+    deployments_schema.init(db)
+    with sqlite3.connect(db) as raw:
+        raw.execute("DROP TABLE deployments")
+        raw.execute(
+            """
+            CREATE TABLE deployments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_name TEXT NOT NULL,
+                server_id INTEGER NOT NULL,
+                branch TEXT NOT NULL,
+                commit_sha TEXT,
+                status TEXT NOT NULL
+                    CHECK(status IN ('running','success','failed','timeout','cancelled')),
+                kind TEXT NOT NULL DEFAULT 'git' CHECK(kind IN ('git','db')),
+                triggered_by INTEGER,
+                started_at TEXT NOT NULL,
+                finished_at TEXT,
+                log_file TEXT
+            )
+            """
+        )
+        raw.execute(
+            "INSERT INTO deployments (project_name, server_id, branch, status, kind, "
+            "started_at) VALUES ('p', 1, 'main', 'success', 'db', '2026-01-01')"
+        )
+        raw.execute("PRAGMA user_version = 5")
+        raw.commit()
+
+    deployments_schema.init(db)
+
+    with sqlite3.connect(db) as raw:
+        assert raw.execute("SELECT kind FROM deployments").fetchone()[0] == "db"
+        raw.execute(
+            "INSERT INTO deployments (project_name, server_id, branch, status, kind, "
+            "started_at) VALUES ('p', 1, 'main', 'success', 'media', '2026-01-02')"
+        )
+        raw.commit()
+
+
+def test_media_diff_sends_new_and_stale_only():
+    """Additive sync: send what is missing or stale, and never report a
+    remote-only file for deletion."""
+    from app.services.media_push import diff_trees
+
+    local = [
+        ("a.jpg", 100, 1000.0),   # identical remotely -> skip
+        ("b.jpg", 200, 5000.0),   # newer locally      -> send
+        ("c.jpg", 300, 1000.0),   # size differs       -> send
+        ("d.jpg", 400, 1000.0),   # absent remotely    -> send (new)
+    ]
+    remote = {
+        "a.jpg": (100, 1000.0),
+        "b.jpg": (200, 1000.0),
+        "c.jpg": (999, 1000.0),
+        "gone.jpg": (10, 1.0),    # remote-only -> must be left alone
+    }
+    todo, new_count = diff_trees(local, remote)
+    assert [rel for rel, _ in todo] == ["b.jpg", "c.jpg", "d.jpg"]
+    assert new_count == 1
+    assert "gone.jpg" not in [rel for rel, _ in todo]
+
+
+def test_media_diff_tolerates_mtime_rounding():
+    """Some SFTP servers round mtimes; a sub-second delta must not make
+    every file look stale on the next run."""
+    from app.services.media_push import diff_trees
+
+    todo, _ = diff_trees([("a.jpg", 100, 1000.9)], {"a.jpg": (100, 1000.0)})
+    assert todo == []
+
+
+def test_media_push_excludes_generated_caches(tmp_path):
+    """Elementor's CSS cache embeds absolute URLs of the environment
+    that produced it — copying it would undo the DB push's rewriting."""
+    from app.services.media_push import _iter_local_files
+
+    root = tmp_path / "uploads"
+    for rel in [
+        "2026/01/photo.jpg",
+        "elementor/css/post-1.css",
+        "elementor/forms/index.php",
+        "cache/x.css",
+        "wp-rocket-config/site.php",
+        ".DS_Store",
+    ]:
+        p = root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("x")
+
+    found = sorted(rel for rel, _, _ in _iter_local_files(str(root)))
+    assert found == ["2026/01/photo.jpg", "elementor/forms/index.php"]
+
+
+def test_media_push_skips_symlinks(tmp_path):
+    """Only regular files are synced: a symlink would be followed and
+    silently materialised as a copy on the remote."""
+    from app.services.media_push import _iter_local_files
+
+    root = tmp_path / "uploads"
+    root.mkdir()
+    (root / "real.jpg").write_text("x")
+    os.symlink(str(root / "real.jpg"), str(root / "link.jpg"))
+
+    found = sorted(rel for rel, _, _ in _iter_local_files(str(root)))
+    assert found == ["real.jpg"]
+
+
+def test_parse_remote_listing_handles_missing_dir_and_rows():
+    from app.services.media_push import _parse_remote_listing
+
+    missing, files = _parse_remote_listing("MISSING=1\n__FILES__\n")
+    assert missing is True and files == {}
+
+    missing, files = _parse_remote_listing(
+        "MISSING=0\n__FILES__\n120\t1700000000.5\t2026/01/a.jpg\nbroken line\n"
+    )
+    assert missing is False
+    assert files == {"2026/01/a.jpg": (120, 1700000000.5)}
+
+
+def test_push_media_route_rejects_unauth(client):
+    rv = client.post("/api/deployment-targets/1/push-media", follow_redirects=False)
+    assert rv.status_code in (302, 400, 401, 403)
+    assert rv.status_code != 500
+
+
+def test_push_modules_have_no_undefined_names():
+    """A refactor once removed `import subprocess` from db_push while
+    _copy_and_gzip still used it — the failure only surfaced mid-push,
+    after the dump had been built. Compile-time checks miss it, so lint
+    the push modules for undefined names here."""
+    import subprocess as sp
+
+    proc = sp.run(
+        [sys.executable, "-m", "pyflakes",
+         "app/services/db_push.py",
+         "app/services/media_push.py",
+         "app/services/push_common.py",
+         "app/services/deployment_service.py"],
+        capture_output=True, text=True,
+    )
+    if proc.returncode == 1 and "No module named pyflakes" in proc.stderr:
+        pytest.skip("pyflakes not installed")
+    problems = [
+        line for line in proc.stdout.splitlines()
+        if "undefined name" in line or "may be undefined" in line
+    ]
+    assert not problems, "\n".join(problems)

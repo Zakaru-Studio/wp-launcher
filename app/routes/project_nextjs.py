@@ -298,40 +298,37 @@ def fix_docker_compose_ports(project_name):
         if project.nextjs_port:
             ports['nextjs'] = project.nextjs_port
         
-        # Remplacer les ports dans le contenu
+        # Remplacer les ports dans le contenu.
+        # L'adresse de bind varie selon l'âge du projet (0.0.0.0 avant le
+        # durcissement, 127.0.0.1 depuis) : on la matche sans la présumer.
+        import re
+        from app.utils import security_config
+        bind = security_config.BIND_PREFIX
+
         changes = []
-        if ports.get('wordpress'):
-            old_pattern = f'0.0.0.0:{ports["wordpress"]}:80'
-            if old_pattern in content:
-                changes.append(f'WordPress: {ports["wordpress"]}')
-        
-        if ports.get('phpmyadmin'):
-            old_pattern = f'0.0.0.0:{ports["phpmyadmin"]}:80'
-            if old_pattern in content:
-                changes.append(f'phpMyAdmin: {ports["phpmyadmin"]}')
-        
-        if ports.get('mailpit'):
-            old_pattern = f'0.0.0.0:{ports["mailpit"]}:8025'
-            if old_pattern in content:
-                changes.append(f'Mailpit: {ports["mailpit"]}')
-        
-        if ports.get('smtp'):
-            old_pattern = f'0.0.0.0:{ports["smtp"]}:1025'
-            if old_pattern in content:
-                changes.append(f'SMTP: {ports["smtp"]}')
-        
+        for key, container_port, label in (
+            ('wordpress', 80, 'WordPress'),
+            ('phpmyadmin', 80, 'phpMyAdmin'),
+            ('mailpit', 8025, 'Mailpit'),
+            ('smtp', 1025, 'SMTP'),
+        ):
+            # Guillemets obligatoires dans le motif : BIND_PREFIX est
+            # optionnel, donc sans ancrage `8080:80` matcherait aussi
+            # `"127.0.0.1:18080:80"` et on signalerait un port non touché.
+            if ports.get(key) and re.search(rf'"{bind}{ports[key]}:{container_port}"', content):
+                changes.append(f'{label}: {ports[key]}')
+
         if ports.get('nextjs'):
             # Chercher et remplacer les ports incorrects pour Next.js
-            import re
-            nextjs_pattern = r'0\.0\.0\.0:(\d+):3000'
-            matches = re.findall(nextjs_pattern, content)
-            
-            for match in matches:
+            site_bind = security_config.site_bind_address()
+            for match in re.findall(rf'{bind}(\d+):3000', content):
                 current_port = int(match)
                 if current_port != ports['nextjs']:
-                    old_port_config = f'0.0.0.0:{current_port}:3000'
-                    new_port_config = f'0.0.0.0:{ports["nextjs"]}:3000'
-                    content = content.replace(old_port_config, new_port_config)
+                    content = re.sub(
+                        rf'{bind}{current_port}:3000',
+                        f'{site_bind}:{ports["nextjs"]}:3000',
+                        content
+                    )
                     changes.append(f'Next.js: {current_port} → {ports["nextjs"]}')
         
         # Écrire le fichier corrigé

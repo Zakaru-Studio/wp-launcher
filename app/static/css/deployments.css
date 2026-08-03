@@ -684,6 +684,38 @@
 .deploy-target-redeploy-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 .deploy-target-redeploy-btn .material-symbols-outlined { font-size: 18px; }
 
+/* Push the dev database to this connection. Deliberately quieter than
+   the primary deploy button: it overwrites the remote database. */
+.deploy-target-dbpush-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 13px;
+    border-radius: 9px;
+    border: 1px solid var(--al-outline-variant);
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 0.82rem;
+    background: transparent;
+    color: var(--al-on-surface-variant);
+    transition: background 0.18s, color 0.18s, border-color 0.18s;
+}
+.deploy-target-dbpush-btn:hover {
+    background: var(--al-surface-container-high);
+    color: var(--al-on-surface);
+    border-color: var(--al-outline);
+}
+.deploy-target-dbpush-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.deploy-target-dbpush-btn .material-symbols-outlined { font-size: 18px; }
+
+/* History rows: mark a database push apart from a commit sha. */
+code.deploy-run-kind-db {
+    background: var(--al-surface-container-high);
+    color: var(--al-on-surface-variant);
+    font-style: italic;
+}
+
 /* Per-target history drawer */
 .deploy-target-history {
     margin-top: 12px;

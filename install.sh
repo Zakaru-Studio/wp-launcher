@@ -89,12 +89,56 @@ echo -e "${YELLOW}[5/6] Configuration .env...${NC}"
 
 if [ ! -f "$APP_DIR/.env" ]; then
     LOCAL_IP=$(hostname -I | awk '{print $1}')
+
+    # Machine locale ou VPS ? Détermine si l'app et les sites écoutent sur
+    # toutes les interfaces ou seulement sur la loopback.
+    echo ""
+    echo "  Ce serveur est-il accessible depuis Internet (VPS, IP publique) ?"
+    # `|| REPLY=""` : sous `set -e`, un read sans tty (curl | bash, CI)
+    # renvoie 1 et avorterait l'installation sans écrire de .env.
+    REPLY=""
+    read -p "  Répondre o installe des défauts durcis (écoute en loopback). (o/N) " -n 1 -r || REPLY=""
+    echo ""
+    if [ ! -t 0 ]; then
+        # Pas d'interaction possible : on choisit le défaut sûr.
+        echo "  (pas de terminal — mode durci par défaut)"
+        LOCAL_MODE=false
+    elif [[ $REPLY =~ ^[Oo]$ ]]; then
+        LOCAL_MODE=false
+    else
+        LOCAL_MODE=true
+    fi
+
+    WP_ADMIN_PW=$(python3 -c "import secrets; print(secrets.token_urlsafe(18))")
+
     cat > "$APP_DIR/.env" <<EOF
 APP_HOST=$LOCAL_IP
 APP_PORT=5000
 SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+
+# false = tout écoute en loopback, cookie de session en HTTPS uniquement.
+# À laisser à false dès que la machine est joignable depuis Internet.
+WPL_LOCAL_MODE=$LOCAL_MODE
+
+# Compte admin WordPress créé pour les nouveaux projets. Valeur globale,
+# partagée par tous les projets et transmise à l'autologin dans l'URL :
+# à ne jamais réutiliser ailleurs.
+WP_ADMIN_USER=admin
+WP_ADMIN_PASSWORD=$WP_ADMIN_PW
+WP_ADMIN_EMAIL=admin@example.com
 EOF
-    echo -e "  ✅ .env créé (IP: $LOCAL_IP)"
+    chmod 600 "$APP_DIR/.env"
+
+    if [ "$LOCAL_MODE" = "false" ]; then
+        echo -e "  ✅ .env créé en mode durci (IP: $LOCAL_IP)"
+        echo -e "     ${YELLOW}L'app n'écoutera que sur 127.0.0.1.${NC}"
+        echo -e "     Placez un reverse proxy HTTPS devant, et n'ouvrez au"
+        echo -e "     pare-feu que 22 et 443. Voir la section Deployment du README."
+    else
+        echo -e "  ✅ .env créé en mode local (IP: $LOCAL_IP)"
+    fi
+    echo -e "     Admin WordPress des nouveaux projets : ${YELLOW}admin${NC} / ${YELLOW}${WP_ADMIN_PW}${NC}"
+    echo -e "     (également stocké dans .env — modifiable avant le 1er projet)"
 else
     echo -e "  ⏭️  .env existe déjà"
 fi
@@ -103,7 +147,8 @@ fi
 echo ""
 echo -e "${YELLOW}[6/6] Service systemd...${NC}"
 
-read -p "  Installer le service systemd wp-launcher ? (o/N) " -n 1 -r
+REPLY=""
+read -p "  Installer le service systemd wp-launcher ? (o/N) " -n 1 -r || REPLY=""
 echo ""
 if [[ $REPLY =~ ^[Oo]$ ]]; then
     # Adapt service template to current install

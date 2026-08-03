@@ -6,11 +6,22 @@ Configuration centralisée pour les bases de données MySQL
 class DatabaseConfig:
     """Configuration pour les connexions et opérations MySQL"""
     
-    # Credentials par défaut
-    DEFAULT_USER = 'wordpress'
-    DEFAULT_PASSWORD = 'wordpress'
-    DEFAULT_DB = 'wordpress'
-    ROOT_PASSWORD = 'rootpassword'
+    # Identifiants HÉRITÉS, partagés par tous les projets créés avant la
+    # randomisation par projet. Ils ne valent plus que comme repli : tout
+    # nouveau code doit passer par app.utils.project_credentials, qui lit
+    # l'environnement du conteneur puis le docker-compose.
+    # Alias explicites pour qu'un seul grep trouve tous les consommateurs.
+    from app.utils.security_config import (
+        LEGACY_MYSQL_DATABASE as _LEGACY_DB,
+        LEGACY_MYSQL_PASSWORD as _LEGACY_PW,
+        LEGACY_MYSQL_ROOT_PASSWORD as _LEGACY_ROOT_PW,
+        LEGACY_MYSQL_USER as _LEGACY_USER,
+    )
+
+    DEFAULT_USER = _LEGACY_USER
+    DEFAULT_PASSWORD = _LEGACY_PW
+    DEFAULT_DB = _LEGACY_DB
+    ROOT_PASSWORD = _LEGACY_ROOT_PW
     
     # Configuration du charset
     CHARSET = 'utf8mb4'

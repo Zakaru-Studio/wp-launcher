@@ -222,18 +222,55 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 /**
+ * Ouvre la modale de confirmation de redémarrage (cf. _app_header.html).
+ * Si la modale n'est pas présente (page sans header), on redémarre directement.
+ */
+function restartApp() {
+    const modalEl = document.getElementById('restartAppModal');
+    if (!modalEl || typeof bootstrap === 'undefined') {
+        return performAppRestart();
+    }
+    bootstrap.Modal.getOrCreateInstance(modalEl).show();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const confirmBtn = document.getElementById('confirm-restart-app');
+    if (!confirmBtn) return;
+
+    confirmBtn.addEventListener('click', function() {
+        const modalEl = document.getElementById('restartAppModal');
+        if (modalEl) {
+            bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+        }
+        performAppRestart();
+    });
+});
+
+/** Tous les déclencheurs de redémarrage présents dans la page. */
+function restartButtons() {
+    return document.querySelectorAll(
+        '#restart-app-btn, #restart-app-btn-mobile, .btn-restart-app'
+    );
+}
+
+/** Rétablit l'état normal des boutons de redémarrage. */
+function resetRestartButtons() {
+    restartButtons().forEach(btn => {
+        btn.classList.remove('restarting');
+        btn.disabled = false;
+    });
+}
+
+/**
  * Redémarre l'application gracefully
  */
-async function restartApp() {
-    if (!confirm('Redémarrer l\'application ? Cela prendra quelques secondes.')) {
-        return;
-    }
-    
-    const btn = document.querySelector('.btn-restart-app');
-    if (btn) {
+async function performAppRestart() {
+    // Le bouton existe en deux exemplaires (menu profil sidebar + mobile) :
+    // on applique le retour visuel sur tous ceux présents.
+    restartButtons().forEach(btn => {
         btn.classList.add('restarting');
         btn.disabled = true;
-    }
+    });
     
     try {
         const response = await fetch('/api/system/restart', {
@@ -276,10 +313,7 @@ async function restartApp() {
                             if (typeof showToast === 'function') {
                                 showToast('Le serveur met du temps à redémarrer. Rechargez manuellement.', 'warning');
                             }
-                            if (btn) {
-                                btn.classList.remove('restarting');
-                                btn.disabled = false;
-                            }
+                            resetRestartButtons();
                         }
                     });
             };
@@ -293,9 +327,6 @@ async function restartApp() {
     } catch (error) {
         console.error('Erreur redémarrage:', error);
         showToast('Erreur lors du redémarrage', 'error');
-        if (btn) {
-            btn.classList.remove('restarting');
-            btn.disabled = false;
-        }
+        resetRestartButtons();
     }
 }

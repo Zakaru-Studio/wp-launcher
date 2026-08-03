@@ -114,6 +114,35 @@ def test_detect_source_prefix_returns_none_for_non_wp(tmp_path: Path):
     assert svc._detect_source_prefix(str(dump)) is None
 
 
+def test_detect_source_prefix_needs_two_core_tables(tmp_path: Path):
+    """`app_users` alone is not evidence of a WordPress dump."""
+    dump = tmp_path / "dump.sql"
+    dump.write_text(
+        "CREATE TABLE `app_users` (id INT);\n"
+        "CREATE TABLE `app_sessions` (id INT);\n"
+    )
+    svc = FastImportService(projects_folder=str(tmp_path))
+    assert svc._detect_source_prefix(str(dump)) is None
+
+
+def test_detect_source_prefix_finds_core_tables_past_the_first_megabytes(tmp_path: Path):
+    """Regression: tables are dumped alphabetically, so a fat
+    `<prefix>actionscheduler_logs` can push the core tables far into the
+    file. Detection must not give up on a fixed window."""
+    dump = tmp_path / "dump.sql"
+    with open(dump, "w") as f:
+        f.write("CREATE TABLE `EdM2i2XN_actionscheduler_logs` (id INT);\n")
+        row = "INSERT INTO `EdM2i2XN_actionscheduler_logs` VALUES (%d,'%s');\n"
+        for i in range(12000):
+            f.write(row % (i, "x" * 900))
+        for table in ("commentmeta", "comments", "options", "posts"):
+            f.write(f"CREATE TABLE `EdM2i2XN_{table}` (id INT);\n")
+
+    assert dump.stat().st_size > 10 * 1024 * 1024  # past the old window
+    svc = FastImportService(projects_folder=str(tmp_path))
+    assert svc._detect_source_prefix(str(dump)) == "EdM2i2XN_"
+
+
 def test_read_target_prefix_parses_wp_config(tmp_path: Path):
     project = tmp_path / "myproj"
     project.mkdir()
@@ -146,9 +175,8 @@ def test_stream_adapt_prefix_rewrites_and_cleans_up(tmp_path: Path):
     (project / "wp-config.php").write_text("$table_prefix = 'new_';")
     dump = tmp_path / "d.sql"
     _write_wp_dump(dump, prefix="old_")
-    # Add a PHP-serialized hit so the length-fixing regex is exercised.
     with open(dump, "a") as f:
-        f.write('s:13:"old_user_roles";\n')
+        f.write('s:14:"old_user_roles";\n')
 
     svc = FastImportService(projects_folder=str(tmp_path))
     out = svc._stream_adapt_prefix(str(dump), "p")
@@ -156,7 +184,51 @@ def test_stream_adapt_prefix_rewrites_and_cleans_up(tmp_path: Path):
     content = Path(out).read_text()
     assert "new_options" in content
     assert "old_options" not in content
-    assert 's:13:"new_user_roles"' in content  # length recomputed
+    assert 's:14:"new_user_roles"' in content
+    os.remove(out)
+
+
+def test_stream_adapt_prefix_recomputes_serialized_lengths(tmp_path: Path):
+    """A prefix of a different length must not leave stale `s:N:` byte
+    counts behind — every serialized option/meta would fail to
+    unserialize and WordPress would drop the value."""
+    project = tmp_path / "p"
+    project.mkdir()
+    (project / "wp-config.php").write_text("$table_prefix = 'wp_';")
+    dump = tmp_path / "d.sql"
+    _write_wp_dump(dump, prefix="EdM2i2XN_")
+    with open(dump, "a") as f:
+        # Both the plain and the SQL-escaped quote form occur in dumps.
+        f.write('INSERT INTO `EdM2i2XN_options` VALUES '
+                '(1,\'EdM2i2XN_user_roles\',\'a:1:{s:21:"EdM2i2XN_capabilities";}\');\n')
+        f.write('INSERT INTO `EdM2i2XN_options` VALUES '
+                '(2,\'x\',\'a:1:{s:18:\\"EdM2i2XN_wc_orders\\";}\');\n')
+
+    svc = FastImportService(projects_folder=str(tmp_path))
+    out = svc._stream_adapt_prefix(str(dump), "p")
+    content = Path(out).read_text()
+    assert 's:15:"wp_capabilities"' in content
+    assert 's:12:\\"wp_wc_orders\\"' in content
+    assert "'wp_user_roles'" in content
+    assert "EdM2i2XN" not in content
+    os.remove(out)
+
+
+def test_stream_adapt_prefix_leaves_unrelated_serialized_data_alone(tmp_path: Path):
+    project = tmp_path / "p"
+    project.mkdir()
+    (project / "wp-config.php").write_text("$table_prefix = 'wp_';")
+    dump = tmp_path / "d.sql"
+    _write_wp_dump(dump, prefix="EdM2i2XN_")
+    with open(dump, "a") as f:
+        f.write('INSERT INTO `EdM2i2XN_usermeta` VALUES '
+                '(1,1,\'EdM2i2XN_capabilities\',\'a:1:{s:13:"administrator";b:1;}\');\n')
+
+    svc = FastImportService(projects_folder=str(tmp_path))
+    out = svc._stream_adapt_prefix(str(dump), "p")
+    content = Path(out).read_text()
+    assert 's:13:"administrator"' in content
+    assert "'wp_capabilities'" in content
     os.remove(out)
 
 

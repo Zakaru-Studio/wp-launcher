@@ -2,20 +2,29 @@
 
 ## Scope & design assumptions
 
-WP Launcher is designed for **local development environments only**.
+WP Launcher can be self-hosted on a VPS. Defaults target that case: services
+bind to loopback, session cookies are HTTPS-only, `SECRET_KEY` is mandatory,
+each project gets a random database password, and the login form is rate
+limited. See the Deployment section of the [README](README.md#deployment).
 
-By design, it ships with convenience defaults that are **not** suitable for
-production or internet-exposed use:
+**The structural caveat:** the app drives Docker and `sudo` on its host, so
+an authenticated session is effectively root on the machine. The network is
+the real security boundary — put the instance behind a VPN or an IP
+allow-list. The login form is defence in depth, not the perimeter.
 
-- Weak default credentials on generated WordPress/MySQL containers
-  (`admin/admin`, `wordpress/wordpress`, `rootpassword`)
+Setting `WPL_LOCAL_MODE=true` restores the permissive local-development
+behaviour (services on `0.0.0.0`, cookies over plain HTTP, 30-day sessions).
+Vulnerabilities that require that mode, or that require host-level access
+already, may be documented rather than fixed.
+
+Still true regardless of mode:
+
+- Generated WordPress admin accounts default to `admin`/`admin` unless
+  `WP_ADMIN_PASSWORD` is set
 - Auto-login helpers for WordPress admin
 - `sudo` invocations for file permissions on bind-mounted WordPress files
-- No rate limiting on the web UI
-
-Running WP Launcher on a public network is out of scope. Vulnerabilities that
-can only be exploited in that configuration will be documented but may not be
-prioritised.
+- phpMyAdmin and Mailpit have no authentication of their own and rely
+  entirely on being unreachable from outside the host
 
 ## Supported versions
 
@@ -54,21 +63,37 @@ Include:
 
 The following are documented design choices, not bugs to report:
 
-- Default WordPress admin credentials are `admin` / `admin`
-- Default MySQL root password is `rootpassword`
-- Session cookies default to `SESSION_COOKIE_SECURE=false` for local HTTP
-  convenience — set it to `true` in any HTTPS deployment
+- Default WordPress admin credentials are `admin` / `admin` unless
+  `WP_ADMIN_PASSWORD` is set in `.env`
+- Projects created before per-project credentials still use the shared
+  `wordpress` / `rootpassword` values; they are read back from the running
+  container so both generations keep working. Rotating them on an old
+  project means editing its `docker-compose.yml`, its `wp-config.php` and
+  the MySQL user itself
 - The app requires `sudo` NOPASSWD for `chmod`, `chown`, `find` on WordPress
-  directories (documented in `install.sh`)
+  directories (documented in `install.sh`) — this is what makes an
+  authenticated session root-equivalent
+- Docker publishes ports via its own iptables chain and bypasses `ufw`;
+  container reachability is controlled by the bind addresses
+  (`WPL_SITE_BIND`, `WPL_ADMIN_BIND`), not by the host firewall
+- Changing `SECRET_KEY` invalidates every stored SSH deployment key. Use
+  `scripts/rotate_secret_key.py` to re-encrypt them instead of losing them
 
-## Hardening checklist for non-default deployments
+## Hardening checklist for self-hosted instances
 
-If you must run WP Launcher in an environment that isn't your local machine:
+Most of this is now the default; the checklist is what to verify:
 
-- [ ] Put it behind a VPN or SSH tunnel
-- [ ] Change all default WordPress/MySQL credentials
-- [ ] Export `SESSION_COOKIE_SECURE=true`
-- [ ] Export a strong `SECRET_KEY` (≥ 32 random bytes)
+- [ ] Put it behind a VPN or an IP allow-list — this is the control that
+      actually matters, since a session is root-equivalent
+- [ ] `WPL_LOCAL_MODE` unset or `false`
+- [ ] `SECRET_KEY` set to 32+ random bytes (startup aborts otherwise)
+- [ ] Reverse proxy with TLS, and `WPL_TRUSTED_PROXIES` matching the chain
+      length so the login throttle sees real client IPs
+- [ ] `WP_ADMIN_PASSWORD` changed from `admin`
+- [ ] `docker compose config` on a project shows no `0.0.0.0:` binding for
+      phpMyAdmin, Mailpit, MySQL or Mongo Express
 - [ ] Restrict GitHub OAuth `client_id` to the domain you control
 - [ ] Review the `sudo` rules in `install.sh` before applying
+- [ ] `data/` backed up privately — it holds SSH deployment keys encrypted
+      with `SECRET_KEY`
 - [ ] Keep Docker and the host kernel patched

@@ -41,7 +41,6 @@ import threading
 import time
 import uuid
 import zipfile
-from collections import Counter
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -66,6 +65,31 @@ _CREATE_TABLE_RE = re.compile(
     r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?`?([A-Za-z0-9_]+)`?",
     re.IGNORECASE,
 )
+
+# Every statement that names a table. Used by the prefix detector: on a
+# real dump the WordPress core tables can sit hundreds of MB in (tables
+# are dumped alphabetically, so `xxx_actionscheduler_logs` alone can push
+# `xxx_commentmeta` past any small scan window).
+_TABLE_REF_RE = re.compile(
+    rb"(?:CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?"
+    rb"|DROP\s+TABLE(?:\s+IF\s+EXISTS)?"
+    rb"|INSERT\s+INTO|REPLACE\s+INTO|ALTER\s+TABLE|LOCK\s+TABLES)"
+    rb"\s+`([^`\n]+)`",
+    re.IGNORECASE,
+)
+# Chunk size for the binary prefix scan + overlap so a statement split
+# across two chunks is still matched.
+_DETECT_CHUNK = 8 * 1024 * 1024
+_DETECT_OVERLAP = 4096
+# Core WordPress table names (without prefix). Two distinct hits sharing
+# the same prefix is proof enough that the dump is a WP database.
+_WP_CORE_TABLES = (
+    'options', 'posts', 'postmeta', 'users', 'usermeta', 'comments',
+    'commentmeta', 'terms', 'termmeta', 'term_relationships',
+    'term_taxonomy', 'links',
+)
+# How many distinct core tables must agree before we stop scanning.
+_PREFIX_CONFIDENCE = 3
 
 
 # ────────────────────────────────────────────────────────────────────────
@@ -280,6 +304,19 @@ class FastImportService:
         env = _docker_inspect_env(container)
         project_type = self._detect_project_type(project_name)
 
+        # Repli sur le docker-compose quand le conteneur est arrêté ou
+        # renommé : `docker inspect` ne répond alors rien, et sur un projet
+        # postérieur à la randomisation des mots de passe on utiliserait
+        # sinon les valeurs héritées en silence.
+        if not (env.get('MYSQL_PASSWORD') and env.get('MYSQL_ROOT_PASSWORD')):
+            from app.utils.project_credentials import _compose_env
+            from app.config.docker_config import DockerConfig
+            compose = _compose_env(os.path.join(
+                DockerConfig.CONTAINERS_FOLDER, project_name, 'docker-compose.yml'
+            ))
+            for key, value in compose.items():
+                env.setdefault(key, value)
+
         if project_type == 'nextjs':
             default_user = project_name
             default_db = project_name
@@ -454,29 +491,64 @@ class FastImportService:
     # ─── streaming prefix adaptation ─────────────────────────────────
 
     def _detect_source_prefix(self, sql_file: str) -> Optional[str]:
-        """Scan the first ~10 MB for common WP tables to guess the prefix."""
-        known = ['options', 'posts', 'users', 'comments', 'postmeta', 'usermeta',
-                 'terms', 'term_relationships', 'term_taxonomy', 'termmeta',
-                 'commentmeta', 'links']
-        counter: Counter = Counter()
-        bytes_read = 0
+        """Guess the dump's table prefix from the tables it declares.
+
+        Scans the file in binary chunks looking for statements that name
+        a table, and keeps, per candidate prefix, the set of *distinct*
+        WordPress core tables carrying it. It stops as soon as one
+        candidate reaches ``_PREFIX_CONFIDENCE`` distinct core tables —
+        on a typical dump that happens in the first few MB, but a dump
+        whose early tables are huge (Action Scheduler logs, WooCommerce
+        lookup tables…) is scanned further instead of giving up. The old
+        10 MB window silently returned ``None`` on those, which is how
+        dumps ended up imported with the source prefix intact.
+
+        Returns the prefix including its trailing separator (``wp_``),
+        or ``None`` when the dump doesn't look like WordPress.
+        """
+        seen: Dict[str, set] = {}
         try:
-            with open(sql_file, 'r', encoding='utf-8', errors='replace') as f:
-                for line in f:
-                    bytes_read += len(line)
-                    if bytes_read > 10 * 1024 * 1024:
+            with open(sql_file, 'rb') as f:
+                tail = b''
+                while True:
+                    chunk = f.read(_DETECT_CHUNK)
+                    if not chunk:
                         break
-                    for table in known:
-                        for match in re.finditer(
-                            rf'`([A-Za-z0-9_]+)_{table}`',
-                            line,
-                        ):
-                            counter[match.group(1)] += 1
+                    buf = tail + chunk
+                    for match in _TABLE_REF_RE.finditer(buf):
+                        try:
+                            name = match.group(1).decode('utf-8')
+                        except UnicodeDecodeError:
+                            continue
+                        for core in _WP_CORE_TABLES:
+                            if name.endswith(core) and len(name) > len(core):
+                                prefix = name[:-len(core)]
+                                # Guard against `wp_term_relationships`
+                                # being read as prefix `wp_term_` for the
+                                # core table `relationships`.
+                                if not re.fullmatch(r'[A-Za-z0-9_]+_', prefix):
+                                    continue
+                                seen.setdefault(prefix, set()).add(core)
+                                break
+                    if seen and max(len(v) for v in seen.values()) >= _PREFIX_CONFIDENCE:
+                        break
+                    tail = buf[-_DETECT_OVERLAP:]
         except OSError:
+            log.exception("prefix: could not read %s", sql_file)
             return None
-        if not counter:
+
+        if not seen:
             return None
-        return counter.most_common(1)[0][0] + '_'
+        # Best candidate = most distinct core tables; ties go to the
+        # longest prefix (`wp_` vs `wp_foo_` on a multisite-ish dump).
+        prefix, cores = max(seen.items(), key=lambda kv: (len(kv[1]), len(kv[0])))
+        if len(cores) < 2:
+            # A single hit could be a coincidence on a non-WP dump
+            # (`app_users`…). Don't rewrite on that evidence alone.
+            log.warning("prefix: weak evidence for %r (%s), skipping rewrite",
+                        prefix, ', '.join(sorted(cores)))
+            return None
+        return prefix
 
     def _read_target_prefix(self, project_name: str) -> str:
         """Read ``$table_prefix`` from wp-config.php, fallback to ``wp_``."""
@@ -501,44 +573,65 @@ class FastImportService:
         """Rewrite the dump's table prefix to match wp-config if needed.
 
         Returns the path to the SQL file we should actually import.
-        Always streams line-by-line; never buffers the full file.
+        Streams line-by-line in *binary* (a dump is not necessarily
+        UTF-8; decoding with ``errors='replace'`` would silently mangle
+        latin1 content) and never buffers the whole file.
         """
         target = self._read_target_prefix(project_name)
         source = self._detect_source_prefix(sql_file)
 
-        if not source or source == target:
+        if not source:
+            log.warning("prefix: no WordPress prefix detected in %s — "
+                        "importing the dump as-is (target=%s)", sql_file, target)
+            self._emit_progress(project_name, 12,
+                                "Préfixe non détecté — dump importé tel quel",
+                                'processing')
+            return sql_file
+        if source == target:
             log.info("prefix: no rewrite needed (source=%s target=%s)", source, target)
+            self._emit_progress(project_name, 12,
+                                f"Préfixe déjà conforme ({target})", 'processing')
             return sql_file
 
         log.info("prefix: rewriting %s -> %s", source, target)
-        src_esc = re.escape(source)
+        self._emit_progress(project_name, 12,
+                            f"Réécriture du préfixe {source} → {target}…",
+                            'processing')
+        src_b = source.encode('ascii')
+        tgt_b = target.encode('ascii')
+        src_esc = re.escape(src_b)
 
-        # Table references (backticked and bare) + meta_key values.
-        pat_bt = re.compile(rf'`{src_esc}([A-Za-z0-9_]+)`')
-        pat_bare = re.compile(rf'(\b){src_esc}([A-Za-z0-9_]+)\b')
-        meta_keys = {'capabilities', 'user_level', 'user-settings', 'user-settings-time',
-                     'dashboard_quick_press_last_post_id', 'user-avatar', 'metaboxhidden',
-                     'closedpostboxes', 'primary_blog', 'source_domain', 'user_roles'}
+        # 1. PHP-serialized strings must be fixed *first*: the generic
+        #    passes below would replace the prefix inside them and leave
+        #    the byte count stale, which breaks unserialize() for every
+        #    option/meta holding a table name. The character class stops
+        #    at quotes and backslashes, so `len()` is the exact byte
+        #    length. Both `"` and the SQL-escaped `\"` form occur.
+        pat_ser = re.compile(
+            rb's:\d+:(\\?)"([A-Za-z0-9_./\-]*' + src_esc + rb'[A-Za-z0-9_./\-]*)\1"'
+        )
+        # 2. Backticked identifiers — the table names themselves.
+        pat_bt = re.compile(rb'`' + src_esc + rb'([A-Za-z0-9_]+)`')
+        # 3. Bare occurrences — meta_key / option_name values such as
+        #    `<prefix>capabilities`, `<prefix>user_level` or any prefixed
+        #    key a plugin built from $wpdb->prefix.
+        pat_bare = re.compile(rb'\b' + src_esc + rb'([A-Za-z0-9_]+)\b')
 
-        def rewrite_line(line: str) -> str:
-            line = pat_bt.sub(lambda m: f'`{target}{m.group(1)}`', line)
-            line = pat_bare.sub(lambda m: f'{m.group(1)}{target}{m.group(2)}', line)
-            # PHP-serialized s:N:"prefix_something" — recompute length.
-            def _s_fix(m: re.Match) -> str:
-                inner = m.group(2).replace(source, target, 1)
-                return f's:{len(inner)}:"{inner}"'
-            line = re.sub(rf's:\d+:"({src_esc}[A-Za-z0-9_]+)"',
-                          _s_fix, line)
-            for mk in meta_keys:
-                line = line.replace(f"'{source}{mk}'", f"'{target}{mk}'")
-                line = line.replace(f'"{source}{mk}"', f'"{target}{mk}"')
+        def _ser_fix(m: 're.Match[bytes]') -> bytes:
+            esc = m.group(1)
+            inner = m.group(2).replace(src_b, tgt_b)
+            return b's:%d:%s"%s%s"' % (len(inner), esc, inner, esc)
+
+        def rewrite_line(line: bytes) -> bytes:
+            line = pat_ser.sub(_ser_fix, line)
+            line = pat_bt.sub(lambda m: b'`' + tgt_b + m.group(1) + b'`', line)
+            line = pat_bare.sub(lambda m: tgt_b + m.group(1), line)
             return line
 
         fd, out_path = tempfile.mkstemp(suffix='_adapted.sql')
         os.close(fd)
         try:
-            with open(sql_file, 'r', encoding='utf-8', errors='replace') as src_f, \
-                 open(out_path, 'w', encoding='utf-8') as out_f:
+            with open(sql_file, 'rb') as src_f, open(out_path, 'wb') as out_f:
                 for line in src_f:
                     out_f.write(rewrite_line(line))
         except OSError:

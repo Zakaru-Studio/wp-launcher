@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 
+{% block body_class %}page-sites{% endblock %}
+
 {% block title %}{{ _('WP Launcher - Dashboard') }}{% endblock %}
 
 {% block content %}
@@ -11,6 +13,13 @@
     <div class="page-header-text">
         <h1 class="page-title">{{ _('Managed Sites') }}</h1>
         <p class="page-subtitle">{{ _('Overview and status of all active WordPress environments.') }}</p>
+    </div>
+    <div class="page-header-actions">
+        <button class="btn-primary-dark" id="create-project-btn" onclick="showCreateProjectModal()">
+            <span class="material-symbols-outlined">add</span>
+            <span>{{ _('Add site') }}</span>
+        </button>
+        {% include '_notif_bell.html' %}
     </div>
 </header>
 

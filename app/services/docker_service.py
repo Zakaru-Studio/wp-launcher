@@ -60,7 +60,18 @@ class DockerService:
         content = content.replace('PROJECT_NAME', project_name)
         content = content.replace('{project_name}', project_name)
         content = content.replace('{project_hostname}', project_name)
-        
+
+        # Interfaces d'écoute : les sites peuvent être publics (derrière un
+        # reverse proxy), les side-cars d'admin restent sur la loopback.
+        from app.utils import security_config
+        content = content.replace('{site_bind}', security_config.site_bind_address())
+        content = content.replace('{admin_bind}', security_config.admin_bind_address())
+
+        # Mots de passe propres au projet. Idempotent : sur un compose déjà
+        # rendu les placeholders ont disparu, donc un appel de réparation ne
+        # régénère rien et ne coupe pas l'accès à la base existante.
+        content = security_config.apply_project_credentials(content)
+
         # Remplacer les placeholders de ports - Format moderne
         content = content.replace('{wordpress_port}', str(ports['wordpress']))
         content = content.replace('{phpmyadmin_port}', str(ports['phpmyadmin']))
@@ -370,9 +381,16 @@ class DockerService:
                             f"SET option_value = '{new_url}' "
                             "WHERE option_name IN ('siteurl','home');"
                         )
+                        # Identifiants relus depuis le conteneur : ils sont
+                        # aléatoires par projet depuis le durcissement.
+                        from app.utils.project_credentials import get_mysql_credentials
+                        creds = get_mysql_credentials(
+                            project_name, container_name=mysql_container
+                        )
                         db_sync = subprocess.run(
                             ['docker', 'exec', mysql_container, 'mysql',
-                             '-uroot', '-prootpassword', 'wordpress', '--execute', sql],
+                             '-uroot', f'-p{creds["root_password"]}',
+                             creds['database'], '--execute', sql],
                             capture_output=True, text=True, timeout=30,
                         )
                         if db_sync.returncode == 0:
@@ -427,10 +445,11 @@ class DockerService:
             ], capture_output=True, text=True, timeout=timeout)
             
             success = result.returncode == 0
-            
+
             # Log du résultat
             if success:
-                wp_logger.log_docker_operation('stop', project_name, True, 
+                self._release_project_network(project_name)
+                wp_logger.log_docker_operation('stop', project_name, True,
                                              result.stdout,
                                              "",
                                              container_path=container_path,
@@ -459,6 +478,47 @@ class DockerService:
         finally:
             os.chdir(original_cwd)
     
+    def _release_project_network(self, project_name):
+        """Libère le réseau bridge d'un projet arrêté.
+
+        ``docker-compose stop`` laisse l'objet réseau en place, et chaque
+        réseau consomme un sous-réseau du pool Docker. Avec assez de projets
+        arrêtés le pool s'épuise et toute création de projet échoue sur
+        « all predefined address pools have been fully subnetted ».
+
+        Contrepartie assumée : au redémarrage suivant, le warm restart
+        (``docker-compose start``) échouera puisque le réseau a disparu, et
+        ``start_containers`` retombera sur ``up -d`` — plus lent, mais il
+        recrée le réseau et les conteneurs sans perte de données (elles sont
+        dans les volumes et les bind mounts).
+
+        Deux garde-fous. Docker refuse de lui-même de supprimer un réseau
+        ayant des endpoints *actifs*. Mais les instances de dev déclarent ce
+        réseau en ``external: true`` (dev_instance_service) : si elles sont
+        elles aussi à l'arrêt, la suppression passerait, et leur ``up -d``
+        échouerait ensuite sur « network declared as external, but could not
+        be found » — un réseau externe ne se recrée pas tout seul. On
+        s'abstient donc dès qu'un projet a des instances.
+
+        Best-effort par ailleurs : toute erreur est ignorée.
+        """
+        instances_dir = os.path.join(
+            DockerConfig.PROJECTS_FOLDER, project_name, '.dev-instances'
+        )
+        if os.path.isdir(instances_dir) and os.listdir(instances_dir):
+            return
+
+        network = f"{project_name}_wordpress_network"
+        try:
+            result = subprocess.run(
+                ['docker', 'network', 'rm', network],
+                capture_output=True, text=True, timeout=15,
+            )
+            if result.returncode == 0:
+                print(f"🧹 [DOCKER_SERVICE] Réseau {network} libéré")
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+            pass
+
     def remove_containers(self, container_path, timeout=60):
         """Supprime complètement les conteneurs d'un projet depuis containers/"""
         original_cwd = os.getcwd()

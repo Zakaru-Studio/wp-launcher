@@ -20,6 +20,8 @@ from datetime import datetime
 from app.models.dev_instance import DevInstance
 from app.services.database_service import DatabaseService
 from app.services.port_service import PortService
+from app.utils import security_config
+from app.utils.project_credentials import get_root_password
 from app.utils.slug_utils import clean_username_for_slug, generate_db_name
 
 
@@ -343,7 +345,7 @@ class DevInstanceService:
 
         result = subprocess.run(
             ['docker', 'exec', mysql_container,
-             'mysql', '-u', 'root', '-prootpassword', '-N', '-e',
+             'mysql', '-u', 'root', f'-p{get_root_password(parent_project, container_name=mysql_container)}', '-N', '-e',
              f"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='{db_name}';"],
             capture_output=True, text=True, timeout=30
         )
@@ -386,7 +388,7 @@ class DevInstanceService:
                 try:
                     subprocess.run(
                         ['docker', 'exec', mysql_container,
-                         'mysql', '-u', 'root', '-prootpassword', '-e',
+                         'mysql', '-u', 'root', f'-p{get_root_password(parent_project, container_name=mysql_container)}', '-e',
                          f"DROP DATABASE IF EXISTS `{db_name}`;"],
                         capture_output=True, timeout=30
                     )
@@ -406,6 +408,11 @@ class DevInstanceService:
         if db_host is None:
             db_host = self._parent_mysql_container(parent_project) or f"{parent_project}_mysql_1"
 
+        # L'instance se connecte au MySQL du parent : elle doit donc utiliser
+        # le mot de passe root de ce parent, désormais propre à chaque projet.
+        db_password = get_root_password(parent_project, container_name=db_host)
+        site_bind = security_config.site_bind_address()
+
         template = f"""version: '3.8'
 
 services:
@@ -414,14 +421,14 @@ services:
     container_name: {container_name}
     restart: unless-stopped
     ports:
-      - "{port}:80"
+      - "{site_bind}:{port}:80"
     volumes:
       - ./wp-content:/var/www/html/wp-content
     environment:
       WORDPRESS_DB_HOST: {db_host}:3306
       WORDPRESS_DB_NAME: {db_name}
       WORDPRESS_DB_USER: root
-      WORDPRESS_DB_PASSWORD: rootpassword
+      WORDPRESS_DB_PASSWORD: "{db_password}"
       WORDPRESS_TABLE_PREFIX: {table_prefix}
     networks:
       - {parent_project}_wordpress_network
@@ -592,7 +599,7 @@ networks:
             try:
                 result = subprocess.run([
                     'docker', 'exec', mysql_container,
-                    'mysql', '-u', 'root', '-prootpassword', '-e',
+                    'mysql', '-u', 'root', f'-p{get_root_password(instance.parent_project, container_name=mysql_container)}', '-e',
                     f"DROP DATABASE IF EXISTS `{instance.db_name}`;"
                 ], capture_output=True, timeout=30, text=True)
                 if result.returncode == 0:

@@ -1,0 +1,127 @@
+{#
+  Menu profil réutilisable (pied de sidebar sur desktop, topbar sur mobile).
+
+  Regroupe tout ce qui vivait auparavant dans `.app-topbar` : profil, gestion
+  des utilisateurs, thème, langue, redémarrage et déconnexion.
+
+  Paramètre attendu (via {% with %}) :
+    variant = 'sidebar' (défaut) | 'mobile'
+#}
+{% set variant = variant | default('sidebar') %}
+{% set uid = 'profile-menu-' ~ variant %}
+{% set suffix = '-mobile' if variant == 'mobile' else '' %}
+
+<div class="user-dropdown profile-menu dropdown{{ ' dropup' if variant == 'sidebar' }}">
+    <button class="user-dropdown-toggle profile-menu-toggle {{ variant }}"
+            id="{{ uid }}-toggle" type="button"
+            data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+        <img src="{{ g.current_user.get_avatar_url() }}" alt="{{ _('Avatar') }}" class="user-avatar">
+        {% if variant == 'sidebar' %}
+        <span class="profile-menu-identity">
+            <span class="user-name">{{ g.current_user.get_display_name() }}</span>
+            <span class="user-email">{{ g.current_user.email }}</span>
+        </span>
+        <span class="material-symbols-outlined user-dropdown-caret" aria-hidden="true">unfold_more</span>
+        {% endif %}
+    </button>
+
+    <ul class="dropdown-menu profile-menu-list{{ ' dropdown-menu-end' if variant == 'mobile' }}"
+        aria-labelledby="{{ uid }}-toggle">
+        <li class="dropdown-header profile-menu-header">
+            <strong>{{ g.current_user.get_display_name() }}</strong>
+            <small class="text-muted d-block">{{ g.current_user.email }}</small>
+            {% if g.current_user.role == 'admin' %}
+            <span class="badge admin-badge">{{ _('Admin') }}</span>
+            {% endif %}
+        </li>
+
+        <li><hr class="dropdown-divider"></li>
+
+        <li>
+            <a class="dropdown-item" href="{{ url_for('auth.profile') }}">
+                <span class="material-symbols-outlined" aria-hidden="true">person</span>
+                <span class="profile-item-label">{{ _('My profile') }}</span>
+            </a>
+        </li>
+        {% if g.current_user.role == 'admin' %}
+        <li>
+            <a class="dropdown-item" href="{{ url_for('admin.users_page') }}">
+                <span class="material-symbols-outlined" aria-hidden="true">manage_accounts</span>
+                <span class="profile-item-label">{{ _('User management') }}</span>
+            </a>
+        </li>
+        {% endif %}
+
+        <li><hr class="dropdown-divider"></li>
+
+        {# ── Thème (sous-menu) ── #}
+        <li class="profile-submenu">
+            <button class="dropdown-item profile-submenu-toggle" type="button"
+                    data-submenu="{{ uid }}-theme" aria-controls="{{ uid }}-theme" aria-expanded="false">
+                <span class="material-symbols-outlined" aria-hidden="true">contrast</span>
+                <span class="profile-item-label">{{ _('Theme') }}</span>
+                <span class="material-symbols-outlined profile-submenu-caret" aria-hidden="true">chevron_right</span>
+            </button>
+            <div class="profile-submenu-panel" id="{{ uid }}-theme" role="group" hidden>
+                <button class="dropdown-item theme-option" type="button" role="menuitemradio"
+                        aria-checked="false" data-theme-value="light" onclick="setTheme('light', event)">
+                    <span class="material-symbols-outlined" aria-hidden="true">light_mode</span>
+                    <span class="profile-item-label">{{ _('Light') }}</span>
+                    <span class="material-symbols-outlined profile-option-check" aria-hidden="true">check</span>
+                </button>
+                <button class="dropdown-item theme-option" type="button" role="menuitemradio"
+                        aria-checked="false" data-theme-value="dark" onclick="setTheme('dark', event)">
+                    <span class="material-symbols-outlined" aria-hidden="true">dark_mode</span>
+                    <span class="profile-item-label">{{ _('Dark') }}</span>
+                    <span class="material-symbols-outlined profile-option-check" aria-hidden="true">check</span>
+                </button>
+            </div>
+        </li>
+
+        {# ── Langue (sous-menu) ── #}
+        <li class="profile-submenu">
+            <button class="dropdown-item profile-submenu-toggle" type="button"
+                    data-submenu="{{ uid }}-lang" aria-controls="{{ uid }}-lang" aria-expanded="false">
+                <span class="material-symbols-outlined" aria-hidden="true">language</span>
+                <span class="profile-item-label">{{ _('Language') }}</span>
+                <span class="material-symbols-outlined profile-submenu-caret" aria-hidden="true">chevron_right</span>
+            </button>
+            <div class="profile-submenu-panel" id="{{ uid }}-lang" role="group" hidden>
+                <form method="POST" action="{{ url_for('main.set_locale') }}" class="profile-lang-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" name="locale" value="en" class="dropdown-item lang-option"
+                            role="menuitemradio" aria-checked="{{ 'true' if g.current_locale == 'en' else 'false' }}">
+                        <span class="profile-item-label">English</span>
+                        <span class="material-symbols-outlined profile-option-check{{ ' is-on' if g.current_locale == 'en' }}"
+                              aria-hidden="true">check</span>
+                    </button>
+                    <button type="submit" name="locale" value="fr" class="dropdown-item lang-option"
+                            role="menuitemradio" aria-checked="{{ 'true' if g.current_locale == 'fr' else 'false' }}">
+                        <span class="profile-item-label">Français</span>
+                        <span class="material-symbols-outlined profile-option-check{{ ' is-on' if g.current_locale == 'fr' }}"
+                              aria-hidden="true">check</span>
+                    </button>
+                </form>
+            </div>
+        </li>
+
+        <li><hr class="dropdown-divider"></li>
+
+        <li>
+            <button class="dropdown-item" type="button" id="restart-app-btn{{ suffix }}"
+                    onclick="restartApp()">
+                <span class="material-symbols-outlined restart-icon" aria-hidden="true">restart_alt</span>
+                <span class="profile-item-label">{{ _('Restart the application') }}</span>
+            </button>
+        </li>
+
+        <li><hr class="dropdown-divider"></li>
+
+        <li>
+            <a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}">
+                <span class="material-symbols-outlined" aria-hidden="true">logout</span>
+                <span class="profile-item-label">{{ _('Logout') }}</span>
+            </a>
+        </li>
+    </ul>
+</div>

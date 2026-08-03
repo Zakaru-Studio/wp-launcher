@@ -14,27 +14,15 @@
         <p class="page-subtitle">{{ _('Real-time resource utilization across all active instances.') }}</p>
     </div>
     <div class="page-header-actions">
-        <div class="refresh-range-pill">
-            <button class="range-btn active" onclick="setRefreshRange(5000, this)">5S</button>
-            <button class="range-btn" onclick="setRefreshRange(10000, this)">10S</button>
-            <button class="range-btn" onclick="setRefreshRange(30000, this)">30S</button>
-            <button class="range-btn" onclick="setRefreshRange(60000, this)">1M</button>
-        </div>
-        <select id="refresh-interval" class="form-select form-select-sm refresh-select d-none" onchange="updateRefreshInterval()">
-            <option value="2000">{{ _('2 sec') }}</option>
-            <option value="5000" selected>{{ _('5 sec') }}</option>
-            <option value="10000">{{ _('10 sec') }}</option>
-            <option value="30000">{{ _('30 sec') }}</option>
-            <option value="60000">{{ _('1 min') }}</option>
-        </select>
         <button class="refresh-btn" onclick="refreshServerStats()">
             <i class="fas fa-sync-alt"></i> {{ _('Refresh') }}
         </button>
+        {% include '_notif_bell.html' %}
     </div>
 </header>
 
 <div class="page-content">
-    <!-- Tabs (Server / Docker / Processes) -->
+    <!-- Tabs (Server / Docker / Processes) + délai de rafraîchissement à droite -->
     <div class="monitoring-tabs">
         <button class="monitoring-tab active" onclick="switchTab('serveur')">
             <i class="fas fa-server"></i> {{ _('Server') }}
@@ -45,6 +33,22 @@
         <button class="monitoring-tab" onclick="switchTab('processus')">
             <i class="fas fa-tasks"></i> {{ _('Processes') }}
         </button>
+
+        <div class="monitoring-tabs-aside">
+            <div class="refresh-range-pill">
+                <button class="range-btn active" onclick="setRefreshRange(5000, this)">5S</button>
+                <button class="range-btn" onclick="setRefreshRange(10000, this)">10S</button>
+                <button class="range-btn" onclick="setRefreshRange(30000, this)">30S</button>
+                <button class="range-btn" onclick="setRefreshRange(60000, this)">1M</button>
+            </div>
+            <select id="refresh-interval" class="form-select form-select-sm refresh-select d-none" onchange="updateRefreshInterval()">
+                <option value="2000">{{ _('2 sec') }}</option>
+                <option value="5000" selected>{{ _('5 sec') }}</option>
+                <option value="10000">{{ _('10 sec') }}</option>
+                <option value="30000">{{ _('30 sec') }}</option>
+                <option value="60000">{{ _('1 min') }}</option>
+            </select>
+        </div>
     </div>
 
     <!-- Server tab (Stitch metrics row) -->

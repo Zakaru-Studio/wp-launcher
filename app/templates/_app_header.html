@@ -9,21 +9,12 @@
         </div>
     </div>
 
-    <button class="sidebar-cta" onclick="showCreateProjectModal()">
-        <span class="material-symbols-outlined">add</span>
-        <span>{{ _('Add') }}</span>
-    </button>
-
     <nav class="sidebar-nav">
         <a href="/" class="sidebar-nav-item {{ 'active' if request.endpoint == 'main.index' else '' }}">
-            <span class="material-symbols-outlined">dns</span>
+            <i class="fab fa-wordpress nav-icon-wp" aria-hidden="true"></i>
             <span>{{ _('Sites') }}</span>
         </a>
         {% if g.current_user.role == 'admin' %}
-        <a href="/logs" class="sidebar-nav-item {{ 'active' if 'logs' in request.endpoint else '' }}">
-            <span class="material-symbols-outlined">description</span>
-            <span>{{ _('Logs') }}</span>
-        </a>
         <a href="/monitoring" class="sidebar-nav-item {{ 'active' if 'monitoring' in request.endpoint else '' }}">
             <span class="material-symbols-outlined">analytics</span>
             <span>{{ _('Monitoring') }}</span>
@@ -40,69 +31,17 @@
             <span class="material-symbols-outlined">dns</span>
             <span>{{ _('Servers') }}</span>
         </a>
+        <a href="/logs" class="sidebar-nav-item {{ 'active' if 'logs' in request.endpoint else '' }}">
+            <span class="material-symbols-outlined">description</span>
+            <span>{{ _('Logs') }}</span>
+        </a>
         {% endif %}
     </nav>
-</aside>
 
-<header class="app-topbar">
-    <div class="topbar-spacer"></div>
-    <div class="topbar-actions">
-        <button class="topbar-action" onclick="restartApp()" title="{{ _('Sync') }}" aria-label="{{ _('Sync') }}">
-            <span class="material-symbols-outlined">refresh</span>
-        </button>
-
-        <button class="topbar-action notif-bell" id="notif-bell" type="button" onclick="toggleTaskSidebar()"
-                title="{{ _('Notifications') }}" aria-label="{{ _('Notifications') }}"
-                aria-haspopup="true" aria-expanded="false">
-            <span class="material-symbols-outlined">notifications</span>
-            <span class="notif-bell-badge" id="notif-bell-badge" hidden>0</span>
-        </button>
-
-        <button id="theme-toggle" class="topbar-action theme-toggle" onclick="toggleTheme(event)"
-                title="{{ _('Toggle theme') }}" aria-label="{{ _('Toggle theme') }}">
-            <i class="fas fa-sun" aria-hidden="true"></i>
-            <i class="fas fa-moon" aria-hidden="true"></i>
-        </button>
-
-        {% include '_language_switcher.html' ignore missing %}
-
-        <div class="user-dropdown dropdown">
-            <button class="user-dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                <img src="{{ g.current_user.get_avatar_url() }}" alt="{{ _('Avatar') }}" class="user-avatar">
-                <span class="user-name">{{ g.current_user.get_display_name() }}</span>
-                {% if g.current_user.role == 'admin' %}
-                <span class="badge admin-badge">{{ _('Admin') }}</span>
-                {% endif %}
-                <span class="material-symbols-outlined user-dropdown-caret" aria-hidden="true">expand_more</span>
-            </button>
-            <ul class="dropdown-menu dropdown-menu-end">
-                <li class="dropdown-header">
-                    <strong>{{ g.current_user.get_display_name() }}</strong>
-                    <small class="text-muted d-block">{{ g.current_user.email }}</small>
-                </li>
-                <li><hr class="dropdown-divider"></li>
-                <li>
-                    <a class="dropdown-item" href="{{ url_for('auth.profile') }}">
-                        <i class="fas fa-user me-2"></i>{{ _('My profile') }}
-                    </a>
-                </li>
-                {% if g.current_user.role == 'admin' %}
-                <li>
-                    <a class="dropdown-item" href="{{ url_for('admin.users_page') }}">
-                        <i class="fas fa-users-cog me-2"></i>{{ _('User management') }}
-                    </a>
-                </li>
-                {% endif %}
-                <li><hr class="dropdown-divider"></li>
-                <li>
-                    <a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}">
-                        <i class="fas fa-sign-out-alt me-2"></i>{{ _('Logout') }}
-                    </a>
-                </li>
-            </ul>
-        </div>
+    <div class="sidebar-footer">
+        {% with variant = 'sidebar' %}{% include '_profile_menu.html' %}{% endwith %}
     </div>
-</header>
+</aside>
 
 <header class="app-topbar-mobile">
     <div class="mobile-brand">
@@ -120,49 +59,16 @@
             <i class="fas fa-sun" aria-hidden="true"></i>
             <i class="fas fa-moon" aria-hidden="true"></i>
         </button>
-        <div class="user-dropdown dropdown">
-            <button class="user-dropdown-toggle mobile" data-bs-toggle="dropdown" aria-expanded="false">
-                <img src="{{ g.current_user.get_avatar_url() }}" alt="{{ _('Avatar') }}" class="user-avatar">
-            </button>
-            <ul class="dropdown-menu dropdown-menu-end">
-                <li class="dropdown-header">
-                    <strong>{{ g.current_user.get_display_name() }}</strong>
-                    <small class="text-muted d-block">{{ g.current_user.email }}</small>
-                </li>
-                <li><hr class="dropdown-divider"></li>
-                <li>
-                    <a class="dropdown-item" href="{{ url_for('auth.profile') }}">
-                        <i class="fas fa-user me-2"></i>{{ _('My profile') }}
-                    </a>
-                </li>
-                {% if g.current_user.role == 'admin' %}
-                <li>
-                    <a class="dropdown-item" href="{{ url_for('admin.users_page') }}">
-                        <i class="fas fa-users-cog me-2"></i>{{ _('User management') }}
-                    </a>
-                </li>
-                {% endif %}
-                <li><hr class="dropdown-divider"></li>
-                <li>
-                    <a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}">
-                        <i class="fas fa-sign-out-alt me-2"></i>{{ _('Logout') }}
-                    </a>
-                </li>
-            </ul>
-        </div>
+        {% with variant = 'mobile' %}{% include '_profile_menu.html' %}{% endwith %}
     </div>
 </header>
 
 <nav class="bottom-nav">
     <a href="/" class="bottom-nav-item {{ 'active' if request.endpoint == 'main.index' else '' }}">
-        <span class="material-symbols-outlined">dns</span>
+        <i class="fab fa-wordpress nav-icon-wp" aria-hidden="true"></i>
         <span>{{ _('Sites') }}</span>
     </a>
     {% if g.current_user.role == 'admin' %}
-    <a href="/logs" class="bottom-nav-item {{ 'active' if 'logs' in request.endpoint else '' }}">
-        <span class="material-symbols-outlined">description</span>
-        <span>{{ _('Logs') }}</span>
-    </a>
     <a href="/monitoring" class="bottom-nav-item {{ 'active' if 'monitoring' in request.endpoint else '' }}">
         <span class="material-symbols-outlined">analytics</span>
         <span>{{ _('Monitoring') }}</span>
@@ -175,6 +81,10 @@
         <span class="material-symbols-outlined">rocket_launch</span>
         <span>{{ _('Deploy') }}</span>
     </a>
+    <a href="/logs" class="bottom-nav-item {{ 'active' if 'logs' in request.endpoint else '' }}">
+        <span class="material-symbols-outlined">description</span>
+        <span>{{ _('Logs') }}</span>
+    </a>
     {% endif %}
 </nav>
 
@@ -182,4 +92,30 @@
         title="{{ _('Launch a new site') }}" aria-label="{{ _('Launch a new site') }}">
     <span class="material-symbols-outlined">add</span>
 </button>
+
+<!-- Confirmation de redémarrage de l'application (remplace le confirm() natif) -->
+<div class="modal fade" id="restartAppModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title d-flex align-items-center gap-2">
+                    <span class="material-symbols-outlined">restart_alt</span>
+                    <span>{{ _('Restart the application') }}</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ _('Close') }}"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-2">{{ _('The application will restart and the page will reload automatically.') }}</p>
+                <p class="profile-field-hint mb-0">{{ _('This takes a few seconds. Running tasks are not interrupted.') }}</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="ghost-btn" data-bs-dismiss="modal">{{ _('Cancel') }}</button>
+                <button type="button" class="btn-primary-teal" id="confirm-restart-app">
+                    <span class="material-symbols-outlined">restart_alt</span>
+                    <span>{{ _('Restart') }}</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endif %}

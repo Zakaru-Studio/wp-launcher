@@ -44,6 +44,7 @@ function t(key, fallback) {
 function deployToast(kind, msg) {
     if (kind === 'success' && window.showSuccess) return window.showSuccess(msg);
     if (kind === 'error'   && window.showError)   return window.showError(msg);
+    if (kind === 'info'    && window.showInfo)    return window.showInfo(msg);
     console[kind === 'error' ? 'error' : 'log'](msg);
 }
 
@@ -954,13 +955,17 @@ async function loadProjectActivity(project) {
             if (did === null) return '';
             const status = safeStatus(d.status);
             const env = d.server_env ? safeEnv(d.server_env) : '';
-            const sha = d.commit_sha ? String(d.commit_sha).slice(0, 7) : '—';
+            const isDb = d.kind === 'db';
+            const isMedia = d.kind === 'media';
+            const sha = isDb ? t('db_push', 'DB push')
+                : isMedia ? t('media_push', 'Media push')
+                : (d.commit_sha ? String(d.commit_sha).slice(0, 7) : '—');
             return `
                 <div class="deploy-target-history-row">
                     <span class="status-pill status-${status}"><span class="status-dot"></span>${escapeHtml(status)}</span>
                     <span class="deploy-activity-server">${escapeHtml(d.server_label || '')}${env ? ` <small>(${escapeHtml(env)})</small>` : ''}</span>
                     <code>${escapeHtml(d.branch || '')}</code>
-                    <code>${escapeHtml(sha)}</code>
+                    <code class="${isDb || isMedia ? 'deploy-run-kind-db' : ''}">${escapeHtml(sha)}</code>
                     <span>${escapeHtml(fmtDate(d.started_at))}</span>
                     <button class="deploy-target-history-link" data-action="target-logs" data-deployment-id="${did}">
                         ${escapeHtml(t('view_logs', 'View logs'))}
@@ -980,6 +985,7 @@ function openProject(project) {
     DEPLOY_STATE.currentProject = project;
     DEPLOY_STATE.targetHistory = {};
     renderProjectsView();
+    syncUrlToView();
     const section = document.getElementById('projects-section');
     if (section && section.scrollIntoView) {
         section.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -990,6 +996,44 @@ function backToGrid() {
     DEPLOY_STATE.view = 'grid';
     DEPLOY_STATE.currentProject = null;
     renderProjectsView();
+    syncUrlToView();
+}
+
+/** Keep ?project=<name> in step with the view, so the page can be
+ *  linked to (the site list does) and survives a refresh. */
+function syncUrlToView() {
+    try {
+        const url = new URL(window.location.href);
+        if (DEPLOY_STATE.view === 'detail' && DEPLOY_STATE.currentProject) {
+            url.searchParams.set('project', DEPLOY_STATE.currentProject);
+        } else {
+            url.searchParams.delete('project');
+        }
+        window.history.replaceState({}, '', url);
+    } catch (_) { /* history API unavailable — cosmetic only */ }
+}
+
+/** Honour ?project=<name> on load: open that project's detail view.
+ *  A project with no deployment folder yet lands on the grid with the
+ *  creation modal pre-filled, which is what the visitor came to do. */
+function openProjectFromUrl() {
+    let wanted = null;
+    try {
+        wanted = new URL(window.location.href).searchParams.get('project');
+    } catch (_) { return; }
+    if (!wanted) return;
+
+    const known = (DEPLOY_STATE.projects || []).some(p => p.project_name === wanted);
+    if (known) { openProject(wanted); return; }
+
+    if ((DEPLOY_STATE.deployableProjects || []).includes(wanted)) {
+        deployToast('info', t('project_not_registered', 'This project has no deployment folder yet — create it below.')
+            .replace('{project}', wanted));
+        openProjectModal();
+        const sel = document.getElementById('project-select');
+        if (sel) sel.value = wanted;
+    }
+    syncUrlToView();
 }
 
 /* ───── project (folder) modal ───── */
@@ -1112,6 +1156,16 @@ function renderTargetCard(tg) {
                         <button class="deploy-target-redeploy-btn" data-action="redeploy" data-target-id="${id}">
                             <span class="material-symbols-outlined">rocket_launch</span>
                             <span>${escapeHtml(t('redeploy', 'Redeploy'))}</span>
+                        </button>
+                        <button class="deploy-target-dbpush-btn" data-action="push-db" data-target-id="${id}"
+                                title="${escapeHtml(t('push_db_hint', 'Overwrite the remote database with the dev one (URLs rewritten, remote backup taken)'))}">
+                            <span class="material-symbols-outlined">database_upload</span>
+                            <span>${escapeHtml(t('push_db', 'Push DB'))}</span>
+                        </button>
+                        <button class="deploy-target-dbpush-btn" data-action="push-media" data-target-id="${id}"
+                                title="${escapeHtml(t('push_media_hint', 'Send the dev media library (adds and updates only, never deletes on the server)'))}">
+                            <span class="material-symbols-outlined">perm_media</span>
+                            <span>${escapeHtml(t('push_media', 'Push media'))}</span>
                         </button>
                         <button class="deploy-server-action-btn" data-action="edit-target" data-target-id="${id}"
                                 title="${escapeHtml(t('edit', 'Edit'))}">
@@ -1436,6 +1490,84 @@ async function redeployTarget(targetId) {
     }
 }
 
+/** Push the dev database onto a connection's server.
+ *  Destructive on the remote side, so production asks for the project
+ *  name to be typed out; every environment gets a plain confirm first. */
+async function pushDbToTarget(targetId) {
+    const id = safeInt(targetId);
+    if (id === null) return;
+    const tg = DEPLOY_STATE.targets.find(x => x.id === id);
+    if (!tg) return;
+
+    const env = safeEnv(tg.server_env);
+    const msg = t('confirm_push_db', 'Overwrite the database of {server} ({env}) with the dev database of {project}?')
+        .replace('{project}', tg.project_name)
+        .replace('{server}', tg.server_label || ('#' + tg.server_id))
+        .replace('{env}', env);
+    if (!confirm(msg + '\n\n' + t('push_db_details',
+        'URLs are rewritten automatically and a backup of the remote database is written on the server before the import.'))) return;
+
+    if (env === 'production') {
+        const typed = prompt(
+            t('confirm_push_db_prod', 'PRODUCTION — type the project name to confirm the database overwrite:')
+                .replace('{project}', tg.project_name)
+        );
+        if ((typed || '').trim() !== tg.project_name) {
+            deployToast('error', t('push_db_aborted', 'Database push aborted.'));
+            return;
+        }
+    }
+
+    try {
+        const res = await fetch(`/api/deployment-targets/${id}/push-db`, {
+            method: 'POST',
+            headers: headerJson(),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            deployToast('error', data.error || t('push_db_refused', 'Database push refused.'));
+            return;
+        }
+        const newId = safeInt(data.deployment_id);
+        showDeployLogView(newId, `${t('db_push', 'DB push')} #${newId} — ${tg.project_name} → ${tg.server_label || ('#' + tg.server_id)}`);
+    } catch (e) {
+        deployToast('error', e.message);
+    }
+}
+
+/** Sync the dev media library to a connection's server. Additive, so
+ *  the confirmation is lighter than the database push: nothing on the
+ *  remote is ever destroyed. */
+async function pushMediaToTarget(targetId) {
+    const id = safeInt(targetId);
+    if (id === null) return;
+    const tg = DEPLOY_STATE.targets.find(x => x.id === id);
+    if (!tg) return;
+
+    const msg = t('confirm_push_media', 'Send the dev media of {project} to {server} ({env})?')
+        .replace('{project}', tg.project_name)
+        .replace('{server}', tg.server_label || ('#' + tg.server_id))
+        .replace('{env}', safeEnv(tg.server_env));
+    if (!confirm(msg + '\n\n' + t('push_media_details',
+        'Only missing or modified files are sent. Nothing is deleted on the server.'))) return;
+
+    try {
+        const res = await fetch(`/api/deployment-targets/${id}/push-media`, {
+            method: 'POST',
+            headers: headerJson(),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            deployToast('error', data.error || t('push_media_refused', 'Media push refused.'));
+            return;
+        }
+        const newId = safeInt(data.deployment_id);
+        showDeployLogView(newId, `${t('media_push', 'Media push')} #${newId} — ${tg.project_name} \u2192 ${tg.server_label || ('#' + tg.server_id)}`);
+    } catch (e) {
+        deployToast('error', e.message);
+    }
+}
+
 async function toggleTargetHistory(targetId) {
     const id = safeInt(targetId);
     if (id === null) return;
@@ -1488,11 +1620,15 @@ function renderTargetHistoryRow(d) {
     const did = safeInt(d.id);
     if (did === null) return '';
     const status = safeStatus(d.status);
-    const sha = d.commit_sha ? String(d.commit_sha).slice(0, 7) : '—';
+    const isDb = d.kind === 'db';
+    const isMedia = d.kind === 'media';
+    const sha = isDb ? t('db_push', 'DB push')
+        : isMedia ? t('media_push', 'Media push')
+        : (d.commit_sha ? String(d.commit_sha).slice(0, 7) : '—');
     return `
         <div class="deploy-target-history-row">
             <span class="status-pill status-${status}"><span class="status-dot"></span>${escapeHtml(status)}</span>
-            <code>${escapeHtml(sha)}</code>
+            <code class="${isDb || isMedia ? 'deploy-run-kind-db' : ''}">${escapeHtml(sha)}</code>
             <span>${escapeHtml(fmtDate(d.started_at))}</span>
             <button class="deploy-target-history-link" data-action="target-logs" data-deployment-id="${did}">
                 ${escapeHtml(t('view_logs', 'View logs'))}
@@ -1582,6 +1718,8 @@ function onProjectsViewClick(event) {
     if (id === null) return;
     if (action === 'target-history-more') expandTargetHistory(id);
     else if (action === 'redeploy') redeployTarget(id);
+    else if (action === 'push-db') pushDbToTarget(id);
+    else if (action === 'push-media') pushMediaToTarget(id);
     else if (action === 'edit-target') openConnectionModal(id);
     else if (action === 'delete-target') deleteTarget(id);
     else if (action === 'toggle-history') toggleTargetHistory(id);
@@ -1674,7 +1812,12 @@ document.addEventListener('DOMContentLoaded', () => {
     loadDeployments();
     // Load deployable projects first (needed by the create-project select
     // + folder env badges), then projects and connections.
-    loadDeployableProjects().finally(() => { loadProjects(); loadTargets(); });
+    // Projects and connections must both be in before we can honour a
+    // ?project= deep link (the site list links straight into a project).
+    loadDeployableProjects()
+        .finally(() => Promise.all([loadProjects(), loadTargets()])
+            .then(openProjectFromUrl)
+            .catch(() => {}));
     bindDeployModalLifecycle();
     const sTbody = document.getElementById('servers-tbody');
     if (sTbody) sTbody.addEventListener('click', onServersTbodyClick);

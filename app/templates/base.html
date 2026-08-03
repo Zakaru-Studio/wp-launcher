@@ -1,22 +1,29 @@
 <!DOCTYPE html>
-<html lang="fr">
+<!-- `data-theme` est posé dès le balisage : la palette :root est claire, donc
+     sans cet attribut la page rendrait en clair si le script ci-dessous
+     échouait ou si JS était désactivé. Le script ne le remplace que si
+     l'utilisateur a explicitement choisi un thème. -->
+<html lang="fr" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{% block title %}WordPress Launcher{% endblock %}</title>
     
-    <!-- Favicon -->
+    <!-- Favicon (généré depuis l'icône de marque : bolt sur carré arrondi) -->
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/favicon.svg') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='images/favicon-32.png') }}">
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='images/favicon.ico') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/apple-touch-icon.png') }}">
     
     <!-- Theme detection (must run before render to prevent FOUC) -->
     <script>
         (function() {
             try {
-                var saved = localStorage.getItem('wp-launcher-theme');
-                var systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                var theme = saved || (systemDark ? 'dark' : 'light');
-                document.documentElement.dataset.theme = theme;
+                // Sombre par défaut : la préférence système n'est plus consultée,
+                // seul un choix explicite de l'utilisateur peut passer en clair.
+                document.documentElement.dataset.theme =
+                    localStorage.getItem('wp-launcher-theme') || 'dark';
             } catch (e) {
                 document.documentElement.dataset.theme = 'dark';
             }
@@ -34,6 +41,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/modals.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/custom-select.css') }}">
     
     <!-- Préchargement des ressources critiques -->
     <link rel="preload" href="{{ url_for('static', filename='js/main.js') }}" as="script">
@@ -44,7 +52,7 @@
     
     {% block head %}{% endblock %}
 </head>
-<body class="app-shell {{ 'is-authenticated' if g.current_user else 'is-anonymous' }}"
+<body class="app-shell {{ 'is-authenticated' if g.current_user else 'is-anonymous' }} {% block body_class %}{% endblock %}"
       data-current-user="{{ g.current_user.username if g.current_user else '' }}"
       data-current-role="{{ g.current_user.role if g.current_user else '' }}">
 
@@ -146,6 +154,8 @@
     <!-- Scripts de l'application (ordre important) -->
     <script src="{{ url_for('static', filename='js/toast-notifications.js') }}"></script>
     <script src="{{ url_for('static', filename='js/app-config.js') }}"></script>
+    <!-- Dropdown custom : améliore les <select> natifs (progressive enhancement) -->
+    <script src="{{ url_for('static', filename='js/custom-select.js') }}" defer></script>
     <script src="{{ url_for('static', filename='js/modules/utils.js') }}" defer></script>
     <script src="{{ url_for('static', filename='js/task-manager.js') }}" defer></script>
     <script src="{{ url_for('static', filename='js/main.js') }}" defer></script>
@@ -172,15 +182,22 @@
     {% block scripts %}{% endblock %}
 
     <script>
-        // ── Theme toggle with View Transition API circle reveal ──
-        function toggleTheme(event) {
+        // ── Theme switch with View Transition API circle reveal ──
+        /**
+         * Applique un thème explicite ('light' | 'dark').
+         * Utilisé par les options du menu profil ; `toggleTheme` s'appuie dessus.
+         */
+        function setTheme(newTheme, event) {
             const root = document.documentElement;
-            const current = root.dataset.theme || 'dark';
-            const newTheme = current === 'dark' ? 'light' : 'dark';
+            if (newTheme !== 'light' && newTheme !== 'dark') return;
+            if ((root.dataset.theme || 'dark') === newTheme) {
+                syncThemeChecks();
+                return;
+            }
 
             try { localStorage.setItem('wp-launcher-theme', newTheme); } catch (e) {}
 
-            const applyTheme = () => { root.dataset.theme = newTheme; };
+            const applyTheme = () => { root.dataset.theme = newTheme; syncThemeChecks(); };
 
             const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -194,8 +211,8 @@
             let x = window.innerWidth - 80;
             let y = 48;
             const target = event && (event.currentTarget || event.target);
-            if (target && target.getBoundingClientRect) {
-                const btn = target.closest('#theme-toggle') || target;
+            if (target && target.closest) {
+                const btn = target.closest('#theme-toggle, .theme-option, .theme-toggle') || target;
                 if (btn && btn.getBoundingClientRect) {
                     const rect = btn.getBoundingClientRect();
                     x = rect.left + rect.width / 2;
@@ -228,19 +245,78 @@
             });
         }
 
-        // Sync theme across tabs + respond to system preference when no explicit choice
+        /** Bascule clair <-> sombre (bouton compact de la topbar mobile). */
+        function toggleTheme(event) {
+            const current = document.documentElement.dataset.theme || 'dark';
+            setTheme(current === 'dark' ? 'light' : 'dark', event);
+        }
+
+        /** Coche l'option de thème active dans les menus profil. */
+        function syncThemeChecks() {
+            const current = document.documentElement.dataset.theme || 'dark';
+            document.querySelectorAll('.theme-option').forEach(function(btn) {
+                const on = btn.dataset.themeValue === current;
+                btn.setAttribute('aria-checked', on ? 'true' : 'false');
+                const check = btn.querySelector('.profile-option-check');
+                if (check) check.classList.toggle('is-on', on);
+            });
+        }
+
+        // Sync theme across tabs
         (function() {
             window.addEventListener('storage', function(e) {
                 if (e.key === 'wp-launcher-theme' && e.newValue) {
                     document.documentElement.dataset.theme = e.newValue;
+                    syncThemeChecks();
                 }
             });
-            const mql = window.matchMedia('(prefers-color-scheme: dark)');
-            mql.addEventListener && mql.addEventListener('change', function(e) {
-                if (!localStorage.getItem('wp-launcher-theme')) {
-                    document.documentElement.dataset.theme = e.matches ? 'dark' : 'light';
+        })();
+
+        // ── Menu profil : sous-menus repliables (thème / langue) ──
+        (function() {
+            document.addEventListener('click', function(e) {
+                const toggle = e.target.closest('.profile-submenu-toggle');
+                if (!toggle) return;
+                e.preventDefault();
+                e.stopPropagation();
+
+                const panel = document.getElementById(toggle.dataset.submenu);
+                if (!panel) return;
+                const willOpen = panel.hasAttribute('hidden');
+
+                // Un seul sous-menu ouvert à la fois dans un même menu.
+                const menu = toggle.closest('.profile-menu-list');
+                if (menu) {
+                    menu.querySelectorAll('.profile-submenu-panel').forEach(function(p) {
+                        if (p !== panel) p.setAttribute('hidden', '');
+                    });
+                    menu.querySelectorAll('.profile-submenu-toggle').forEach(function(t) {
+                        if (t !== toggle) t.setAttribute('aria-expanded', 'false');
+                    });
+                }
+
+                if (willOpen) {
+                    panel.removeAttribute('hidden');
+                    toggle.setAttribute('aria-expanded', 'true');
+                } else {
+                    panel.setAttribute('hidden', '');
+                    toggle.setAttribute('aria-expanded', 'false');
                 }
             });
+
+            // Replier les sous-menus quand le menu profil se ferme.
+            document.addEventListener('hidden.bs.dropdown', function(e) {
+                const menu = e.target.querySelector('.profile-menu-list');
+                if (!menu) return;
+                menu.querySelectorAll('.profile-submenu-panel').forEach(function(p) {
+                    p.setAttribute('hidden', '');
+                });
+                menu.querySelectorAll('.profile-submenu-toggle').forEach(function(t) {
+                    t.setAttribute('aria-expanded', 'false');
+                });
+            });
+
+            document.addEventListener('DOMContentLoaded', syncThemeChecks);
         })();
 
         // Initialisation optimisée

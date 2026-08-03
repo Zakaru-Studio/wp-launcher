@@ -7,6 +7,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **Self-hosting is now a supported deployment mode.** Defaults target an
+  internet-facing VPS: services bind to loopback, session cookies are
+  HTTPS-only and sessions last 12 h. Set `WPL_LOCAL_MODE=true` to restore
+  the previous permissive local behaviour. See the Deployment section of
+  the README.
+- Project side-cars (phpMyAdmin, Mailpit, MySQL, Mongo Express) no longer
+  bind `0.0.0.0` in hardened mode. They ship with static credentials and no
+  TLS, so they were directly reachable from the internet on a public host.
+- Each new project now gets its own random 24-char MySQL/Mongo passwords
+  instead of the shared `wordpress` / `rootpassword`. Existing projects keep
+  working: credentials are read back from the running container, falling
+  back to the compose file and finally to the historical values.
+- `SECRET_KEY` is mandatory — startup aborts on a missing, too-short or
+  placeholder value instead of falling back to a public constant. It signs
+  session cookies *and* derives the encryption key for stored SSH
+  deployment keys, so a known value meant forgeable sessions.
+  `scripts/rotate_secret_key.py` re-encrypts stored keys when rotating.
+- Login form is rate limited: 5 failures per (IP, username) and 20 per IP,
+  then an escalating 1 → 5 → 15 → 60 min lockout.
+- WordPress salts are now generated on the fallback project-creation path,
+  which previously wrote the public `put your unique phrase here`
+  placeholders — making auth cookies forgeable on affected sites.
+- Session is reset on login (both password and GitHub OAuth paths) against
+  session fixation; security headers added; `ProxyFix` is opt-in via
+  `WPL_TRUSTED_PROXIES` so `X-Forwarded-For` can't be spoofed by default.
+- Task notifications are HTML-escaped before rendering — remote stderr text
+  reached `innerHTML` unescaped.
+
+### Changed
+- The service now runs under gunicorn (single worker, eventlet) instead of
+  the Werkzeug development server, bound to loopback by default.
+- `scripts/start.sh` is a service entrypoint only: it no longer installs
+  dependencies or runs `chmod -R` over the project tree at boot. Both
+  belong to `install.sh`, and the `chmod` reset POSIX ACL masks, silently
+  revoking www-data's write access to `wp-config.php`.
+- `eventlet` 0.33.3 → 0.40.3: the old pin imported `distutils` and was
+  unusable on Python 3.12, silently degrading Socket.IO to threading mode.
+
+### Fixed
+- Port reallocation and repair routes matched a hardcoded `0.0.0.0:` prefix
+  and would have silently stopped matching on newly created projects.
+
+## [1.4.0] - 2026-08-03
+
+### Added
+- Profile menu at the bottom of the sidebar (pattern borrowed from
+  `boilerplate-saas`), gathering profile, user management, theme, language,
+  application restart and logout, with collapsible Theme/Language submenus
+- The mobile top bar now reuses the same menu, so language switching and
+  application restart — previously desktop-only — are available on mobile
+
+### Changed
+- Removed the desktop top bar (`.app-topbar`); its actions moved to the
+  sidebar profile menu, freeing ~64px of vertical space
+- Dark theme is now the default; the system preference is no longer
+  consulted and only an explicit user choice switches to light
+- Notification bell moved next to each page's primary action buttons
+- Notifications panel now floats above the content instead of shrinking it
+- Sites page: fixed viewport height, only the site list scrolls
+- Sidebar narrowed by 10% (256px → 230px)
+- Sites navigation entry now uses the WordPress icon
+- Server Telemetry: refresh interval selector moved to the right of the tabs
+
+### Fixed
+- Site list height no longer relies on a hardcoded `calc(100vh - 153px)`,
+  which was calibrated for the removed top bar
+- `performAppRestart()` now updates every restart trigger present in the
+  page instead of a single hardcoded id
+
 ## [1.3.0] - 2026-06-24
 
 ### Added

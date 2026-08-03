@@ -339,37 +339,51 @@ class CloneService:
             content = content.replace('PROJECT_NAME', project_name)
             content = content.replace('{project_name}', project_name)
             
+            # Interfaces d'écoute (voir app/utils/security_config.py)
+            from app.utils import security_config
+            site_bind = security_config.site_bind_address()
+            admin_bind = security_config.admin_bind_address()
+            content = content.replace('{site_bind}', site_bind)
+            content = content.replace('{admin_bind}', admin_bind)
+            # No-op sur un clone (le compose source est déjà rendu, donc sans
+            # placeholder) : le clone garde les identifiants de sa source, ce
+            # qui est nécessaire puisqu'il hérite aussi de ses données.
+            content = security_config.apply_project_credentials(content)
+
             # Remplacer les ports dans les variables
             content = content.replace('{wordpress_port}', str(ports['wordpress']))
             content = content.replace('{phpmyadmin_port}', str(ports['phpmyadmin']))
             content = content.replace('{mailpit_port}', str(ports['mailpit']))
             content = content.replace('{smtp_port}', str(ports['smtp']))
-            
-            # Remplacer TOUS les ports de manière simple et directe
-            # Format: "0.0.0.0:PORT:80" ou "PORT:80"
-            
+
+            # Remplacer TOUS les ports de manière simple et directe.
+            # Le projet source peut avoir n'importe quelle adresse de bind
+            # (0.0.0.0 pour les projets d'avant le durcissement, 127.0.0.1
+            # depuis) : on l'accepte en entrée et on réécrit avec la nôtre.
+            _bind_prefix = r'(?:\d{1,3}(?:\.\d{1,3}){3}:)?'
+
             # Remplacer tous les mappings de port vers 80 (WordPress et PhpMyAdmin)
             # On garde une liste des ports trouvés pour les remplacer dans l'ordre
-            port_mappings_80 = re.findall(r'"(?:0\.0\.0\.0:)?(\d+):80"', content)
+            port_mappings_80 = re.findall(rf'"{_bind_prefix}(\d+):80"', content)
             if len(port_mappings_80) >= 2:
                 # Premier port :80 trouvé = WordPress
                 content = re.sub(
-                    rf'"(?:0\.0\.0\.0:)?{port_mappings_80[0]}:80"',
-                    f'"0.0.0.0:{ports["wordpress"]}:80"',
+                    rf'"{_bind_prefix}{port_mappings_80[0]}:80"',
+                    f'"{site_bind}:{ports["wordpress"]}:80"',
                     content,
                     count=1
                 )
                 # Deuxième port :80 trouvé = PhpMyAdmin
                 content = re.sub(
-                    rf'"(?:0\.0\.0\.0:)?{port_mappings_80[1]}:80"',
-                    f'"0.0.0.0:{ports["phpmyadmin"]}:80"',
+                    rf'"{_bind_prefix}{port_mappings_80[1]}:80"',
+                    f'"{admin_bind}:{ports["phpmyadmin"]}:80"',
                     content,
                     count=1
                 )
-            
+
             # Remplacer les ports Mailpit (8025 pour web UI, 1025 pour SMTP)
-            content = re.sub(r'"(?:0\.0\.0\.0:)?(\d+):8025"', f'"0.0.0.0:{ports["mailpit"]}:8025"', content)
-            content = re.sub(r'"(?:0\.0\.0\.0:)?(\d+):1025"', f'"0.0.0.0:{ports["smtp"]}:1025"', content)
+            content = re.sub(rf'"{_bind_prefix}(\d+):8025"', f'"{admin_bind}:{ports["mailpit"]}:8025"', content)
+            content = re.sub(rf'"{_bind_prefix}(\d+):1025"', f'"{admin_bind}:{ports["smtp"]}:1025"', content)
             
             # Remplacer aussi les URLs dans les variables d'environnement
             # WP_HOME, PMA_ABSOLUTE_URI, etc.

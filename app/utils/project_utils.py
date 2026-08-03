@@ -84,6 +84,12 @@ def _copy_file_robust(src, dst, project_name=None, ports=None, resource_limits=N
         content = content.replace('{project_name}', project_name)
         print(f"🔄 Placeholders remplacés: {project_name}")
     
+    # Interfaces d'écoute et identifiants (voir app/utils/security_config.py)
+    from app.utils import security_config
+    content = content.replace('{site_bind}', security_config.site_bind_address())
+    content = content.replace('{admin_bind}', security_config.admin_bind_address())
+    content = security_config.apply_project_credentials(content)
+
     # Remplacer les placeholders de ports si fournis
     if ports:
         content = content.replace('{wordpress_port}', str(ports.get('wordpress', '8080')))
@@ -380,10 +386,21 @@ def create_default_wp_content(wp_content_dest):
         raise
 
 
-def create_wordpress_base_files(project_path):
-    """Crée les fichiers de base WordPress (.htaccess et wp-config.php)"""
+def create_wordpress_base_files(project_path, credentials=None):
+    """Crée les fichiers de base WordPress (.htaccess et wp-config.php)
+
+    ``credentials`` : dict ``{'user', 'password', 'database'}``. Omis, les
+    identifiants sont relus depuis le docker-compose du projet — ils sont
+    désormais aléatoires par projet, donc wp-config.php ne peut plus les
+    coder en dur sans casser la connexion à la base.
+    """
     print("📝 Création des fichiers de base WordPress...")
-    
+
+    if credentials is None:
+        from app.utils.project_credentials import get_mysql_credentials
+        project_name = os.path.basename(os.path.normpath(project_path))
+        credentials = get_mysql_credentials(project_name)
+
     # S'assurer que le dossier du projet existe et a les bonnes permissions
     try:
         import subprocess
@@ -445,22 +462,22 @@ RewriteRule . /index.php [L]
  */
 
 // Configuration MySQL
-define('DB_NAME', 'wordpress');
-define('DB_USER', 'wordpress');
-define('DB_PASSWORD', 'wordpress');
+define('DB_NAME', '__WPL_DB_NAME__');
+define('DB_USER', '__WPL_DB_USER__');
+define('DB_PASSWORD', '__WPL_DB_PASSWORD__');
 define('DB_HOST', 'mysql:3306');
 define('DB_CHARSET', 'utf8mb4');
 define('DB_COLLATE', '');
 
 // Clés de sécurité WordPress
-define('AUTH_KEY', 'put your unique phrase here');
-define('SECURE_AUTH_KEY', 'put your unique phrase here');
-define('LOGGED_IN_KEY', 'put your unique phrase here');
-define('NONCE_KEY', 'put your unique phrase here');
-define('AUTH_SALT', 'put your unique phrase here');
-define('SECURE_AUTH_SALT', 'put your unique phrase here');
-define('LOGGED_IN_SALT', 'put your unique phrase here');
-define('NONCE_SALT', 'put your unique phrase here');
+define('AUTH_KEY', '__WPL_AUTH_KEY__');
+define('SECURE_AUTH_KEY', '__WPL_SECURE_AUTH_KEY__');
+define('LOGGED_IN_KEY', '__WPL_LOGGED_IN_KEY__');
+define('NONCE_KEY', '__WPL_NONCE_KEY__');
+define('AUTH_SALT', '__WPL_AUTH_SALT__');
+define('SECURE_AUTH_SALT', '__WPL_SECURE_AUTH_SALT__');
+define('LOGGED_IN_SALT', '__WPL_LOGGED_IN_SALT__');
+define('NONCE_SALT', '__WPL_NONCE_SALT__');
 
 // Préfixe des tables WordPress
 $table_prefix = 'wp_';
@@ -538,6 +555,19 @@ require_once ABSPATH . 'wp-settings.php';
     # Remplacer les placeholders DockerConfig dans le contenu wp-config
     wp_config_content = wp_config_content.replace('{local_ip}', DockerConfig.LOCAL_IP)
     wp_config_content = wp_config_content.replace('{wp_locale}', DockerConfig.WP_LOCALE)
+
+    # Identifiants base de données, propres au projet
+    wp_config_content = wp_config_content.replace('__WPL_DB_NAME__', credentials['database'])
+    wp_config_content = wp_config_content.replace('__WPL_DB_USER__', credentials['user'])
+    wp_config_content = wp_config_content.replace('__WPL_DB_PASSWORD__', credentials['password'])
+
+    # Salts WordPress. Ce chemin écrivait les placeholders « put your unique
+    # phrase here » : les cookies d'authentification devenaient forgeables
+    # puisque les clés étaient connues. On génère les mêmes clés aléatoires
+    # que le chemin nominal (database_utils.generate_wordpress_security_keys).
+    from app.utils.database_utils import generate_wordpress_security_keys
+    for name, value in generate_wordpress_security_keys().items():
+        wp_config_content = wp_config_content.replace(f'__WPL_{name}__', value)
 
     wp_config_path = os.path.join(project_path, 'wp-config.php')
 
@@ -1104,21 +1134,27 @@ API_PORT=3001
 # Base de données
 '''
     
+    # Mots de passe relus depuis le docker-compose déjà généré : ils sont
+    # aléatoires par projet, les coder en dur ici casserait la connexion.
+    from app.utils.project_credentials import get_mongo_password, get_mysql_credentials
+
     if database_type == 'mongodb':
-        env_content += f'''MONGODB_URI=mongodb://admin:adminpassword@mongodb:27017/{project_name}?authSource=admin
+        mongo_password = get_mongo_password(project_name)
+        env_content += f'''MONGODB_URI=mongodb://admin:{mongo_password}@mongodb:27017/{project_name}?authSource=admin
 DB_HOST=mongodb
 DB_PORT=27017
 DB_NAME={project_name}
 DB_USER=admin
-DB_PASSWORD=adminpassword
+DB_PASSWORD={mongo_password}
 '''
     else:
-        env_content += f'''DATABASE_URL=mysql://{project_name}:projectpassword@mysql:3306/{project_name}
+        db_password = get_mysql_credentials(project_name)['password']
+        env_content += f'''DATABASE_URL=mysql://{project_name}:{db_password}@mysql:3306/{project_name}
 DB_HOST=mysql
 DB_PORT=3306
 DB_NAME={project_name}
 DB_USER={project_name}
-DB_PASSWORD=projectpassword
+DB_PASSWORD={db_password}
 '''
     
     env_content += f'''

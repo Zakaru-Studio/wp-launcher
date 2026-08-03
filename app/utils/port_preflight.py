@@ -216,10 +216,15 @@ def _update_wp_db_urls(project_name: str, new_port: int) -> bool:
         f"SET option_value = '{new_url}' "
         "WHERE option_name IN ('siteurl','home');"
     )
+    # Identifiants propres au projet (aléatoires depuis le durcissement)
+    from app.utils.project_credentials import get_mysql_credentials
+    creds = get_mysql_credentials(project_name, container_name=container)
+
     try:
         result = subprocess.run(
             ['docker', 'exec', container, 'mysql',
-             '-uroot', '-prootpassword', 'wordpress', '--execute', sql],
+             '-uroot', f'-p{creds["root_password"]}',
+             creds['database'], '--execute', sql],
             capture_output=True, text=True, timeout=30,
         )
     except subprocess.TimeoutExpired:

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,9 +7,9 @@
     <script>
         (function() {
             try {
-                var saved = localStorage.getItem('wp-launcher-theme');
-                var systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                document.documentElement.dataset.theme = saved || (systemDark ? 'dark' : 'light');
+                // Sombre par défaut, comme le reste de l'application.
+                document.documentElement.dataset.theme =
+                    localStorage.getItem('wp-launcher-theme') || 'dark';
             } catch (e) { document.documentElement.dataset.theme = 'dark'; }
         })();
     </script>
@@ -75,8 +75,10 @@
             text-align: center;
             margin-bottom: 2rem;
         }
+        /* Thème sombre : dégradé sur la primaire turquoise de l'app
+           (--al-primary #76d6d5) plutôt que l'ancien bleu/violet. */
         .login-header h2 {
-            background: linear-gradient(135deg, #38bdf8 0%, #a78bfa 60%);
+            background: linear-gradient(135deg, #76d6d5 0%, #a8e8e7 60%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -113,8 +115,10 @@
         .form-control::placeholder {
             color: #475569;
         }
+        /* Thème sombre : mêmes couleurs que .btn-primary-dark dans l'app —
+           fond --al-primary (#76d6d5), texte --al-on-primary (#00363b). */
         .btn-primary {
-            background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
+            background: #76d6d5;
             border: none;
             border-radius: 10px;
             padding: 0.7rem;
@@ -123,10 +127,12 @@
             font-family: inherit;
             font-size: 0.9rem;
             transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-            color: white;
+            color: #00363b;
         }
         .btn-primary:hover {
-            box-shadow: 0 4px 20px rgba(56, 189, 248, 0.25);
+            background: #8fe0df;
+            color: #00363b;
+            box-shadow: 0 4px 20px rgba(118, 214, 213, 0.3);
             transform: translateY(-1px);
         }
         .btn-github {
@@ -204,8 +210,10 @@
         [data-theme="light"] .login-container::before {
             background: linear-gradient(90deg, transparent, rgba(6, 182, 212, 0.4), transparent);
         }
+        /* Thème clair : secondaire turquoise -> primaire marine de l'app
+           (--al-secondary #006a61 -> --al-primary #0c1427). */
         [data-theme="light"] .login-header h2 {
-            background: linear-gradient(135deg, #0891b2 0%, #0284c7 60%, #8b5cf6 100%);
+            background: linear-gradient(135deg, #006a61 0%, #0c1427 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -229,11 +237,16 @@
         [data-theme="light"] .form-control::placeholder {
             color: #94a3b8;
         }
+        /* Thème clair : fond --al-primary (#0c1427), texte --al-on-primary,
+           survol sur --al-primary-container (#21283c). */
         [data-theme="light"] .btn-primary {
-            background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+            background: #0c1427;
+            color: #ffffff;
         }
         [data-theme="light"] .btn-primary:hover {
-            box-shadow: 0 4px 20px rgba(6, 182, 212, 0.35);
+            background: #21283c;
+            color: #ffffff;
+            box-shadow: 0 4px 20px rgba(12, 20, 39, 0.28);
         }
         [data-theme="light"] .btn-github {
             background: #0f172a;

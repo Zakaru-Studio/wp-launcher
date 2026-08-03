@@ -7,7 +7,7 @@ import os
 from flask import Flask
 from flask_socketio import SocketIO
 from app.config.docker_config import DockerConfig
-from app.utils.version_utils import get_git_version
+from app.utils.version_utils import get_app_version
 
 # Configuration des constantes (utilise DockerConfig pour la cohérence)
 UPLOAD_FOLDER = DockerConfig.UPLOADS_FOLDER
@@ -20,8 +20,8 @@ APP_HOST = DockerConfig.LOCAL_IP
 APP_PORT = DockerConfig.APP_PORT
 APP_URL = f"http://{APP_HOST}:{APP_PORT}"
 
-# Version de l'application depuis Git
-APP_VERSION = get_git_version()
+# Version déclarée de l'application (cf. app/utils/version_utils.py)
+APP_VERSION = get_app_version()
 
 def create_app():
     """Créer et configurer l'application Flask"""
@@ -33,7 +33,12 @@ def create_app():
     app = Flask(__name__, 
                 template_folder=os.path.join(app_path, 'templates'),
                 static_folder=os.path.join(app_path, 'static'))
-    app.secret_key = os.getenv('SECRET_KEY', 'change-me-in-production')
+    # Pas de repli : une clé publique rend les cookies de session forgeables,
+    # et forger une session donne l'équivalent de root sur l'hôte. La
+    # validation vit ici plutôt qu'en aval, pour couvrir aussi les points
+    # d'entrée qui n'appellent que create_app().
+    from app.utils.security_config import require_secret_key
+    app.secret_key = require_secret_key()
     
     # Configuration Flask
     app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER

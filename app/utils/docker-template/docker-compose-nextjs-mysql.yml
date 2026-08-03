@@ -6,24 +6,24 @@ services:
     container_name: PROJECT_NAME_mysql_1
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_ROOT_PASSWORD: "{mysql_root_password}"
       MYSQL_DATABASE: PROJECT_NAME
       MYSQL_USER: PROJECT_NAME
-      MYSQL_PASSWORD: projectpassword
+      MYSQL_PASSWORD: "{mysql_password}"
     volumes:
       - mysql_data:/var/lib/mysql
       - ../../projets/{project_name}/config/mysql.cnf:/etc/mysql/conf.d/custom.cnf
     networks:
       - app_network
     ports:
-      - "0.0.0.0:{mysql_port}:3306"  # Port MySQL exposé
+      - "{admin_bind}:{mysql_port}:3306"  # MySQL — loopback (WPL_ADMIN_BIND)
     command: --default-authentication-plugin=mysql_native_password --innodb-fast-shutdown=1
     stop_grace_period: 60s
     # Allocations raisonnables pour MySQL
     mem_limit: {mysql_memory}
     cpus: '{mysql_cpu}'
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p{mysql_root_password}"]
       timeout: 10s
       retries: 5
       interval: 30s
@@ -40,7 +40,7 @@ services:
     networks:
       - app_network
     ports:
-      - "0.0.0.0:{nextjs_port}:3000"  # Port Next.js frontend
+      - "{site_bind}:{nextjs_port}:3000"  # Port Next.js frontend
     environment:
       - NODE_ENV=development
       - NEXT_TELEMETRY_DISABLED=1
@@ -70,15 +70,15 @@ services:
     networks:
       - app_network
     ports:
-      - "0.0.0.0:{api_port}:3001"  # Port API Express
+      - "{site_bind}:{api_port}:3001"  # Port API Express
     environment:
       - NODE_ENV=development
-      - DATABASE_URL=mysql://PROJECT_NAME:projectpassword@mysql:3306/PROJECT_NAME
+      - DATABASE_URL=mysql://PROJECT_NAME:{mysql_password}@mysql:3306/PROJECT_NAME
       - DB_HOST=mysql
       - DB_PORT=3306
       - DB_NAME=PROJECT_NAME
       - DB_USER=PROJECT_NAME
-      - DB_PASSWORD=projectpassword
+      - DB_PASSWORD={mysql_password}
       - JWT_SECRET=your-jwt-secret-key-here-PROJECT_NAME
       - CORS_ORIGIN=http://{local_ip}:{nextjs_port}
       - API_PORT=3001
@@ -107,8 +107,8 @@ services:
     networks:
       - app_network
     ports:
-      - "0.0.0.0:{mailpit_port}:8025"  # Port interface web Mailpit
-      - "0.0.0.0:{smtp_port}:1025"     # Port SMTP Mailpit
+      - "{admin_bind}:{mailpit_port}:8025"  # Port interface web Mailpit
+      - "{admin_bind}:{smtp_port}:1025"     # Port SMTP Mailpit
     # Allocations légères
     mem_limit: 48m
     cpus: '0.25'
@@ -121,8 +121,8 @@ services:
       PMA_HOST: mysql
       PMA_PORT: 3306
       PMA_USER: root
-      PMA_PASSWORD: rootpassword
-      MYSQL_ROOT_PASSWORD: rootpassword
+      PMA_PASSWORD: "{mysql_root_password}"
+      MYSQL_ROOT_PASSWORD: "{mysql_root_password}"
       PMA_ABSOLUTE_URI: http://{local_ip}:{phpmyadmin_port}/
       # Configuration Apache pour les limites d'en-têtes
       APACHE_RUN_USER: www-data
@@ -137,7 +137,7 @@ services:
     networks:
       - app_network
     ports:
-      - "0.0.0.0:{phpmyadmin_port}:80"  # Port phpMyAdmin
+      - "{admin_bind}:{phpmyadmin_port}:80"  # Port phpMyAdmin
     depends_on:
       mysql:
         condition: service_started

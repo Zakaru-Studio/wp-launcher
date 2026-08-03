@@ -6,6 +6,23 @@ import subprocess
 import os
 from typing import Optional
 
+# Version déclarée de l'application : source de vérité pour l'affichage.
+# À incrémenter à chaque release, en cohérence avec le tag Git `vX.Y.Z`
+# et l'entrée correspondante du CHANGELOG.
+__version__ = "1.4.0"
+
+
+def get_app_version() -> str:
+    """
+    Version affichée dans l'interface (ex. 'v1.4.0').
+
+    Volontairement indépendante de Git : `git describe` renvoie des suffixes
+    parasites (`-dirty`, `-N-gHASH`) selon l'état du dépôt, et retombe sur
+    'v0.0.0-dev' en production où le `.git` est absent.
+    """
+    return f"v{__version__}"
+
+
 def get_git_version() -> str:
     """
     Récupère la version depuis le dernier tag Git.
@@ -73,7 +90,10 @@ def get_version_info() -> dict:
         dict: Dictionnaire avec version, commit_hash, branch, etc.
     """
     info = {
-        'version': get_git_version(),
+        'version': get_app_version(),
+        # État Git conservé à titre de diagnostic (peut différer de la
+        # version déclarée si le dépôt n'est pas taggé / arbre modifié).
+        'git_describe': get_git_version(),
         'commit_hash': None,
         'branch': None,
         'commit_date': None

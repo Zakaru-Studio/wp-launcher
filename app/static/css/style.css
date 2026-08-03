@@ -27,7 +27,7 @@
     --al-primary-fixed-dim:         #bec6e0;
 
     --al-secondary:                 #006a61;
-    --al-secondary-container:       #86f2e4;
+    --al-secondary-container:       #eff9f7;
     --al-on-secondary:              #ffffff;
     --al-on-secondary-container:    #006f66;
     --al-secondary-fixed:           #89f5e7;
@@ -52,9 +52,7 @@
     --primary-color: var(--al-secondary);       /* teal as the accent */
     --primary-hover: #005049;
     --primary-bright: var(--al-secondary-fixed-dim);
-    --primary-gradient: linear-gradient(180deg, #86f2e4 0%, #006a61 100%);
     --secondary-gradient: linear-gradient(135deg, #006a61 0%, #001334 100%);
-    --success-gradient: linear-gradient(135deg, #86f2e4 0%, #006a61 100%);
     --warning-gradient: linear-gradient(135deg, #ffdad6 0%, #ba1a1a 100%);
     --danger-gradient: linear-gradient(135deg, #ba1a1a 0%, #93000a 100%);
     --info-gradient: linear-gradient(135deg, #21283c 0%, #0c1427 100%);
@@ -618,7 +616,6 @@ span.app-version.badge.bg-secondary {
     position: relative;
     overflow-y: auto;
     overflow-x: hidden;
-    height: calc(100vh - 153px);
     padding-top: 1rem;
 }
 
@@ -632,18 +629,58 @@ span.app-version.badge.bg-secondary {
     padding-right: 7px;
 }
 
-body.sidebar-open .projects-grid {
-    margin-right: 420px;
+/* ── Page « Sites gérés » : hauteur d'écran fixe, seule la liste défile ──
+   Chaîne flex complète : .app-canvas > main.app-main > .page-content >
+   .projects-grid-container. Chaque maillon a besoin de `min-height: 0`,
+   sinon un enfant flex refuse de rétrécir sous sa hauteur de contenu et
+   c'est la page entière qui défile.
+   Desktop uniquement : sur mobile le shell (topbar + bottom-nav) garde le
+   défilement naturel de la page. */
+@media (min-width: 769px) {
+    body.page-sites { overflow: hidden; }
+
+    body.page-sites .app-canvas {
+        height: 100vh;
+        min-height: 0;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        padding-bottom: 24px;
+    }
+
+    body.page-sites #flash-messages { flex-shrink: 0; }
+
+    body.page-sites .app-main {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* Les blocs fixes (titre, stats, recherche) gardent leur hauteur… */
+    body.page-sites .page-header,
+    body.page-sites .stats-row,
+    body.page-sites .sites-search-row { flex-shrink: 0; }
+
+    /* …et la liste occupe tout le reste. */
+    body.page-sites .page-content {
+        flex: 1;
+        min-height: 0;
+        margin-bottom: 0;
+    }
+    body.page-sites .projects-grid-container {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+    }
+    body.page-sites .projects-grid { margin-bottom: 0; }
 }
 
-@media (max-width: 1200px) {
-    .projects-grid { margin-right: 50px; }
-    body.sidebar-open .projects-grid { margin-right: 320px; }
-}
+/* Le panneau de notifications flotte au-dessus du contenu :
+   la liste ne se réduit plus à son ouverture. */
 
 @media (max-width: 768px) {
-    .projects-grid { width: calc(100% - 2%); margin-right: 40px; }
-    body.sidebar-open .projects-grid { margin-right: 280px; }
+    .projects-grid { width: 100%; }
 }
 
 /* ============================================
@@ -1101,15 +1138,21 @@ body.sidebar-open .projects-grid {
     width: 100%;
     background: var(--al-surface-container-lowest);
     color: var(--al-on-surface);
+    /* Same elevation as the WordPress card's buttons (which inherit it
+       from the global .btn-primary CTA). Without it a white button on a
+       card that turned white on row hover has no visible edge at all. */
+    box-shadow: 0 4px 16px -6px rgba(12, 20, 39, 0.25);
 }
 
 .btn-service:hover {
     transform: translateY(-1px);
     background: var(--al-surface-container-high);
+    box-shadow: 0 8px 24px -8px rgba(12, 20, 39, 0.35);
 }
 
 .btn-service:active {
     transform: translateY(0);
+    box-shadow: 0 2px 8px -4px rgba(12, 20, 39, 0.25);
 }
 
 .btn-service i { font-size: 0.8rem; }
@@ -3481,7 +3524,6 @@ a:focus-visible {
     --primary-color: var(--al-secondary);
     --primary-hover: var(--al-secondary-fixed);
     --primary-bright: var(--al-secondary-fixed);
-    --primary-gradient: linear-gradient(180deg, #6bd8cb 0%, #005049 100%);
 
     --success-color: var(--al-secondary);
     --success-glow: rgba(107, 216, 203, 0.3);
@@ -3595,8 +3637,99 @@ a:focus-visible {
     background: var(--al-surface-container);
 }
 
+/* Les règles génériques `[data-theme="dark"] .btn-primary` ont exactement
+   la même spécificité que `.btn-service.btn-primary` mais arrivent plus
+   loin dans la feuille : au survol, elles imposaient la couleur de texte
+   --al-on-secondary (#2d2f39, sombre) alors que le fond venait, lui, de
+   `[data-theme="dark"] .btn-service:hover` (surface sombre) — texte sombre
+   sur fond sombre. On rétablit ici un couple fond/texte contrasté. */
+[data-theme="dark"] .btn-service.btn-primary {
+    background: var(--al-surface-container-low);
+    color: var(--al-secondary);
+    box-shadow: none;
+}
+[data-theme="dark"] .btn-service.btn-primary:hover {
+    background: var(--al-secondary-container);
+    color: var(--al-on-secondary-container);
+    box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.45);
+}
+[data-theme="dark"] .btn-service.btn-primary i,
+[data-theme="dark"] .btn-service.btn-primary:hover i {
+    color: inherit;
+}
+
 [data-theme="dark"] .modal-content {
     background: rgba(19, 27, 46, 0.92);
+}
+
+/* ── États sélectionnés de la modale « Create a new project » ──
+   Ces cartes s'appuient sur la famille --al-secondary, qui en thème sombre
+   est une rampe de gris neutres (#c4c6d1 / #444650) et non l'accent de
+   l'app : la carte active paraissait grisée, donc désactivée, alors que la
+   carte inactive affichait un titre turquoise. On repasse sur la primaire
+   turquoise (--al-primary #76d6d5) pour que « actif » se lise comme tel. */
+[data-theme="dark"] .project-type-option input[type="radio"]:checked + .project-type-card,
+[data-theme="dark"] .wordpress-type-selector .form-check:has(.form-check-input:checked),
+[data-theme="dark"] .wordpress-type-check:has(.form-check-input:checked) {
+    background: #263c4d; /* repli si color-mix indisponible */
+    background: color-mix(in srgb, var(--al-primary) 16%, var(--al-surface-container));
+}
+[data-theme="dark"] .project-type-option input[type="radio"]:checked + .project-type-card {
+    box-shadow: 0 0 0 2px var(--al-primary), var(--shadow-medium);
+}
+[data-theme="dark"] .wordpress-type-selector .form-check:has(.form-check-input:checked),
+[data-theme="dark"] .wordpress-type-check:has(.form-check-input:checked) {
+    box-shadow: inset 0 0 0 2px var(--al-primary);
+}
+
+/* Titre, icône et pastille radio de la carte active */
+[data-theme="dark"] .project-type-option input[type="radio"]:checked + .project-type-card .project-type-icon i,
+[data-theme="dark"] .project-type-option input[type="radio"]:checked + .project-type-card .project-type-info h5,
+[data-theme="dark"] .wordpress-type-selector .form-check:has(.form-check-input:checked) .form-check-label,
+[data-theme="dark"] .wordpress-type-check:has(.form-check-input:checked) .form-check-label {
+    color: var(--al-primary) !important;
+}
+[data-theme="dark"] .wordpress-type-selector .form-check:has(.form-check-input:checked)::before,
+[data-theme="dark"] .wordpress-type-check:has(.form-check-input:checked)::before {
+    border-color: var(--al-primary);
+    background: var(--al-primary);
+    box-shadow: inset 0 0 0 3px var(--al-surface-container);
+}
+
+/* Badges techno de la carte active : lisibles sur le fond teinté */
+[data-theme="dark"] .project-type-option input[type="radio"]:checked + .project-type-card .tech-badge {
+    background: rgba(118, 214, 213, 0.16);
+    color: var(--al-primary);
+}
+
+/* ── Interrupteur « Add Next.js » ──
+   Le curseur utilisait --al-on-primary (#00363b, sombre) dans les deux
+   états : à l'arrêt, il disparaissait sur la piste sombre. */
+[data-theme="dark"] .form-switch .form-check-input {
+    background: var(--al-surface-container-highest);
+}
+[data-theme="dark"] .form-switch .form-check-input::before {
+    background: var(--al-on-surface-variant);
+}
+[data-theme="dark"] .form-switch .form-check-input:checked {
+    background: var(--al-primary);
+}
+[data-theme="dark"] .form-switch .form-check-input:checked::before {
+    background: var(--al-on-primary);
+}
+[data-theme="dark"] .form-switch .form-check-input:focus {
+    box-shadow: 0 0 0 3px rgba(118, 214, 213, 0.22);
+}
+
+/* La croix de fermeture de Bootstrap est une image SVG noire : illisible
+   sur fond sombre. On l'inverse pour obtenir une croix blanche. */
+[data-theme="dark"] .btn-close {
+    filter: invert(1) grayscale(100%) brightness(200%);
+    opacity: 0.75;
+}
+[data-theme="dark"] .btn-close:hover,
+[data-theme="dark"] .btn-close:focus-visible {
+    opacity: 1;
 }
 
 [data-theme="dark"] .task-sidebar {
@@ -3741,7 +3874,7 @@ body.app-shell {
     position: fixed;
     top: 0;
     left: 0;
-    width: 256px;
+    width: 230px;
     height: 100vh;
     background: var(--al-surface-container-low);
     display: flex;
@@ -3786,33 +3919,6 @@ body.app-shell {
     color: var(--al-on-surface-variant);
     margin-top: 2px;
 }
-
-.sidebar-cta {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    width: 100%;
-    padding: 13px 16px;
-    border: none;
-    border-radius: 12px;
-    background: var(--al-primary);
-    color: var(--al-on-primary);
-    font-family: 'Inter', sans-serif;
-    font-weight: 700;
-    font-size: 0.875rem;
-    letter-spacing: 0.02em;
-    cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-    box-shadow: 0 6px 20px -8px rgba(12, 20, 39, 0.35);
-}
-.sidebar-cta:hover {
-    background: var(--al-primary-container);
-    transform: translateY(-1px);
-    box-shadow: 0 10px 28px -10px rgba(12, 20, 39, 0.45);
-}
-.sidebar-cta:active { transform: scale(0.98); }
-.sidebar-cta i { font-size: 0.85rem; }
 
 .sidebar-nav {
     display: flex;
@@ -3860,57 +3966,7 @@ body.app-shell {
 }
 .sidebar-footer .user-dropdown { flex: 1; min-width: 0; }
 
-/* ─────── Topbar (desktop) ─────── */
-.app-topbar {
-    position: sticky;
-    top: 0;
-    z-index: 40;
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 14px 28px;
-    background: rgba(247, 249, 251, 0.85);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    margin-left: 256px;
-}
-
-.topbar-search {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex: 1;
-    max-width: 480px;
-    padding: 10px 14px;
-    background: var(--al-surface-container);
-    border-radius: 10px;
-    transition: background 0.2s ease;
-}
-.topbar-search:focus-within {
-    background: var(--al-surface-container-low);
-    box-shadow: 0 0 0 2px rgba(0, 106, 97, 0.15);
-}
-.topbar-search i {
-    color: var(--al-on-surface-variant);
-    font-size: 0.85rem;
-}
-.topbar-search input {
-    flex: 1;
-    background: transparent;
-    border: none;
-    outline: none;
-    color: var(--al-on-surface);
-    font-family: 'Inter', sans-serif;
-    font-size: 0.875rem;
-}
-.topbar-search input::placeholder { color: var(--al-on-surface-variant); }
-
-.topbar-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-left: auto;
-}
+/* ─────── Icon buttons (mobile topbar + sidebar footer) ─────── */
 .topbar-action {
     width: 36px;
     height: 36px;
@@ -3928,12 +3984,18 @@ body.app-shell {
     background: var(--al-surface-container-high);
     color: var(--al-on-surface);
 }
+/* Redémarrage en cours : même feedback que .btn-restart-app */
+.topbar-action.restarting {
+    animation: spin 1s linear infinite;
+    pointer-events: none;
+    opacity: 0.6;
+}
 
 /* ─────── Main canvas ─────── */
 .app-canvas {
-    margin-left: 256px;
+    margin-left: 230px;
     padding: 28px 32px 48px;
-    min-height: calc(100vh - 64px);
+    min-height: 100vh;
     transition: padding-right 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .app-main { padding: 0; }
@@ -4148,13 +4210,6 @@ body.app-shell {
 /* ─────── Responsive: switch to mobile shell ─────── */
 @media (max-width: 768px) {
     .app-sidebar { display: none; }
-    /* Keep app-topbar visible on mobile so the search remains usable;
-       hide its desktop-only actions and drop the sidebar offset. */
-    .app-topbar {
-        margin-left: 0;
-        padding: 12px 16px;
-    }
-    .app-topbar .topbar-actions { display: none; }
     .app-topbar-mobile { display: flex; }
     .app-canvas {
         margin-left: 0;
@@ -4164,7 +4219,6 @@ body.app-shell {
     .fab-create { display: flex; align-items: center; justify-content: center; }
     .page-title { font-size: 1.6rem; }
     .page-header { flex-direction: column; align-items: stretch; }
-    .topbar-search { max-width: none; }
     /* On very narrow screens, allow stat cards to wrap to 2 rows */
     .stats-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -4179,11 +4233,9 @@ body.app-shell {
 [data-theme="dark"] .app-sidebar {
     background: var(--al-surface-container-low);
 }
-[data-theme="dark"] .app-topbar,
 [data-theme="dark"] .app-topbar-mobile {
     background: rgba(12, 20, 39, 0.85);
 }
-[data-theme="dark"] .topbar-search { background: var(--al-surface-container); }
 [data-theme="dark"] .instance-strip { background: var(--al-surface-container-lowest); }
 [data-theme="dark"] .bottom-nav { background: var(--al-surface-container-low); }
 [data-theme="dark"] .lang-btn.active { background: var(--al-surface-container-high); }
@@ -4298,6 +4350,12 @@ body.app-shell {
     box-shadow: 0 1px 2px -1px rgba(12, 20, 39, 0.04);
     transition: box-shadow 0.2s var(--ease), transform 0.2s var(--ease), background 0.2s var(--ease);
     position: relative;
+
+
+}
+
+.dark-theme .instance-strip.project-item {
+background: #ffffff05; 
 }
 
 .instance-strip.project-item.is-error::before {
@@ -4320,6 +4378,8 @@ body.app-shell {
     align-items: center;
     gap: 20px;
     padding: 18px 22px;
+    background: #ffffff05;
+    border-radius: 16px;
 }
 
 .instance-strip.project-item.is-inactive .instance-strip-main { opacity: 0.78; }
@@ -4453,6 +4513,10 @@ body.app-shell {
     background: var(--al-surface-container-high);
     color: var(--al-primary);
 }
+/* The deploy shortcut is an <a>, so it needs the link defaults cleared
+   to sit flush with the <button> siblings in the same action row. */
+a.instance-icon-btn { text-decoration: none; flex-shrink: 0; }
+a.instance-icon-btn:hover { text-decoration: none; }
 
 .instance-ghost-btn {
     display: inline-flex;
@@ -4901,8 +4965,8 @@ body.app-shell {
     align-items: center;
     gap: 8px;
     padding: 10px 18px;
-    background: linear-gradient(180deg, #86f2e4 0%, #006a61 100%);
-    color: #ffffff;
+    background: var(--al-secondary);
+    color: var(--al-on-secondary);
     border-radius: var(--border-radius);
     border: none;
     font-family: 'Inter', sans-serif;
@@ -5129,90 +5193,251 @@ body.app-shell {
 
 
 /* ============================================
-   TOPBAR ACTIONS — user dropdown + theme + lang + bell
+   PROFILE MENU — sidebar footer (desktop) + mobile topbar
    ============================================ */
-.topbar-spacer { flex: 1; }
 
-.app-topbar .topbar-actions {
+/* ── Déclencheur pleine largeur en pied de sidebar ── */
+.profile-menu-toggle.sidebar {
     display: flex;
     align-items: center;
     gap: 10px;
-    margin-left: auto;
-}
-
-.app-topbar .user-dropdown { position: relative; }
-
-.app-topbar .user-dropdown-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 10px 6px 6px;
-    background: var(--al-surface-container);
-    border: none;
-    border-radius: 999px;
+    width: 100%;
+    padding: 8px;
+    text-align: left;
+    background: transparent;
+    border: 1px solid var(--al-outline-variant, rgba(128, 128, 128, 0.22));
+    border-radius: 12px;
     cursor: pointer;
-    transition: background 0.18s ease;
+    transition: background 0.18s ease, border-color 0.18s ease;
     font-family: 'Inter', sans-serif;
     color: var(--al-on-surface);
 }
-
-.app-topbar .user-dropdown-toggle:hover {
+.profile-menu-toggle.sidebar:hover,
+.profile-menu-toggle.sidebar[aria-expanded="true"] {
     background: var(--al-surface-container-high);
 }
 
-.app-topbar .user-dropdown-toggle .user-avatar {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    object-fit: cover;
+.profile-menu-toggle.sidebar .user-avatar {
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
 }
 
-.app-topbar .user-dropdown-toggle .user-name {
-    font-size: 0.85rem;
+.profile-menu-identity {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+}
+.profile-menu-toggle.sidebar .profile-menu-identity .user-name {
+    font-size: 14px;
     font-weight: 600;
     color: var(--al-on-surface);
-    max-width: 130px;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.profile-menu-toggle.sidebar .profile-menu-identity .user-email {
+    font-size: 12px;
+    line-height: 1.3;
+    /* Suit le thème : sombre sur fond clair, clair sur fond sombre */
+    color: var(--al-on-surface);
+    opacity: 0.75;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.app-topbar .user-dropdown-toggle .user-dropdown-caret {
-    font-size: 0.7rem;
+.profile-menu-toggle .user-dropdown-caret {
+    font-size: 1rem;
     color: var(--al-on-surface-variant);
-    margin-left: 2px;
+    flex-shrink: 0;
 }
 
-.app-topbar .user-dropdown-toggle .admin-badge { margin-left: 0; }
-
-/* Theme toggle in the topbar inherits .topbar-action sizing */
-.app-topbar .theme-toggle {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
+/* Variante mobile : avatar seul */
+.profile-menu-toggle.mobile {
+    padding: 2px;
     background: transparent;
     border: none;
-    color: var(--al-on-surface-variant);
-    position: relative;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+/* ── Panneau du menu ── */
+.profile-menu-list {
+    min-width: 244px;
+    padding: 6px;
+    border-radius: 14px;
+    border: 1px solid var(--al-outline-variant, rgba(128, 128, 128, 0.22));
+    background: var(--al-surface-container-lowest);
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.22);
+}
+/* En pied de sidebar, le menu s'ouvre vers le haut et ne dépasse jamais
+   la largeur utile de la barre latérale (230px - 2x16px de padding). */
+.sidebar-footer .profile-menu-list {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    margin-bottom: 8px;
+    box-sizing: border-box;
+}
+/* Le texte long (email, libellés) est tronqué plutôt que d'élargir le menu */
+.sidebar-footer .profile-menu-list .dropdown-item { min-width: 0; }
+
+.profile-menu-header {
+    padding: 8px 10px;
+    color: var(--al-on-surface);
+}
+.profile-menu-header strong {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
     overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+/* `.text-muted` de Bootstrap est illisible sur fond sombre : on repasse
+   sur la couleur de texte du thème (sombre sur clair, clair sur sombre). */
+.profile-menu-header small,
+.profile-menu-header small.text-muted {
+    display: block;
+    font-size: 12px;
+    color: var(--al-on-surface) !important;
+    opacity: 0.75;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.profile-menu-header .admin-badge { margin: 6px 0 0; margin-left: 0; }
+
+.profile-menu-list .dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 10px;
+    border: none;
+    border-radius: 9px;
+    background: transparent;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.84rem;
+    color: var(--al-on-surface);
+    cursor: pointer;
+}
+.profile-menu-list .dropdown-item:hover,
+.profile-menu-list .dropdown-item:focus-visible {
+    background: var(--al-surface-container-high);
+    color: var(--al-on-surface);
+}
+.profile-menu-list .dropdown-item.text-danger,
+.profile-menu-list .dropdown-item.text-danger:hover {
+    color: var(--al-error);
+}
+.profile-menu-list .dropdown-item .material-symbols-outlined {
+    font-size: 1.15rem;
+    color: var(--al-on-surface-variant);
+    flex-shrink: 0;
+}
+.profile-menu-list .dropdown-item.text-danger .material-symbols-outlined { color: var(--al-error); }
+.profile-item-label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.profile-menu-list .dropdown-divider { margin: 5px 4px; opacity: 0.5; }
+
+/* ── Sous-menus repliables (thème / langue) ── */
+.profile-submenu-caret {
+    transition: transform 0.18s ease;
+    font-size: 1rem !important;
+}
+.profile-submenu-toggle[aria-expanded="true"] .profile-submenu-caret {
+    transform: rotate(90deg);
+}
+.profile-submenu-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-left: 14px;
+    margin-top: 2px;
+}
+.profile-submenu-panel[hidden] { display: none; }
+.profile-lang-form {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+}
+
+/* Coche de l'option active — réservée pour éviter tout décalage */
+.profile-option-check {
+    font-size: 1rem !important;
+    opacity: 0;
+    flex-shrink: 0;
+}
+.profile-option-check.is-on { opacity: 1; color: var(--al-secondary) !important; }
+
+/* Redémarrage en cours : seule l'icône tourne */
+.profile-menu-list .dropdown-item.restarting { pointer-events: none; opacity: 0.6; }
+.profile-menu-list .dropdown-item.restarting .restart-icon {
+    animation: spin 1s linear infinite;
+}
+
+/* ── Pied de sidebar ── */
+.sidebar-footer { flex-wrap: nowrap; }
+
+/* Icône WordPress de l'entrée « Sites » : même gabarit que les
+   Material Symbols voisins pour garder la colonne alignée. */
+.nav-icon-wp {
+    width: 22px;
+    font-size: 1.25rem !important;
+    text-align: center;
+    flex-shrink: 0;
+    opacity: 0.85;
+}
+.sidebar-nav-item.active .nav-icon-wp,
+.bottom-nav-item.active .nav-icon-wp {
+    color: var(--al-secondary);
+    opacity: 1;
+}
+
+/* Barre de titre : tous les boutons (principal, secondaires, cloche)
+   partagent la même hauteur de 42px. Le padding vertical est neutralisé —
+   la hauteur est imposée et le contenu recentré en flex. */
+.page-header-actions > button,
+.page-header-actions > a {
+    height: 42px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    padding-top: 0;
+    padding-bottom: 0;
 }
 
-/* Language switcher fits in the topbar */
-.app-topbar .language-switcher {
-    height: 36px;
-    align-items: center;
+/* Cloche placée à droite des boutons d'action : carré 42x42 */
+.page-header-actions .page-notif-bell {
+    width: 42px;
+    height: 42px;
+    flex-shrink: 0;
+    padding: 0;
     background: var(--al-surface-container);
+}
+.page-header-actions .page-notif-bell:hover {
+    background: var(--al-surface-container-high);
+}
+/* Icône agrandie de 2px (1.15rem = 18.4px -> 20.4px) */
+.page-header-actions .page-notif-bell .material-symbols-outlined {
+    font-size: 1.275rem;
 }
 
 /* Bell with badge */
 .notif-bell { position: relative; }
 .notif-bell-badge {
     position: absolute;
-    top: 4px;
-    right: 4px;
+top: -4px;
+    right: -5px;
     min-width: 16px;
     height: 16px;
     padding: 0 4px;
@@ -5232,10 +5457,10 @@ body.app-shell {
    ============================================ */
 .task-popover {
     position: fixed;
-    top: 64px;          /* below the topbar */
+    top: 24px;          /* la topbar desktop a été supprimée */
     right: 24px;
     width: 380px;
-    max-height: calc(100vh - 88px);
+    max-height: calc(100vh - 48px);
     z-index: 1200;
     background: var(--al-surface-container-lowest);
     border-radius: 16px;
@@ -5376,13 +5601,8 @@ body.sidebar-open .task-popover[hidden] { display: flex !important; }
 
 /* Push layout: on wide screens the canvas shrinks while the popover is open,
    so per-site actions (gear / Start) on the far right stay visible.
-   Below 1200px the popover keeps overlaying — pushing would crush the content. */
-@media (min-width: 1200px) {
-    body.sidebar-open .app-canvas {
-        /* popover width (380) + right offset (24) + breathing room (24) */
-        padding-right: 428px;
-    }
-}
+   Le panneau flotte toujours au-dessus du contenu : aucune réservation
+   d'espace, quelle que soit la largeur d'écran. */
 
 @media (max-width: 768px) {
     .task-popover {
@@ -5393,11 +5613,8 @@ body.sidebar-open .task-popover[hidden] { display: flex !important; }
         max-height: 70vh;
     }
     body.sidebar-open .task-popover-backdrop { display: block; }
-    /* Hide the user-name label in topbar, keep only avatar on small screens */
-    .app-topbar .user-dropdown-toggle .user-name { display: none; }
-    /* Topbar gets compact on mobile — drop the search slot, prioritize actions */
-    .app-topbar .topbar-spacer { display: none; }
-    .app-topbar .topbar-actions { width: 100%; justify-content: flex-end; }
+    /* Le menu profil mobile reste dans le viewport */
+    .app-topbar-mobile .profile-menu-list { min-width: 220px; }
 }
 
 /* On the Sites page only, search above the table */
@@ -5447,9 +5664,10 @@ body.sidebar-open .task-popover[hidden] { display: flex !important; }
     color: var(--al-on-surface);
 }
 
-/* Dark theme overrides for the new topbar/popover bits */
-[data-theme="dark"] .app-topbar .user-dropdown-toggle { background: var(--al-surface-container); }
-[data-theme="dark"] .app-topbar .user-dropdown-toggle:hover { background: var(--al-surface-container-high); }
+/* Dark theme overrides for the profile menu / popover bits */
+[data-theme="dark"] .profile-menu-toggle.sidebar:hover,
+[data-theme="dark"] .profile-menu-toggle.sidebar[aria-expanded="true"] { background: var(--al-surface-container-high); }
+[data-theme="dark"] .profile-menu-list { background: var(--al-surface-container-low); }
 [data-theme="dark"] .task-popover { background: var(--al-surface-container-lowest); }
 [data-theme="dark"] .task-popover-header,
 [data-theme="dark"] .task-popover-footer { background: var(--al-surface-container-low); }
@@ -5477,7 +5695,6 @@ body.sidebar-open .task-popover[hidden] { display: flex !important; }
     font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
 }
 .brand-icon .material-symbols-outlined { font-size: 1.05rem; color: var(--al-on-primary); }
-.sidebar-cta .material-symbols-outlined { font-size: 1rem; }
 
 /* Topbar action icons */
 .topbar-action .material-symbols-outlined { font-size: 1.15rem; }
@@ -5604,7 +5821,7 @@ body.sidebar-open .task-popover[hidden] { display: flex !important; }
     gap: 8px;
     width: 100%;
     padding: 11px 16px;
-    background: linear-gradient(180deg, var(--al-secondary-fixed-dim) 0%, var(--al-secondary) 100%);
+    background: var(--al-secondary);
     color: var(--al-on-secondary);
     border: none;
     border-radius: 10px;
@@ -5616,7 +5833,8 @@ body.sidebar-open .task-popover[hidden] { display: flex !important; }
     box-shadow: 0 6px 16px -8px rgba(0, 106, 97, 0.5);
 }
 .btn-primary-teal:hover {
-    filter: brightness(1.05);
+    /* Aplat : le hover a besoin d'un écart plus marqué que sur l'ancien dégradé */
+    filter: brightness(1.15);
     transform: translateY(-1px);
     box-shadow: 0 10px 22px -10px rgba(0, 106, 97, 0.55);
 }
@@ -5644,6 +5862,27 @@ body.sidebar-open .task-popover[hidden] { display: flex !important; }
     transform: translateY(-1px);
 }
 .btn-primary-dark .material-symbols-outlined { font-size: 1.05rem; }
+
+/* Rendu en <a> (ex. « Manage servers ») : neutraliser le soulignement
+   par défaut des liens, et garder la couleur du bouton. */
+.btn-primary-dark,
+.btn-primary-dark:hover,
+.btn-primary-dark:focus,
+.ghost-btn,
+.ghost-btn:hover,
+.ghost-btn:focus {
+    text-decoration: none;
+}
+.btn-primary-dark:hover { color: var(--al-on-primary); }
+
+/* En thème sombre, --al-primary-container (#001818) est quasi noir alors
+   que le texte reste --al-on-primary (#00363b) : le survol devenait
+   illisible. On éclaircit la teinte primaire au lieu de l'assombrir. */
+[data-theme="dark"] .btn-primary-dark:hover {
+    background: #8fe0df;
+    color: var(--al-on-primary);
+    box-shadow: 0 8px 20px -8px rgba(118, 214, 213, 0.45);
+}
 
 .btn-text-muted {
     background: transparent;
@@ -5773,6 +6012,11 @@ body.sidebar-open .task-popover[hidden] { display: flex !important; }
     margin-top: 8px;
 }
 .profile-form-actions .btn-primary-teal { width: auto; padding: 11px 22px; }
+
+/* Confirmation de redémarrage : Annuler à gauche, Redémarrer à droite,
+   sur une seule ligne (le .btn-primary-teal est en width:100% par défaut). */
+#restartAppModal .modal-footer { justify-content: space-between; flex-wrap: nowrap; }
+#restartAppModal .btn-primary-teal { width: auto; padding: 11px 22px; }
 
 @media (max-width: 768px) {
     .profile-grid { grid-template-columns: 1fr; }

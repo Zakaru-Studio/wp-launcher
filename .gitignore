@@ -25,6 +25,27 @@ app/utils/containers
 
 # Sensitive configuration
 .env
+.env.backup-*
+
+# Key material and certificates — deliberately broad. Reverse-proxy state
+# (ACME account keys, issued certs) must never reach a commit.
+traefik/
+acme.json
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+
+# Databases (data/ already ignored, but projects and dumps land elsewhere)
+*.db
+*.sqlite
+*.sqlite3
+
+# Runtime state that names internal hosts
+exposed_sites.json
 
 # Recovery dumps (MySQL rescue snapshots)
 .recovery-backup/

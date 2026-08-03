@@ -994,6 +994,11 @@ function createProjectHTML(project) {
                     </div>
                     ` : ''}
 
+                    <a class="instance-icon-btn" href="/deployments?project=${encodeURIComponent(project.name)}"
+                       title="Déploiement de ${_escAttr(project.name)}">
+                        <i class="fas fa-rocket"></i>
+                    </a>
+
                     <div class="btn-group">
                         <button class="instance-icon-btn" type="button" data-bs-toggle="dropdown" data-bs-auto-close="true" aria-expanded="false" title="Commandes du projet">
                             <i class="fas fa-cog"></i>

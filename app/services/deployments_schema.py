@@ -15,7 +15,7 @@ import sqlite3
 from typing import Optional
 
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 6
 
 
 def connect(db_path: str) -> sqlite3.Connection:
@@ -70,6 +70,8 @@ def _create_tables(conn: sqlite3.Connection) -> None:
             commit_sha     TEXT,
             status         TEXT NOT NULL
                            CHECK(status IN ('running','success','failed','timeout','cancelled')),
+            kind           TEXT NOT NULL DEFAULT 'git'
+                           CHECK(kind IN ('git','db','media')),
             triggered_by   INTEGER,
             started_at     TEXT NOT NULL,
             finished_at    TEXT,
@@ -180,7 +182,79 @@ def _migrate(conn: sqlite3.Connection) -> None:
             "FROM deployment_targets GROUP BY project_name"
         )
 
+    # --- v5 -----------------------------------------------------------
+    # `deployments` gains a `kind` discriminator: 'git' (the historical
+    # fetch/reset deploy) or 'db' (dev → remote database push). Existing
+    # rows are all git deploys, which the column default backfills.
+    if current < 5 and not _has_column(conn, "deployments", "kind"):
+        conn.execute(
+            "ALTER TABLE deployments ADD COLUMN kind TEXT NOT NULL DEFAULT 'git'"
+        )
+
+    # --- v6 -----------------------------------------------------------
+    # `kind` gains 'media' (dev → remote uploads sync). Fresh v5 tables
+    # carry a two-value CHECK that would reject it, and tables migrated
+    # from v4 carry no CHECK at all — rebuild converges both.
+    if current < 6 and _needs_kind_check_rebuild(conn):
+        _rebuild_deployments_with_kind(conn)
+
     conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+
+
+def _needs_kind_check_rebuild(conn: sqlite3.Connection) -> bool:
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='deployments'"
+    ).fetchone()
+    if not row or not row["sql"]:
+        return False
+    return "'media'" not in row["sql"]
+
+
+def _rebuild_deployments_with_kind(conn: sqlite3.Connection) -> None:
+    """Rebuild `deployments` so `kind` accepts 'media'."""
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS _new_deployments_kind (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_name   TEXT NOT NULL,
+                server_id      INTEGER NOT NULL,
+                branch         TEXT NOT NULL,
+                commit_sha     TEXT,
+                status         TEXT NOT NULL
+                               CHECK(status IN ('running','success','failed','timeout','cancelled')),
+                kind           TEXT NOT NULL DEFAULT 'git'
+                               CHECK(kind IN ('git','db','media')),
+                triggered_by   INTEGER,
+                started_at     TEXT NOT NULL,
+                finished_at    TEXT,
+                log_file       TEXT,
+                FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            "INSERT INTO _new_deployments_kind "
+            "(id, project_name, server_id, branch, commit_sha, status, kind, "
+            " triggered_by, started_at, finished_at, log_file) "
+            "SELECT id, project_name, server_id, branch, commit_sha, status, "
+            "       COALESCE(kind, 'git'), triggered_by, started_at, finished_at, log_file "
+            "FROM deployments"
+        )
+        conn.execute("DROP TABLE deployments")
+        conn.execute("ALTER TABLE _new_deployments_kind RENAME TO deployments")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_deploy_project "
+            "ON deployments(project_name, started_at DESC)"
+        )
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON")
+
+
+def _has_column(conn: sqlite3.Connection, table: str, column: str) -> bool:
+    rows = conn.execute(f"PRAGMA table_info('{table}')").fetchall()
+    return any(r["name"] == column for r in rows)
 
 
 def _needs_deploy_paths_fk_rebuild(conn: sqlite3.Connection) -> bool:

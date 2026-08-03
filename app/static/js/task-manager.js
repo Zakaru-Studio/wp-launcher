@@ -993,29 +993,44 @@ class TaskManager {
     /**
      * Générer le HTML d'une tâche
      */
+    /** Échappe une valeur destinée à être interpolée dans du HTML. */
+    esc(value) {
+        const div = document.createElement('div');
+        div.textContent = String(value ?? '');
+        return div.innerHTML;
+    }
+
     renderTaskHTML(task, isNew = false) {
         const statusIcon = this.getStatusIcon(task);
         const statusClass = this.getStatusClass(task);
         const elapsed = this.formatElapsedTime(task.startTime);
         const taskDateTime = this.formatDateTime(task.startTime);
-        const projectInfo = task.projectName ? ` • ${task.projectName}` : '';
+        // name / message / details transportent du texte d'origine serveur
+        // (stderr distant, erreurs d'API) : ils partent dans innerHTML et
+        // doivent donc être échappés.
+        const esc = (v) => this.esc(v);
+        const taskId = esc(task.id);
+        const taskName = esc(task.name);
+        const taskMessage = esc(task.message);
+        const taskDetails = task.details ? esc(task.details) : '';
+        const projectInfo = task.projectName ? ` • ${esc(task.projectName)}` : '';
         const newClass = isNew ? ' task-item-new' : '';
 
         const html = `
-            <div class="task-item ${statusClass}${newClass}" data-task-id="${task.id}">
+            <div class="task-item ${statusClass}${newClass}" data-task-id="${taskId}">
                 <div class="task-item-header">
                     <div class="task-item-title">
                         ${statusIcon}
-                        ${task.name}${projectInfo}
+                        ${taskName}${projectInfo}
                     </div>
-                    <button class="task-item-close" onclick="taskManager.removeTask('${task.id}')">
+                    <button class="task-item-close" onclick="taskManager.removeTask('${taskId}')">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
                 
                 <div class="task-item-content">
-                    <div class="task-item-message">${task.message}</div>
-                    ${task.details ? `<div class="task-item-details">${task.details}</div>` : ''}
+                    <div class="task-item-message">${taskMessage}</div>
+                    ${taskDetails ? `<div class="task-item-details">${taskDetails}</div>` : ''}
                     
                     ${(task.status === 'running' || task.status === 'queued') && !this.isNotificationType(task.type) ? `
                         <div class="task-item-progress">
@@ -1029,15 +1044,15 @@ class TaskManager {
                     ${task.actionButton && task.status === 'completed' ? (
                         task.actionButton.url
                             ? `<div class="task-action-button">
-                                <a href="${task.actionButton.url}" target="_blank" rel="noopener" class="btn-task-action">
-                                    <i class="${task.actionButton.icon}"></i>
-                                    ${task.actionButton.text}
+                                <a href="${esc(task.actionButton.url)}" target="_blank" rel="noopener" class="btn-task-action">
+                                    <i class="${esc(task.actionButton.icon)}"></i>
+                                    ${esc(task.actionButton.text)}
                                 </a>
                             </div>`
                             : `<div class="task-action-button">
                                 <button type="button" class="btn-task-action" onclick="${task.actionButton.action}">
-                                    <i class="${task.actionButton.icon}"></i>
-                                    ${task.actionButton.text}
+                                    <i class="${esc(task.actionButton.icon)}"></i>
+                                    ${esc(task.actionButton.text)}
                                 </button>
                             </div>`
                     ) : ''}
@@ -1217,11 +1232,50 @@ class TaskManager {
     /**
      * Gestion de la sidebar
      */
+    /**
+     * Ancre le panneau juste SOUS la cloche, aligné sur son bord droit,
+     * pour qu'il ne recouvre plus les boutons d'action de la page.
+     *
+     * Desktop uniquement : en dessous de 769px la feuille de style pose un
+     * panneau pleine largeur, on retire donc les styles inline.
+     */
+    positionPopover() {
+        const el = this.sidebarElement;
+        if (!el) return;
+
+        const bell = document.getElementById('notif-bell');
+        if (!bell || window.innerWidth < 769) {
+            el.style.top = '';
+            el.style.right = '';
+            el.style.maxHeight = '';
+            return;
+        }
+
+        const rect = bell.getBoundingClientRect();
+        const GAP = 10;      // respiration sous la cloche
+        const MARGIN = 24;   // marge basse conservée
+        const top = rect.bottom + GAP;
+
+        el.style.top = `${Math.round(top)}px`;
+        el.style.right = `${Math.round(Math.max(12, window.innerWidth - rect.right))}px`;
+        el.style.maxHeight = `${Math.max(200, Math.round(window.innerHeight - top - MARGIN))}px`;
+    }
+
     openSidebar() {
         if (this.sidebarElement) {
             this.sidebarElement.classList.add('open');
             document.body.classList.add('sidebar-open');
             this.isOpen = true;
+            this.positionPopover();
+
+            // Garder l'ancrage correct si la fenêtre bouge pendant l'ouverture.
+            if (!this._repositionHandler) {
+                this._repositionHandler = () => {
+                    if (this.isOpen) this.positionPopover();
+                };
+                window.addEventListener('resize', this._repositionHandler);
+                window.addEventListener('scroll', this._repositionHandler, true);
+            }
             //console.log('📂 Sidebar ouverte, classe sidebar-open ajoutée au body');
         }
     }
@@ -1231,6 +1285,12 @@ class TaskManager {
             this.sidebarElement.classList.remove('open');
             document.body.classList.remove('sidebar-open');
             this.isOpen = false;
+
+            if (this._repositionHandler) {
+                window.removeEventListener('resize', this._repositionHandler);
+                window.removeEventListener('scroll', this._repositionHandler, true);
+                this._repositionHandler = null;
+            }
             //console.log('📁 Sidebar fermée, classe sidebar-open supprimée du body');
         }
     }

@@ -35,6 +35,9 @@ msgstr "Paramètres"
 msgid "Add"
 msgstr "Ajouter"
 
+msgid "Add site"
+msgstr "Ajouter un site"
+
 msgid "Search instances..."
 msgstr "Rechercher une instance..."
 
@@ -387,6 +390,51 @@ msgstr "Aucune cible enregistrée. Cliquez sur « Nouvelle cible » pour en cré
 msgid "Redeploy {project} on {server} ({branch})?"
 msgstr "Redéployer {project} sur {server} ({branch}) ?"
 
+msgid "This project has no deployment folder yet — create it below."
+msgstr "Ce projet n'a pas encore de dossier de déploiement — créez-le ci-dessous."
+
+msgid "Push media"
+msgstr "Pousser les médias"
+
+msgid "Media push"
+msgstr "Push médias"
+
+msgid "Send the dev media library (adds and updates only, never deletes on the server)"
+msgstr "Envoyer la médiathèque de dev (ajouts et mises à jour uniquement, aucune suppression sur le serveur)"
+
+msgid "Send the dev media of {project} to {server} ({env})?"
+msgstr "Envoyer les médias de dev du projet {project} vers {server} ({env}) ?"
+
+msgid "Only missing or modified files are sent. Nothing is deleted on the server."
+msgstr "Seuls les fichiers manquants ou modifiés sont envoyés. Rien n'est supprimé sur le serveur."
+
+msgid "Media push refused."
+msgstr "Push des médias refusé."
+
+msgid "Push DB"
+msgstr "Pousser la BDD"
+
+msgid "DB push"
+msgstr "Push BDD"
+
+msgid "Overwrite the remote database with the dev one (URLs rewritten, remote backup taken)"
+msgstr "Écraser la base distante avec celle de dev (URLs réécrites, sauvegarde distante effectuée)"
+
+msgid "Overwrite the database of {server} ({env}) with the dev database of {project}?"
+msgstr "Écraser la base de données de {server} ({env}) avec celle de dev du projet {project} ?"
+
+msgid "URLs are rewritten automatically and a backup of the remote database is written on the server before the import."
+msgstr "Les URLs sont réécrites automatiquement et une sauvegarde de la base distante est écrite sur le serveur avant l'import."
+
+msgid "PRODUCTION — type the project name ({project}) to confirm the database overwrite:"
+msgstr "PRODUCTION — saisissez le nom du projet ({project}) pour confirmer l'écrasement de la base :"
+
+msgid "Database push aborted."
+msgstr "Push de la base annulé."
+
+msgid "Database push refused."
+msgstr "Push de la base refusé."
+
 msgid "Delete this deployment target? Its run history is kept."
 msgstr "Supprimer cette cible de déploiement ? Son historique est conservé."
 
@@ -522,3 +570,18 @@ msgstr "Enregistrez, modifiez et testez les cibles SSH distantes sur lesquelles 
 
 msgid "Each server stores its SSH credentials, pinned host fingerprint and base deploy path."
 msgstr "Chaque serveur stocke ses identifiants SSH, l'empreinte d'hôte épinglée et le chemin de déploiement de base."
+
+msgid "Restart the application"
+msgstr "Redémarrer l'application"
+
+msgid "The application will restart and the page will reload automatically."
+msgstr "L'application va redémarrer et la page se rechargera automatiquement."
+
+msgid "This takes a few seconds. Running tasks are not interrupted."
+msgstr "Cela prend quelques secondes. Les tâches en cours ne sont pas interrompues."
+
+msgid "Light"
+msgstr "Clair"
+
+msgid "Dark"
+msgstr "Sombre"
