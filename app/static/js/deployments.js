@@ -13,7 +13,10 @@ const DEPLOY_STATE = {
     targets: [],         // connections (project × server × branch)
     targetHistory: {},   // targetId -> { rows: [...], expanded: bool }
     deployableProjects: [],
-    view: 'grid',        // 'grid' (folders) | 'detail' (one project)
+    filter: 'all',       // all | active | inactive | wordpress | nextjs
+    search: '',
+    sortDir: 'asc',
+    view: 'grid',        // 'grid' (sites) | 'detail' (one project)
     currentProject: null,
     currentDeploymentId: null,
     currentRoom: null,
@@ -719,15 +722,140 @@ async function replayDeployment(deploymentId) {
 /** Number of history rows shown before the "See more" button. */
 const TARGET_HISTORY_PAGE = 5;
 
+/**
+ * Charge la liste des sites installés, enrichie de leurs infos de déploiement.
+ *
+ * On part désormais de `/projects_with_status` — la même source que la page
+ * Sites — et non de `/api/deployment-projects` : il n'existe pas d'entité
+ * « projet de déploiement » côté base, tout y est déjà clé sur le nom du
+ * site (cf. deployment_targets.project_name). Créer un dossier au préalable
+ * était donc une étape purement d'affichage ; l'API de création de cible
+ * valide d'ailleurs le nom contre les sites installés.
+ */
 async function loadProjects() {
+    let sites = [];
+    let deployMeta = [];
+
     try {
-        const res = await fetch('/api/deployment-projects');
-        const data = await res.json();
-        DEPLOY_STATE.projects = data.projects || [];
+        const [sitesRes, metaRes] = await Promise.all([
+            fetch('/projects_with_status'),
+            fetch('/api/deployment-projects')
+        ]);
+        const sitesData = await sitesRes.json();
+        sites = Array.isArray(sitesData) ? sitesData : (sitesData.projects || []);
+        const metaData = await metaRes.json();
+        deployMeta = metaData.projects || [];
     } catch (e) {
-        DEPLOY_STATE.projects = [];
+        sites = [];
     }
+
+    const metaBy = {};
+    deployMeta.forEach(m => { metaBy[m.project_name] = m; });
+
+    DEPLOY_STATE.projects = sites.map(s => {
+        const meta = metaBy[s.name] || {};
+        return {
+            project_name: s.name,
+            favicon_urls: s.favicon_urls || [],
+            // Attributs repris de la page Sites pour appliquer les mêmes filtres
+            status: s.status || s.container_status || 'inactive',
+            type: s.type || 'wordpress',
+            has_nextjs: !!(s.has_nextjs || s.nextjs_enabled),
+            connection_count: meta.connection_count || 0,
+            last_status: meta.last_status || null,
+            last_started_at: meta.last_started_at || null
+        };
+    });
+
     renderProjectsView();
+}
+
+/* ───── filtres (mêmes critères que la page Sites) ───── */
+
+/** Un site correspond-il au filtre courant ? */
+function matchesDeployFilter(p, filter) {
+    switch (filter) {
+        case 'active':    return p.status === 'active';
+        case 'inactive':  return p.status !== 'active';
+        case 'wordpress': return p.type === 'wordpress';
+        case 'nextjs':    return p.type === 'nextjs' || p.has_nextjs;
+        default:          return true;
+    }
+}
+
+/** Liste filtrée par onglet + recherche, puis triée par nom. */
+function visibleDeployProjects() {
+    const term = (DEPLOY_STATE.search || '').trim().toLowerCase();
+    const dir = DEPLOY_STATE.sortDir === 'desc' ? -1 : 1;
+    return DEPLOY_STATE.projects
+        .filter(p => matchesDeployFilter(p, DEPLOY_STATE.filter))
+        .filter(p => !term || p.project_name.toLowerCase().includes(term))
+        .sort((a, b) => dir * a.project_name.localeCompare(b.project_name));
+}
+
+/** Compteurs des cartes de filtre — calculés sur la liste complète. */
+function updateDeployCounts() {
+    const all = DEPLOY_STATE.projects;
+    const counts = {
+        all: all.length,
+        active: all.filter(p => matchesDeployFilter(p, 'active')).length,
+        inactive: all.filter(p => matchesDeployFilter(p, 'inactive')).length,
+        wordpress: all.filter(p => matchesDeployFilter(p, 'wordpress')).length,
+        nextjs: all.filter(p => matchesDeployFilter(p, 'nextjs')).length
+    };
+    Object.keys(counts).forEach(k => {
+        const el = document.querySelector(`#deploy-filters [data-count="${k}"]`);
+        if (el) el.textContent = counts[k];
+    });
+}
+
+/** Branche les filtres, la recherche et le tri (une seule fois). */
+function initDeployFilters() {
+    const bar = document.getElementById('deploy-filters');
+    if (bar && !bar.dataset.bound) {
+        bar.dataset.bound = '1';
+        bar.addEventListener('click', ev => {
+            const card = ev.target.closest('.stat-card[data-filter]');
+            if (!card) return;
+            DEPLOY_STATE.filter = card.dataset.filter;
+            bar.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active'));
+            card.classList.add('active');
+            renderProjectsView();
+        });
+    }
+
+    const input = document.getElementById('deploy-search-input');
+    if (input && !input.dataset.bound) {
+        input.dataset.bound = '1';
+        input.addEventListener('input', () => {
+            DEPLOY_STATE.search = input.value;
+            const clear = document.getElementById('deploy-clear-search');
+            if (clear) clear.style.display = input.value ? '' : 'none';
+            renderProjectsView();
+        });
+    }
+
+    const clear = document.getElementById('deploy-clear-search');
+    if (clear && !clear.dataset.bound) {
+        clear.dataset.bound = '1';
+        clear.addEventListener('click', () => {
+            const i = document.getElementById('deploy-search-input');
+            if (i) i.value = '';
+            DEPLOY_STATE.search = '';
+            clear.style.display = 'none';
+            renderProjectsView();
+        });
+    }
+
+    const sort = document.getElementById('deploy-sort-toggle');
+    if (sort && !sort.dataset.bound) {
+        sort.dataset.bound = '1';
+        sort.addEventListener('click', () => {
+            DEPLOY_STATE.sortDir = DEPLOY_STATE.sortDir === 'asc' ? 'desc' : 'asc';
+            sort.dataset.dir = DEPLOY_STATE.sortDir;
+            renderProjectsView();
+        });
+    }
 }
 
 async function loadTargets() {
@@ -829,59 +957,113 @@ function renderProjectsView() {
         DEPLOY_STATE.currentProject = null;
     }
 
-    if (DEPLOY_STATE.view === 'detail' && DEPLOY_STATE.currentProject) {
+    // Les filtres ne concernent que la liste : on les masque dans le détail.
+    const filters = document.getElementById('deploy-filters');
+    const searchRow = document.getElementById('deploy-search-row');
+    const inDetail = DEPLOY_STATE.view === 'detail' && DEPLOY_STATE.currentProject;
+    if (filters) filters.hidden = inDetail;
+    if (searchRow) searchRow.hidden = inDetail;
+
+    if (inDetail) {
         if (createBtn) createBtn.style.display = 'none';
         setDedicatedView(true, DEPLOY_STATE.currentProject);
         renderProjectDetail(view, DEPLOY_STATE.currentProject);
     } else {
         if (createBtn) createBtn.style.display = '';
         setDedicatedView(false);
+        initDeployFilters();
+        updateDeployCounts();
         renderProjectGrid(view);
     }
 }
 
 function renderProjectGrid(view) {
-    const projects = DEPLOY_STATE.projects;
+    const projects = visibleDeployProjects();
     if (!projects.length) {
-        view.innerHTML = `<div class="deploy-targets-empty">${escapeHtml(t('no_project_yet', 'No project yet. Click "Create project" to add one.'))}</div>`;
+        const empty = DEPLOY_STATE.projects.length
+            ? t('no_project_match', 'No site matches the current filters.')
+            : t('no_site_installed', 'No site installed yet.');
+        view.innerHTML = `<div class="deploy-targets-empty">${escapeHtml(empty)}</div>`;
         return;
     }
-    view.innerHTML = `<div class="deploy-folder-grid">` + projects.map(p => {
-        const name = p.project_name;
-        const count = safeInt(p.connection_count) ?? 0;
-        // Distinct env badges from this project's connections.
-        const envs = [...new Set(connectionsOf(name).map(c => safeEnv(c.server_env)))];
-        const envPills = envs.map(e => {
-            const cls = e === 'production' ? 'env-production' : 'env-staging';
-            return `<span class="env-pill ${cls}"><span class="env-dot"></span>${escapeHtml(e)}</span>`;
-        }).join('');
-        let last = '';
-        if (p.last_status) {
-            const st = safeStatus(p.last_status);
-            last = `<span class="status-pill status-${st}"><span class="status-dot"></span>${escapeHtml(st)}</span>`
-                 + `<span class="deploy-folder-last-date">${escapeHtml(fmtDate(p.last_started_at))}</span>`;
-        } else {
-            last = `<span class="deploy-folder-last-none">${escapeHtml(t('never_deployed', 'Never deployed'))}</span>`;
-        }
-        const connLabel = count > 1
-            ? `${count} ${escapeHtml(t('connections', 'connections'))}`
-            : `${count} ${escapeHtml(t('connection', 'connection'))}`;
-        return `
-            <div class="deploy-folder" data-action="open-project" data-project="${escapeHtml(name)}" role="button" tabindex="0">
-                <button class="deploy-folder-delete" data-action="delete-project" data-project="${escapeHtml(name)}"
-                        title="${escapeHtml(t('delete', 'Delete'))}">
-                    <span class="material-symbols-outlined">delete</span>
-                </button>
-                <div class="deploy-folder-icon">${faviconImg(name, p.favicon_urls)}</div>
-                <div class="deploy-folder-name">${escapeHtml(name)}</div>
-                <div class="deploy-folder-envs">${envPills || `<span class="deploy-folder-noenv">${escapeHtml(t('no_connection_short', 'no connection'))}</span>`}</div>
-                <div class="deploy-folder-meta">
-                    <span class="deploy-folder-count">${connLabel}</span>
-                    <span class="deploy-folder-last">${last}</span>
+    // Liste (et non grille de cartes) calquée sur la page Sites : mêmes
+    // classes `.instance-strip`, donc même densité et même comportement
+    // visuel. Chaque ligne porte ses deux boutons d'environnement.
+    view.innerHTML = `<div class="projects-grid instance-list deploy-site-list">`
+        + projects.map(p => renderDeploySiteRow(p)).join('')
+        + `</div>`;
+}
+
+/** Bouton d'un environnement : « configuré » s'il existe déjà une connexion. */
+function renderDeployEnvButton(project, envKey, label) {
+    const conns = connectionsOf(project).filter(c => safeEnv(c.server_env) === envKey);
+    const configured = conns.length > 0;
+    const glyph = envKey === 'production' ? 'rocket_launch' : 'science';
+    const cls = envKey === 'production' ? 'env-production' : 'env-staging';
+
+    // Configuré -> on ouvre le détail du site ; sinon -> modale de connexion
+    // pré-remplie sur cet environnement.
+    const action = configured ? 'open-project' : 'add-connection';
+    const suffix = configured
+        ? `<span class="deploy-env-btn-count">${conns.length}</span>`
+        : `<span class="material-symbols-outlined deploy-env-btn-add">add</span>`;
+
+    return `
+        <button class="deploy-env-btn ${cls} ${configured ? 'is-configured' : ''}"
+                data-action="${action}" data-project="${escapeHtml(project)}" data-env="${envKey}"
+                title="${escapeHtml(configured
+                    ? t('view_env_connections', 'View the {env} connections').replace('{env}', label)
+                    : t('configure_env', 'Configure {env}').replace('{env}', label))}">
+            <span class="material-symbols-outlined">${glyph}</span>
+            <span class="deploy-env-btn-label">${escapeHtml(label)}</span>
+            ${suffix}
+        </button>`;
+}
+
+/** Une ligne de site, au format de la liste de la page Sites. */
+function renderDeploySiteRow(p) {
+    const name = p.project_name;
+    const count = safeInt(p.connection_count) ?? 0;
+    const running = p.status === 'active';
+
+    let last;
+    if (p.last_status) {
+        const st = safeStatus(p.last_status);
+        last = `<span class="status-pill status-${st}"><span class="status-dot"></span>${escapeHtml(st)}</span>`
+             + `<span class="deploy-folder-last-date">${escapeHtml(fmtDate(p.last_started_at))}</span>`;
+    } else {
+        last = `<span class="deploy-folder-last-none">${escapeHtml(t('never_deployed', 'Never deployed'))}</span>`;
+    }
+
+    return `
+        <div class="project-item instance-strip deploy-site-row ${running ? 'is-active' : 'is-inactive'}"
+             data-project="${escapeHtml(name)}">
+            <div class="instance-strip-main deploy-site-main"
+                 data-action="open-project" data-project="${escapeHtml(name)}"
+                 role="button" tabindex="0">
+                <div class="instance-icon-box deploy-site-icon">${faviconImg(name, p.favicon_urls)}</div>
+                <div class="instance-body">
+                    <div class="instance-title-row">
+                        <h3 class="project-title instance-title">${escapeHtml(name)}</h3>
+                        <span class="status-pill ${running ? 'status-running' : 'status-stopped'}">
+                            <span class="status-dot"></span>
+                            ${escapeHtml(running ? t('running', 'Running') : t('stopped', 'Stopped'))}
+                        </span>
+                    </div>
+                    <div class="deploy-site-meta">${last}</div>
                 </div>
             </div>
-        `;
-    }).join('') + `</div>`;
+
+            <div class="deploy-site-actions">
+                ${renderDeployEnvButton(name, 'staging', 'Staging')}
+                ${renderDeployEnvButton(name, 'production', 'Production')}
+                ${count ? `
+                <button class="deploy-site-unlink" data-action="delete-project" data-project="${escapeHtml(name)}"
+                        title="${escapeHtml(t('remove_connections', 'Remove the deployment connections of this site'))}">
+                    <span class="material-symbols-outlined">link_off</span>
+                </button>` : ''}
+            </div>
+        </div>`;
 }
 
 function renderProjectDetail(view, project) {
@@ -1026,13 +1208,10 @@ function openProjectFromUrl() {
     const known = (DEPLOY_STATE.projects || []).some(p => p.project_name === wanted);
     if (known) { openProject(wanted); return; }
 
-    if ((DEPLOY_STATE.deployableProjects || []).includes(wanted)) {
-        deployToast('info', t('project_not_registered', 'This project has no deployment folder yet — create it below.')
-            .replace('{project}', wanted));
-        openProjectModal();
-        const sel = document.getElementById('project-select');
-        if (sel) sel.value = wanted;
-    }
+    // Tous les sites installés sont désormais listés : un nom inconnu ici
+    // correspond à un site absent ou hors des droits de l'utilisateur.
+    deployToast('info', t('project_unknown', 'Unknown site: {project}')
+        .replace('{project}', wanted));
     syncUrlToView();
 }
 
@@ -1678,8 +1857,27 @@ function expandTargetHistory(targetId) {
     renderTargetHistory(id);
 }
 
-function openConnectionModal(targetId, forcedProject) {
+function openConnectionModal(targetId, forcedProject, forcedEnv) {
     openTargetModal(targetId, forcedProject);
+
+    // Ouverture depuis un bouton Staging/Production : on présélectionne le
+    // premier serveur de cet environnement, et on pré-remplit le champ du
+    // formulaire « nouveau serveur » si aucun n'existe encore.
+    if (forcedEnv) {
+        const sel = document.getElementById('target-server');
+        const match = (DEPLOY_STATE.servers || [])
+            .find(s => safeEnv(s.env) === forcedEnv && safeInt(s.id) !== null);
+        if (sel && match) {
+            sel.value = String(safeInt(match.id));
+            sel.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        const envField = document.getElementById('server-env');
+        if (envField && !match) {
+            envField.value = forcedEnv;
+            envField.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    }
+
     new bootstrap.Modal(document.getElementById('targetModal')).show();
 }
 
@@ -1704,7 +1902,8 @@ function onProjectsViewClick(event) {
     }
     if (action === 'back-to-grid') { backToGrid(); return; }
     if (action === 'add-connection') {
-        openConnectionModal(null, el.dataset.project || DEPLOY_STATE.currentProject);
+        openConnectionModal(null, el.dataset.project || DEPLOY_STATE.currentProject,
+                            el.dataset.env || null);
         return;
     }
 

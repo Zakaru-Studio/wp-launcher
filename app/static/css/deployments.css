@@ -289,6 +289,205 @@
     background: var(--al-error-container);
     color: var(--al-on-error-container);
 }
+/* Anneau de focus clavier (a11y) — invisible à la souris. */
+.deploy-server-action-btn:focus-visible {
+    outline: 2px solid var(--al-primary, #2fd4c4);
+    outline-offset: 2px;
+}
+
+/* ============================================
+   REGISTERED SERVERS TABLE (/deployments/servers)
+   Tout est scopé à .deploy-servers-table / #servers-section : la page
+   /deployments partage cette feuille de style et ne doit pas bouger.
+   Les lignes sont générées par deployment-servers.js — le markup
+   (td > strong, td > code, .env-pill, .deploy-server-action-btn) est
+   pris tel quel, aucun hook nouveau n'est requis côté JS.
+   ============================================ */
+
+/* Le parent .users-table-wrap scrolle déjà en X : on fixe une largeur
+   minimale pour que les 7 colonnes ne se compressent jamais au point
+   d'être illisibles. En dessous, on scrolle plutôt que d'écraser. */
+.deploy-servers-table { min-width: 900px; }
+
+/* Scrollbar discrète sur le conteneur scrollable de cette page. */
+#servers-section .users-table-wrap {
+    scrollbar-width: thin;
+    scrollbar-color: var(--al-outline-variant) transparent;
+}
+
+/* ── En-tête ─────────────────────────────────────────────── */
+.deploy-servers-table thead th {
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--al-outline-variant);
+    white-space: nowrap;
+}
+.deploy-servers-table thead th.text-end { text-align: right; }
+
+/* ── Lignes ──────────────────────────────────────────────── */
+.deploy-servers-table tbody td {
+    padding: 15px 18px;
+    /* Séparateur volontairement plus léger que --al-outline-variant :
+       le mix évite un trait dur en thème clair comme en sombre. */
+    border-bottom: 1px solid color-mix(in srgb, var(--al-outline-variant) 55%, transparent);
+}
+.deploy-servers-table tbody tr:last-child td { border-bottom: none; }
+
+/* Survol : .users-table gère déjà le fond, on ajoute juste un filet
+   d'accent à gauche via un box-shadow inset (n'affecte pas le layout). */
+.deploy-servers-table tbody tr:hover td:first-child {
+    box-shadow: inset 3px 0 0 0 var(--al-primary, #2fd4c4);
+}
+
+/* ── Largeurs indicatives (table-layout: auto) ───────────── */
+/* 1 Label · 2 Environment · 3 Host · 4 SSH user · 5 Base path
+   · 6 Fingerprint · 7 Actions.
+   width:1% = « colonne au plus juste » pour la pastille et les actions. */
+.deploy-servers-table th:nth-child(1), .deploy-servers-table td:nth-child(1) { width: 18%; }
+.deploy-servers-table th:nth-child(2), .deploy-servers-table td:nth-child(2) { width: 1%; white-space: nowrap; }
+.deploy-servers-table th:nth-child(3), .deploy-servers-table td:nth-child(3) { width: 22%; }
+.deploy-servers-table th:nth-child(4), .deploy-servers-table td:nth-child(4) { width: 12%; }
+.deploy-servers-table th:nth-child(5), .deploy-servers-table td:nth-child(5) { width: 22%; }
+.deploy-servers-table th:nth-child(6), .deploy-servers-table td:nth-child(6) { width: 18%; }
+.deploy-servers-table th:nth-child(7), .deploy-servers-table td:nth-child(7) { width: 1%; }
+
+/* ── Hiérarchie : le label domine ────────────────────────── */
+.deploy-servers-table tbody td:first-child strong {
+    font-family: 'Manrope', sans-serif;
+    font-weight: 700;
+    font-size: 0.92rem;
+    letter-spacing: -0.01em;
+    color: var(--al-on-surface);
+}
+
+/* L'utilisateur SSH est une métadonnée : ton secondaire. */
+.deploy-servers-table tbody td:nth-child(4) {
+    color: var(--al-on-surface-variant);
+    font-size: 0.84rem;
+}
+
+/* ── Valeurs techniques en monospace ─────────────────────── */
+/* Bootstrap colore <code> en rose (--bs-code-color) et le passe en
+   .875em : on reprend la main sur les deux. */
+.deploy-servers-table tbody code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    line-height: 1.4;
+    color: var(--al-on-surface-variant);
+    background: none;
+    padding: 0;
+    word-wrap: normal;
+}
+/* L'hôte est l'info la plus consultée → un cran plus contrasté. */
+.deploy-servers-table tbody td:nth-child(3) code { color: var(--al-on-surface); }
+
+/* Base path et fingerprint : bornés + ellipsis. Le max-width est posé
+   sur l'inline-block (et non sur le td) car en table-layout:auto seule
+   une contrainte sur l'enfant est réellement respectée. Le JS tronque
+   déjà le fingerprint et pose un title=… : ceci est un garde-fou pour
+   qu'une valeur longue n'écrase jamais les autres colonnes. */
+.deploy-servers-table tbody td:nth-child(5) code,
+.deploy-servers-table tbody td:nth-child(6) code {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: bottom;
+}
+.deploy-servers-table tbody td:nth-child(5) code { max-width: 260px; }
+.deploy-servers-table tbody td:nth-child(6) code {
+    max-width: 190px;
+    cursor: help;   /* la valeur complète est dans l'attribut title */
+    letter-spacing: -0.01em;
+}
+
+/* ── Pastilles d'environnement ───────────────────────────── */
+/* Scopées à cette table : la page /deployments conserve le style
+   historique (.env-pill plus haut dans ce fichier).
+   Pourquoi pas --al-secondary-container ? Ce token vire au gris neutre
+   en thème sombre : staging et production deviendraient indistinguables.
+   --al-error garde une teinte rouge dans les deux thèmes et porte le
+   bon signal (« pousser ici est irréversible »). Pour un rendu moins
+   alarmiste, remplacer --al-error par --al-tertiary ci-dessous. */
+.deploy-servers-table .env-pill {
+    padding: 4px 11px;
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    line-height: 1.5;
+    border: 1px solid transparent;
+    white-space: nowrap;
+}
+.deploy-servers-table .env-pill .env-dot { flex-shrink: 0; }
+.deploy-servers-table .env-pill.env-production {
+    background: color-mix(in srgb, var(--al-error) 14%, transparent);
+    border-color: color-mix(in srgb, var(--al-error) 38%, transparent);
+    color: var(--al-error);
+}
+.deploy-servers-table .env-pill.env-staging {
+    background: color-mix(in srgb, var(--al-on-surface-variant) 10%, transparent);
+    border-color: var(--al-outline-variant);
+    color: var(--al-on-surface-variant);
+}
+
+/* ── Colonne Actions ─────────────────────────────────────── */
+.deploy-servers-table tbody td:last-child {
+    text-align: right;
+    white-space: nowrap;   /* les 3 boutons restent sur une ligne */
+    padding-right: 14px;
+}
+.deploy-servers-table .deploy-server-action-btn {
+    width: 30px;
+    height: 30px;
+    vertical-align: middle;
+}
+.deploy-servers-table .deploy-server-action-btn .material-symbols-outlined { font-size: 18px; }
+/* Les boutons sont séparés par du blanc dans le HTML généré ; on
+   neutralise ce blanc pour un espacement maîtrisé. */
+.deploy-servers-table .deploy-server-action-btn + .deploy-server-action-btn { margin-left: 2px; }
+
+/* ── Ligne vide / chargement / erreur ─────────────────────── */
+.deploy-servers-table .deploy-empty-row td {
+    padding: 34px 18px;
+    font-size: 0.85rem;
+    border-bottom: none;
+    /* Cette cellule unique (colspan=7) est à la fois :first-child et
+       :last-child : il faut donc annuler les règles de la colonne
+       Actions, sinon le message part à droite sur une seule ligne. */
+    text-align: center;
+    white-space: normal;
+    width: auto;
+}
+.deploy-servers-table .deploy-empty-row:hover td { box-shadow: none; }
+/* Pulsation légère tant que la liste n'est pas chargée (la classe
+   is-loading n'existe que sur le markup initial du template ; le JS
+   remplace ensuite le tbody). */
+.deploy-empty-row.is-loading td { animation: deploy-row-pulse 1.4s ease-in-out infinite; }
+@keyframes deploy-row-pulse {
+    0%, 100% { opacity: 0.8; }
+    50%      { opacity: 0.4; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .deploy-empty-row.is-loading td { animation: none; }
+}
+
+/* ── Petites largeurs ────────────────────────────────────── */
+@media (max-width: 768px) {
+    /* style.css empile les cellules de .users-table en mode « carte ».
+       Ici les lignes sont générées en JS sans libellé de colonne : une
+       fois empilées, on lirait 6 valeurs anonymes. On rétablit donc une
+       vraie table et on laisse .users-table-wrap scroller en X. */
+    .deploy-servers-table thead { display: table-header-group; }
+    .deploy-servers-table tbody tr {
+        display: table-row;
+        padding: 0;
+        border-bottom: none;
+    }
+    .deploy-servers-table tbody td { display: table-cell; padding: 13px 14px; }
+    .deploy-servers-table thead th { padding: 11px 14px; }
+    .deploy-servers-table { min-width: 820px; }
+    .deploy-servers-table tbody td:nth-child(5) code { max-width: 200px; }
+    .deploy-servers-table tbody td:nth-child(6) code { max-width: 160px; }
+}
 
 /* ============================================
    DEPLOYMENT TARGETS (saved one-click configs)
@@ -303,7 +502,7 @@
 .deploy-target-add-btn { flex-shrink: 0; }
 
 .deploy-targets-list,
-.deploy-projects-view { padding: 4px 22px 2px; }
+
 .deploy-targets-empty {
     padding: 22px;
     text-align: center;
@@ -795,4 +994,140 @@ code.deploy-run-kind-db {
 /* Dark theme tweaks */
 [data-theme="dark"] .deploy-terminal {
     background: #060a18;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Page Déploiements — liste de sites (et non grille de cartes)
+   Reprend `.instance-strip` de la page Sites pour une densité et
+   un rendu identiques ; seules les actions à droite diffèrent.
+   ───────────────────────────────────────────────────────────── */
+.deploy-site-list { gap: 0.6rem; }
+
+/* `.instance-strip.project-item` (0,2,0) force `display:block` pour la page
+   Sites, où la ligne se déplie. Ici la ligne ne se déplie pas : il faut
+   donc au moins la même spécificité, sinon les actions retombent sous la
+   carte au lieu de se placer à droite. */
+.instance-strip.project-item.deploy-site-row {
+    display: flex;
+    gap: 12px;
+    padding: 8px 16px;
+    flex-direction: row;
+    align-items: center;
+        background: #ffffff05;
+    border-radius: 16px;
+}
+.deploy-site-row .instance-strip-main {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 0;
+    cursor: pointer;
+    /* La carte porte déjà le fond et l'espacement : on neutralise ceux
+       hérités de la page Sites pour éviter le double encadré. */
+    padding: 8px 0;
+    background: transparent;
+    border-radius: 0;
+}
+.deploy-site-icon {
+    width: 38px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border-radius: 9px;
+    overflow: hidden;
+    background: var(--al-surface-container);
+}
+.deploy-site-icon img { width: 100%; height: 100%; object-fit: cover; }
+.deploy-site-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 2px;
+    font-size: 0.75rem;
+    color: var(--al-on-surface-variant);
+}
+
+/* Les boutons sont collés au bord droit de la carte, en vis-à-vis du bloc
+   logo + titre + sous-titre. `margin-left: auto` les y pousse sans dépendre
+   du `flex: 1` du bloc principal : si une règle de la page Sites venait à
+   le neutraliser, l'alignement à droite tiendrait quand même. */
+.deploy-site-row .deploy-site-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+/* Boutons d'environnement : discrets tant que rien n'est configuré,
+   teintés une fois la connexion en place. */
+.deploy-env-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 11px;
+    border: 1px solid var(--al-outline-variant, rgba(128, 128, 128, 0.22));
+    border-radius: 999px;
+    background: transparent;
+    color: var(--al-on-surface-variant);
+    font-family: 'Inter', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+.deploy-env-btn:hover { background: var(--al-surface-container-high); color: var(--al-on-surface); }
+.deploy-env-btn .material-symbols-outlined { font-size: 1rem; }
+.deploy-env-btn-add { opacity: 0.7; }
+.deploy-env-btn-count {
+    min-width: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: currentColor;
+    color: var(--al-surface-container-lowest);
+    font-size: 0.68rem;
+    line-height: 18px;
+    text-align: center;
+}
+.deploy-env-btn.is-configured.env-staging {
+    border-color: transparent;
+    background: color-mix(in srgb, var(--al-secondary) 16%, transparent);
+    color: var(--al-secondary);
+}
+.deploy-env-btn.is-configured.env-production {
+    border-color: transparent;
+    background: color-mix(in srgb, var(--al-primary) 18%, transparent);
+    color: var(--al-primary);
+}
+
+.deploy-site-unlink {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--al-on-surface-variant);
+    cursor: pointer;
+}
+.deploy-site-unlink:hover { background: var(--al-surface-container-high); color: var(--al-error); }
+.deploy-site-unlink .material-symbols-outlined { font-size: 1.05rem; }
+
+/* Sous 760px les boutons passent sous le nom du site. */
+@media (max-width: 760px) {
+    .instance-strip.project-item.deploy-site-row { flex-wrap: wrap; }
+    /* Même spécificité que la règle desktop, sinon `margin-left: auto` et
+       l'alignement à droite continueraient de s'appliquer une fois passé
+       à la ligne. */
+    .deploy-site-row .deploy-site-actions {
+        width: 100%;
+        justify-content: flex-start;
+        margin-left: 0;
+    }
 }

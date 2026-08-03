@@ -29,15 +29,58 @@
 <section class="users-card deploy-section" id="projects-section">
     <header class="deploy-section-header deploy-section-header--row">
         <div>
-            <h2 class="deploy-section-title">{{ _('Deployment projects') }}</h2>
-            <p class="deploy-section-subtitle">{{ _('One folder per project; add staging and production connections inside.') }}</p>
+            <h2 class="deploy-section-title">{{ _('Managed Sites') }}</h2>
+            <p class="deploy-section-subtitle">{{ _('Pick a site to add its staging and production connections.') }}</p>
         </div>
-        <button class="btn-primary-dark deploy-target-add-btn" id="create-project-btn"
-                onclick="openProjectModal()">
-            <span class="material-symbols-outlined">create_new_folder</span>
-            <span>{{ _('Create project') }}</span>
-        </button>
     </header>
+
+    {#- Filtres identiques à la page Sites. Les ids sont préfixés `deploy-`
+        pour rester indépendants de search-filter.js, qui pilote la page
+        Sites via ses propres ids. -#}
+    <section class="stats-row deploy-stats-row" id="deploy-filters">
+        <article class="stat-card stat-card-total active" data-filter="all">
+            <span class="stat-accent"></span>
+            <span class="stat-label">{{ _('Total Instances') }}</span>
+            <span class="stat-number" data-count="all">—</span>
+        </article>
+        <article class="stat-card stat-card-running" data-filter="active">
+            <span class="stat-accent"></span>
+            <span class="stat-label">{{ _('Running') }}</span>
+            <span class="stat-number" data-count="active">—</span>
+        </article>
+        <article class="stat-card stat-card-stopped" data-filter="inactive">
+            <span class="stat-accent"></span>
+            <span class="stat-label">{{ _('Stopped') }}</span>
+            <span class="stat-number" data-count="inactive">—</span>
+        </article>
+        <article class="stat-card stat-card-attention" data-filter="wordpress">
+            <span class="stat-accent"></span>
+            <span class="stat-label">{{ _('WordPress') }}</span>
+            <span class="stat-number" data-count="wordpress">—</span>
+        </article>
+        <article class="stat-card stat-card-nextjs" data-filter="nextjs">
+            <span class="stat-accent"></span>
+            <span class="stat-label">{{ _('Next.js') }}</span>
+            <span class="stat-number" data-count="nextjs">—</span>
+        </article>
+    </section>
+
+    <div class="sites-search-row" id="deploy-search-row">
+        <div class="sites-search">
+            <span class="material-symbols-outlined search-icon">search</span>
+            <input type="text" id="deploy-search-input" placeholder="{{ _('Search a site...') }}" autocomplete="off">
+            <button class="clear-search" id="deploy-clear-search" style="display: none;"
+                    aria-label="{{ _('Clear search') }}">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+        <button class="sort-toggle-btn" id="deploy-sort-toggle" data-dir="asc"
+                title="{{ _('Sort by name') }}" aria-label="{{ _('Sort by name') }}">
+            <span class="material-symbols-outlined sort-icon">sort</span>
+            <span class="sort-label">{{ _('Sort') }}</span>
+        </button>
+    </div>
+
     <div id="projects-view" class="deploy-projects-view">
         <div class="deploy-targets-empty">{{ _('Loading...') }}</div>
     </div>
@@ -68,8 +111,14 @@
   "edit_connection": {{ _('Edit connection') | tojson }},
   "no_connection_short": {{ _('no connection') | tojson }},
   "no_connection_yet": {{ _("No connection yet. Click 'Add connection' to create staging or production.") | tojson }},
-  "no_project_yet": {{ _("No project yet. Click 'Create project' to add one.") | tojson }},
-  "project_not_registered": {{ _('This project has no deployment folder yet — create it below.') | tojson }},
+  "configure_env": {{ _("Configure {env}") | tojson }},
+  "view_env_connections": {{ _("View the {env} connections") | tojson }},
+  "running": {{ _("Running") | tojson }},
+  "stopped": {{ _("Stopped") | tojson }},
+  "no_project_match": {{ _("No site matches the current filters.") | tojson }},
+  "no_site_installed": {{ _("No site installed yet.") | tojson }},
+  "remove_connections": {{ _("Remove the deployment connections of this site") | tojson }},
+  "project_unknown": {{ _('Unknown site: {project}') | tojson }},
   "project_created": {{ _('Project created') | tojson }},
   "project_deleted": {{ _('Project deleted') | tojson }},
   "admins_only": {{ _('Admins only — contact an administrator to see servers.') | tojson }},

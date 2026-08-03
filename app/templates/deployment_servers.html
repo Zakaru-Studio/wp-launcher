@@ -35,17 +35,20 @@
         <table class="users-table deploy-servers-table">
             <thead>
                 <tr>
-                    <th>{{ _('Label') }}</th>
-                    <th>{{ _('Environment') }}</th>
-                    <th>{{ _('Host') }}</th>
-                    <th>{{ _('SSH user') }}</th>
-                    <th>{{ _('Base path') }}</th>
-                    <th>{{ _('Fingerprint') }}</th>
-                    <th class="text-end">{{ _('Actions') }}</th>
+                    <th scope="col">{{ _('Label') }}</th>
+                    <th scope="col">{{ _('Environment') }}</th>
+                    <th scope="col">{{ _('Host') }}</th>
+                    <th scope="col">{{ _('SSH user') }}</th>
+                    <th scope="col">{{ _('Base path') }}</th>
+                    <th scope="col">{{ _('Fingerprint') }}</th>
+                    <th scope="col" class="text-end">{{ _('Actions') }}</th>
                 </tr>
             </thead>
+            {# Les lignes sont rendues par deployment-servers.js (renderServers).
+               `is-loading` n'existe que sur ce placeholder initial : le JS
+               réécrit le tbody sans cette classe une fois la liste chargée. #}
             <tbody id="servers-tbody">
-                <tr class="deploy-empty-row"><td colspan="7">{{ _('Loading...') }}</td></tr>
+                <tr class="deploy-empty-row is-loading"><td colspan="7">{{ _('Loading...') }}</td></tr>
             </tbody>
         </table>
     </div>
