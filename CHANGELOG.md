@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-08-04
+
+### Added
+- Pushing a `v*` tag now publishes the GitHub release automatically: the source
+  archive is built with `git archive`, the notes are taken from this file's
+  matching section, and the job only runs once the tests, the secret scan and
+  the version check have passed.
+
+### Fixed
+- New sites were installed with an outdated WordPress. `build_wordpress_images.sh`
+  built without `--pull`, so Docker reused the locally cached
+  `wordpress:phpX.Y-apache` layer — over a year old on the development box, and
+  carrying **WordPress 6.8.1 while 6.8.3 was already deployed**. Rebuilding the
+  image therefore moved the version *backwards*, which is why the problem
+  survived every rebuild. The base image is now pulled on every build.
+
 ## [1.5.0] - 2026-08-04
 
 ### Added

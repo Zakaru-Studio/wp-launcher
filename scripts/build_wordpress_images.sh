@@ -50,7 +50,11 @@ for version in "${SUPPORTED_VERSIONS[@]}"; do
     if [ "$version" = "$DEFAULT_VERSION" ]; then
         tags+=(-t "wp-launcher-wordpress:latest")
     fi
-    docker build "${tags[@]}" -f "$dockerfile" . || {
+    # `--pull` est indispensable : sans lui, docker réutilise l'image de base
+    # `wordpress:phpX.Y-apache` déjà en cache, qui peut dater de plusieurs
+    # mois. Une reconstruction repartait alors d'un WordPress plus ancien que
+    # celui déjà déployé, et la version n'avançait jamais.
+    docker build --pull "${tags[@]}" -f "$dockerfile" . || {
         echo "❌ Erreur construction PHP $version"
         exit 1
     }

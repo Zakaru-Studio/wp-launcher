@@ -139,3 +139,68 @@ jobs:
             echo "::error::archive=$ARCHIVED ≠ tag=$GITHUB_REF_NAME"
             exit 1
           fi
+
+  # Publication automatique de la release au push d'un tag `v*`.
+  # `needs` couvre tous les contrôles : un tag qui casse les tests, contient un
+  # secret ou déclare une version incohérente ne produit pas de release.
+  release:
+    name: Publish GitHub release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [python, javascript, secrets, version]
+    # Le workflow est en `contents: read` par défaut ; seul ce job a besoin
+    # d'écrire pour créer la release et téléverser l'archive.
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # Même archive que celle produite à la main jusqu'ici : `git archive`
+      # avec le préfixe `wp-launcher-X.Y.Z/`, ce qui déclenche aussi la
+      # substitution export-subst de `_version.txt`.
+      - name: Build source archive
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          git archive --format=tar.gz \
+            --prefix="wp-launcher-${VERSION}/" \
+            -o "wp-launcher-${VERSION}.tar.gz" \
+            "$GITHUB_REF_NAME"
+          ls -l "wp-launcher-${VERSION}.tar.gz"
+
+      # Les notes proviennent de la section correspondante du CHANGELOG, qui
+      # est déjà rédigée. Si la section est absente, on retombe sur les notes
+      # générées par GitHub plutôt que de publier une release vide.
+      - name: Extract release notes from CHANGELOG
+        id: notes
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\]" { found = 1; next }
+            found && /^## \[/       { exit }
+            found                   { print }
+          ' CHANGELOG.md | sed -e '/./,$!d' > notes.md
+          if [ -s notes.md ]; then
+            echo "  section trouvée ($(wc -l < notes.md) lignes)"
+            echo "generated=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Aucune section [$VERSION] dans CHANGELOG.md — notes générées par GitHub"
+            echo "generated=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ARGS=(--title "$GITHUB_REF_NAME")
+          if [ "${{ steps.notes.outputs.generated }}" = "true" ]; then
+            ARGS+=(--generate-notes)
+          else
+            ARGS+=(--notes-file notes.md)
+          fi
+          gh release create "$GITHUB_REF_NAME" \
+            "${ARGS[@]}" \
+            "wp-launcher-${VERSION}.tar.gz"

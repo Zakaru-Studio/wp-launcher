@@ -11,7 +11,7 @@ from typing import Optional
 # ne renseignent la version. Le CI vérifie qu'il correspond au tag publié
 # (job `version` de .github/workflows/ci.yml), donc il ne peut pas dériver en
 # silence.
-__version__ = "1.5.0"
+__version__ = "1.5.1"
 
 # Fichier porteur du jeton de substitution. `git archive` y remplace
 # $Format:%(describe:tags)$ par le tag du commit archivé — y compris pour les
