@@ -90,6 +90,10 @@ def _copy_file_robust(src, dst, project_name=None, ports=None, resource_limits=N
     content = content.replace('{admin_bind}', security_config.admin_bind_address())
     content = security_config.apply_project_credentials(content)
 
+    # Image PHP — voir docker_service.configure_compose_file.
+    from app.config.php_versions import image_tag, resolve_default_php_version
+    content = content.replace('{php_image}', image_tag(resolve_default_php_version()))
+
     # Remplacer les placeholders de ports si fournis
     if ports:
         content = content.replace('{wordpress_port}', str(ports.get('wordpress', '8080')))

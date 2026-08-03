@@ -72,6 +72,21 @@ class DockerService:
         # régénère rien et ne coupe pas l'accès à la base existante.
         content = security_config.apply_project_credentials(content)
 
+        # Image PHP : version la plus récente dont l'image est réellement
+        # construite sur cette machine.
+        from app.config.php_versions import image_tag, resolve_default_php_version
+        php_version = resolve_default_php_version()
+        content = content.replace('{php_image}', image_tag(php_version))
+
+        # Trace la version retenue : c'est ce fichier que relit la
+        # reconstruction (rebuild_container). Sans lui, un projet créé sur la
+        # dernière version repartirait sur le défaut au premier rebuild.
+        try:
+            with open(os.path.join(container_path, '.php_version'), 'w') as handle:
+                handle.write(php_version)
+        except OSError as exc:
+            print(f"⚠️ [DOCKER_SERVICE] Impossible d'écrire .php_version : {exc}")
+
         # Remplacer les placeholders de ports - Format moderne
         content = content.replace('{wordpress_port}', str(ports['wordpress']))
         content = content.replace('{phpmyadmin_port}', str(ports['phpmyadmin']))

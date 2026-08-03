@@ -28,10 +28,16 @@ from typing import Iterable, Optional
 # removed on 2026-04-21 in favour of 8.4/8.5 (8.2 EOL is 2026-12-31).
 SUPPORTED_PHP_VERSIONS: tuple[str, ...] = ('7.4', '8.3', '8.4', '8.5')
 
-# The version new projects land on and the fallback used when a
-# ``.php_version`` file is missing or unreadable. 8.4 is the current
-# stable target (8.5 is available but still settling).
-DEFAULT_PHP_VERSION: str = '8.4'
+# Version des nouveaux projets, et repli quand ``.php_version`` est absent
+# ou illisible.
+#
+# Dérivée de la liste plutôt que codée en dur : la liste est ordonnée de la
+# plus ancienne à la plus récente, donc le dernier élément est la dernière
+# version stable qu'on supporte. Ajouter '8.6' à SUPPORTED_PHP_VERSIONS suffit
+# à ce que les nouveaux sites l'utilisent, sans toucher à cette ligne — c'est
+# précisément l'oubli qui avait laissé les créations sur 8.4 alors que l'image
+# 8.5 existait déjà.
+DEFAULT_PHP_VERSION: str = SUPPORTED_PHP_VERSIONS[-1]
 
 # Image name prefix. The full tag is ``{PREFIX}:php{version}``.
 IMAGE_PREFIX: str = 'wp-launcher-wordpress'
@@ -75,3 +81,22 @@ def iter_for_build() -> Iterable[tuple[str, str]]:
         # Historically the bare Dockerfile was PHP 8.2; that's gone,
         # so all versions now use an explicit Dockerfile.phpX.Y file.
         yield version, f'Dockerfile.php{version}'
+
+
+def resolve_default_php_version() -> str:
+    """Version PHP à utiliser pour un nouveau projet.
+
+    ``DEFAULT_PHP_VERSION`` est la dernière version supportée, mais son image
+    peut ne pas avoir été construite sur cette machine : Docker créerait alors
+    le conteneur puis boucherait indéfiniment à tenter de tirer une image
+    inexistante. On redescend donc vers la plus récente réellement disponible.
+
+    Si la vérification elle-même est impossible (démon arrêté, binaire absent),
+    ``docker_image_exists`` renvoie None et on garde la version la plus
+    récente — best effort, la création signalera l'erreur d'elle-même.
+    """
+    for version in reversed(SUPPORTED_PHP_VERSIONS):
+        available = docker_image_exists(version)
+        if available or available is None:
+            return version
+    return DEFAULT_PHP_VERSION

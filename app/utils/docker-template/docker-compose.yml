@@ -31,7 +31,9 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
-    image: wp-launcher-wordpress:latest
+    # Tag explicite substitué au rendu : `latest` pointait sur une version
+    # figée au dernier build, indépendante de la version par défaut déclarée.
+    image: {php_image}
     container_name: PROJECT_NAME_wordpress_1
     restart: unless-stopped
     environment:

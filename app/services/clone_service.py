@@ -349,6 +349,9 @@ class CloneService:
             # placeholder) : le clone garde les identifiants de sa source, ce
             # qui est nécessaire puisqu'il hérite aussi de ses données.
             content = security_config.apply_project_credentials(content)
+            # No-op sur un clone : le compose source porte déjà son image.
+            from app.config.php_versions import image_tag, resolve_default_php_version
+            content = content.replace('{php_image}', image_tag(resolve_default_php_version()))
 
             # Remplacer les ports dans les variables
             content = content.replace('{wordpress_port}', str(ports['wordpress']))

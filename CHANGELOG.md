@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- New sites are created on the latest supported PHP version (8.5 today)
+  instead of 8.4. The default is now derived from `SUPPORTED_PHP_VERSIONS`
+  rather than hardcoded, so adding a version to that list is enough for new
+  projects to pick it up. The compose template also stops pointing at the
+  `latest` image tag, which tracked whenever the images were last built and
+  drifted from the declared default; it now uses an explicit `php<version>`
+  tag, falling back to the newest version whose image actually exists on the
+  machine. Creation records the chosen version in `.php_version` so a later
+  rebuild keeps it.
+
 ### Fixed
 - The Update button stayed visible after a successful update. The check only
   ever *showed* it, never hid it — harmless while the page reloaded afterwards,
