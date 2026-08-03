@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-08-04
+
+### Added
+- Deployments page aligned with the Sites page: clickable stat cards acting as
+  filters, a search box, and a sort toggle. The servers table uses explicit
+  column widths with horizontal scrolling instead of squeezing, and action
+  buttons gained a `:focus-visible` state.
+
+### Security
+- `/api/monitoring/processes` no longer lists every process on the host. It
+  returned all 754 of them — names, owning accounts, the machine's general
+  shape — which is an inventory handed to anyone who obtains a session on a
+  self-hosted instance. Processes are now matched to the launcher's own
+  containers through their cgroup, leaving only what the app actually manages.
+- `kill-process` accepted **any** PID and sent it a SIGTERM, so an admin
+  session could stop `sshd`, the firewall, or another tenant's application.
+  The route now validates the PID against that same scope and answers `403`
+  otherwise. Process, account and container names are HTML-escaped before
+  rendering — they come from the host.
+
 ### Fixed
 - The site list could briefly show **zero sites** while a project was being
   created or started. The routes resolved `projets/` and `containers/` as
@@ -34,6 +54,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Deleting a site is confirmed through the application's modal instead of the
   browser's `confirm()`. The markup already existed in `index.html`, fully
   translated — nothing referenced it.
+- The CPU / Memory / Disk icons were unreadable in dark mode: a light accent
+  on an equally light `-fixed` background, measuring 1.31:1, 1.32:1 and
+  1.32:1. They now use the design system's `-container` colours, the dark
+  counterparts intended for those accents, reaching 10.8:1, 5.5:1 and 8.5:1.
+  Light mode was already correct and is untouched. Same cause for the
+  `PID · user` line under each process, which used Bootstrap's `text-muted`.
+- Section headings on /monitoring had no class and inherited the browser's
+  default size; they now use a `.section-title` matching the design system.
+
+### Removed
+- The "Active Node Topology" panel on /monitoring — a mock-up whose nodes
+  (`DB-Primary`, `WEB-01`, `WEB-02`) were hardcoded in the template and
+  reflected no real data — along with its 115 lines of CSS.
 
 ## [1.4.1] - 2026-08-03
 
