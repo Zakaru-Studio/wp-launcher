@@ -3,3 +3,28 @@
 # rewritten to build the PEM markers via concatenation so new commits don't
 # match this rule, but the historical commit still contains the inline form.
 729defab11ec913cb0501f1d83c9243ac3efb371:tests/test_deployments.py:private-key:28
+
+# Known historical exposure, acknowledged rather than hidden.
+#
+# Commit 87cd75a (July 2025) added traefik/acme.json and traefik/fullchain.pem
+# before Traefik was dropped from the project. The files were deleted in a
+# later commit, but a deletion does not remove them from history.
+#
+# What was exposed, and why it is not being chased further:
+#   - TLS certificate + key for traefik.dev.akdigital.fr — expired 2025-10-09,
+#     so it cannot be used to impersonate anything.
+#   - A Let's Encrypt ACCOUNT private key. It never expires, but the account is
+#     orphaned (Traefik is gone) and an account key alone cannot issue
+#     certificates without proving domain control. It can only revoke the
+#     already-expired certificates it issued, or deactivate itself.
+#
+# The remediation is to deactivate that ACME account at Let's Encrypt, not to
+# rewrite published history — the repository is public, the release tags point
+# at these commits, and old objects stay reachable by SHA on GitHub regardless.
+#
+# These three fingerprints are pinned so the scan keeps failing on anything
+# NEW. Do not add fingerprints here to silence a fresh finding — rotate the
+# secret instead.
+87cd75a009764c427371971e3a064dc3a451b610:traefik/fullchain.pem:key-material-by-path:1
+87cd75a009764c427371971e3a064dc3a451b610:traefik/acme.json:json-embedded-private-key:11
+87cd75a009764c427371971e3a064dc3a451b610:traefik/acme.json:acme-account-state:1

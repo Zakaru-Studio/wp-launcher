@@ -79,6 +79,43 @@ The following are documented design choices, not bugs to report:
 - Changing `SECRET_KEY` invalidates every stored SSH deployment key. Use
   `scripts/rotate_secret_key.py` to re-encrypt them instead of losing them
 
+## Keeping secrets out of the repository
+
+Two layers, because content-based scanning alone has already failed here once:
+a Let's Encrypt account key lived in this repository's history for a year as a
+base64 blob inside a JSON field. It carried no PEM header, so gitleaks reported
+"no leaks found" on every CI run. Its *filename* was unmistakable.
+
+**Before a commit** — `.githooks/pre-commit` refuses staged files whose path
+looks like key material (`acme.json`, `*.pem`, `*.key`, `.env`, `id_rsa`, …)
+and then runs gitleaks over the staged diff. Enable it once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+`install.sh` does this automatically. `--no-verify` bypasses it; if you use
+that, say why in the commit message.
+
+**In CI** — the `Secret scan` job scans the full history with
+`.gitleaks.toml`, which extends the default rules with detection for key
+material embedded in JSON and for secret-bearing paths.
+
+**On GitHub** — enable secret scanning and push protection (free on public
+repositories). They catch provider-issued tokens at push time, before the
+secret ever reaches the remote:
+
+```bash
+gh api -X PATCH repos/<owner>/<repo> \
+  -F security_and_analysis[secret_scanning][status]=enabled \
+  -F security_and_analysis[secret_scanning_push_protection][status]=enabled
+```
+
+**If a secret does land in a commit**, rotate it. Do not add a fingerprint to
+`.gitleaksignore` to silence the finding — a deletion commit does not remove
+anything from history, and rewriting published history breaks every existing
+clone while old objects stay reachable by SHA anyway.
+
 ## Hardening checklist for self-hosted instances
 
 Most of this is now the default; the checklist is what to verify:

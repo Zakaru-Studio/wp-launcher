@@ -1,0 +1,76 @@
+#!/bin/bash
+#
+# Blocks secrets before they reach a commit.
+#
+# Enable once per clone:
+#     git config core.hooksPath .githooks
+# (install.sh does this for you.)
+#
+# Two layers, in this order:
+#
+#   1. Path blocklist. This is the layer that matters. The Let's Encrypt
+#      account key that sat in this repository's history for a year was a
+#      base64 blob inside a JSON field — no PEM header, so every content-based
+#      scanner reported "no leaks found". Its *filename* was unmistakable.
+#      Refusing known secret-bearing paths catches the whole class, including
+#      formats no scanner knows about yet.
+#
+#   2. gitleaks on the staged diff, when available. Catches provider tokens
+#      pasted into ordinary source files, which layer 1 cannot see.
+#
+# Bypass with `git commit --no-verify` only when you are certain, and say why
+# in the commit message.
+
+set -u
+
+RED=$'\033[0;31m'; YELLOW=$'\033[1;33m'; GREEN=$'\033[0;32m'; NC=$'\033[0m'
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+# Staged files, added/copied/modified/renamed only (skip deletions).
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+[ -z "$staged" ] && exit 0
+
+# ─── layer 1: path blocklist ──────────────────────────────────────────────
+# Extended regex, matched against the repo-relative path.
+BLOCKED='(^|/)(acme\.json|\.env(\.[a-z0-9_-]+)?|id_(rsa|dsa|ecdsa|ed25519)|credentials|\.netrc|\.pgpass)$|\.(pem|key|p12|pfx|jks|keystore|ppk)$'
+# Paths that legitimately match but carry no secret.
+ALLOWED='(^\.env\.example$|^app/utils/docker-template/wordpress/)'
+
+offenders=$(echo "$staged" | grep -nE "$BLOCKED" | grep -vE "$ALLOWED" || true)
+
+if [ -n "$offenders" ]; then
+    echo "${RED}✖ Commit refusé — fichiers susceptibles de contenir des secrets :${NC}"
+    echo "$offenders" | sed 's/^[0-9]*://' | sed 's/^/    /'
+    echo ""
+    echo "  Ces chemins ne doivent pas être versionnés. Si le fichier est un"
+    echo "  exemple sans secret, ajoutez-le à ALLOWED dans .githooks/pre-commit."
+    echo "  Pour retirer du staging :  ${YELLOW}git restore --staged <fichier>${NC}"
+    exit 1
+fi
+
+# ─── layer 2: gitleaks on the staged diff ─────────────────────────────────
+GITLEAKS=""
+for candidate in "$REPO_ROOT/venv/bin/gitleaks" "$(command -v gitleaks 2>/dev/null)"; do
+    [ -n "$candidate" ] && [ -x "$candidate" ] && { GITLEAKS="$candidate"; break; }
+done
+
+if [ -z "$GITLEAKS" ]; then
+    echo "${YELLOW}⚠ gitleaks introuvable — seule la vérification par chemin a tourné.${NC}"
+    echo "  Le scan de contenu s'exécutera quand même en CI."
+    exit 0
+fi
+
+config_arg=()
+[ -f "$REPO_ROOT/.gitleaks.toml" ] && config_arg=(--config "$REPO_ROOT/.gitleaks.toml")
+
+if ! "$GITLEAKS" protect --staged --no-banner --redact "${config_arg[@]}" >/dev/null 2>&1; then
+    echo "${RED}✖ Commit refusé — gitleaks a détecté un secret dans les fichiers stagés :${NC}"
+    echo ""
+    "$GITLEAKS" protect --staged --no-banner --redact "${config_arg[@]}" 2>&1 | sed 's/^/    /'
+    echo ""
+    echo "  ${YELLOW}Faites tourner le secret, ne l'ajoutez pas à .gitleaksignore.${NC}"
+    exit 1
+fi
+
+echo "${GREEN}✓ pre-commit : aucun secret détecté${NC}"
+exit 0

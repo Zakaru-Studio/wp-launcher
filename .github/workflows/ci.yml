@@ -83,5 +83,10 @@ jobs:
             | sudo tar xz -C /usr/local/bin gitleaks
           gitleaks version
 
+      # --config : les règles maison de .gitleaks.toml. Sans elles, le jeu par
+      # défaut ne voit que les marqueurs PEM et laisse passer une clé privée
+      # encodée en base64 dans un champ JSON — c'est exactement ce qui a permis
+      # à une clé de compte Let's Encrypt de traverser un an d'historique avec
+      # un CI au vert.
       - name: Run gitleaks
-        run: gitleaks detect --source . --no-banner --redact --verbose
+        run: gitleaks detect --source . --config .gitleaks.toml --no-banner --redact --verbose

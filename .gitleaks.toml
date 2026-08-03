@@ -1,0 +1,62 @@
+# gitleaks configuration for WP Launcher.
+#
+# Why this file exists: the stock rule set is content-based and looks for PEM
+# markers (`-----BEGIN ... PRIVATE KEY-----`). A private key that lives as a
+# base64 blob inside a JSON field carries no such marker, so the default scan
+# reports "no leaks found" on a file that is entirely made of key material —
+# which is exactly how a Let's Encrypt account key sat unnoticed in this
+# repository's history for a year while CI stayed green.
+#
+# Two additions below: a rule for key material embedded in JSON, and a rule
+# that flags secret-bearing *paths* regardless of their content. Path-based
+# detection is the one that would have caught it.
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "json-embedded-private-key"
+description = "Private key material stored as a base64 blob inside a JSON field"
+# Matches "PrivateKey": "<long base64>" and its snake_case / camelCase variants.
+# La valeur est capturée dans le groupe 1 et déclarée en secretGroup : sans
+# ça, --redact laisse la clé en clair dans la ligne « Finding », donc dans
+# les logs publics d'Actions.
+regex = '''"(?i)(?:private_?key|key_?pem|secret_?key_?data)"\s*:\s*"([A-Za-z0-9+/=_-]{100,})"'''
+secretGroup = 1
+tags = ["key", "private", "json"]
+
+[[rules]]
+id = "acme-account-state"
+description = "ACME/Traefik account state — contains a non-expiring account private key"
+path = '''(^|/)acme\.json$'''
+tags = ["key", "acme", "traefik"]
+
+[[rules]]
+id = "key-material-by-path"
+description = "File extension that carries key material or certificates"
+path = '''\.(pem|key|p12|pfx|jks|keystore)$'''
+tags = ["key", "certificate"]
+
+[[rules]]
+id = "ssh-private-key-file"
+description = "SSH private key committed as a file"
+path = '''(^|/)id_(rsa|dsa|ecdsa|ed25519)$'''
+tags = ["key", "ssh"]
+
+[[rules]]
+id = "dotenv-file"
+description = "Environment file — may carry SECRET_KEY, DB and OAuth credentials"
+path = '''(^|/)\.env(\.[a-z0-9_-]+)?$'''
+tags = ["env", "credentials"]
+
+[allowlist]
+description = "Paths that legitimately contain sample or fixture material"
+paths = [
+  # Ships deliberately with placeholder values only.
+  '''(^|/)\.env\.example$''',
+  # Bundled WordPress plugins carry their own vendored samples.
+  '''app/utils/docker-template/wordpress/''',
+  # Third-party dependencies.
+  '''(^|/)venv/''',
+  '''(^|/)node_modules/''',
+]

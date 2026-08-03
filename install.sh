@@ -83,6 +83,14 @@ pip install --upgrade pip -q
 pip install -r "$APP_DIR/requirements.txt" -q
 echo -e "  ✅ Dépendances installées"
 
+# Hook pre-commit anti-secrets — uniquement dans un clone git, pas dans une
+# archive de release. core.hooksPath pointe sur un dossier versionné, donc le
+# hook suit le dépôt au lieu de vivre dans .git/hooks/ non versionné.
+if [ -d "$APP_DIR/.git" ] && [ -x "$APP_DIR/.githooks/pre-commit" ]; then
+    git -C "$APP_DIR" config core.hooksPath .githooks
+    echo -e "  ✅ Hook pre-commit activé (blocage des secrets avant commit)"
+fi
+
 # 5. Fichier .env
 echo ""
 echo -e "${YELLOW}[5/6] Configuration .env...${NC}"
