@@ -13,9 +13,8 @@ from app.utils.logger import wp_logger
 class ProjectService:
     """Service d'orchestration pour la gestion des projets"""
     
-    def __init__(self, docker_service=None, permission_service=None, database_service=None):
+    def __init__(self, docker_service=None, database_service=None):
         self.docker = docker_service
-        self.permissions = permission_service
         self.database = database_service
         self.projects_folder = DockerConfig.PROJECTS_FOLDER
         self.containers_folder = DockerConfig.CONTAINERS_FOLDER

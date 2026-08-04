@@ -15,7 +15,6 @@ import pytest
     [
         "app",
         "app.middleware.auth_middleware",
-        "app.services.permission_service",
         "app.services.docker_service",
         "app.services.database_service",
         "app.services.snapshot_service",

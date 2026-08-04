@@ -10,7 +10,6 @@ from app.services.fast_import_service import FastImportService
 from app.services.monitoring_service import MonitoringService
 from app.services.mysql_manager import MySQLManager
 from app.services.port_service import PortService
-from app.services.permission_service import PermissionService
 from app.services.project_service import ProjectService
 
 __all__ = [
@@ -21,7 +20,6 @@ __all__ = [
     'MonitoringService',
     'MySQLManager',
     'PortService',
-    'PermissionService',
     'ProjectService',
 ]
 

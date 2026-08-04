@@ -192,7 +192,6 @@ def init_app_services(app, socketio):
     app.extensions['socketio'] = socketio
     
     # Instancier les nouveaux services
-    from app.services.permission_service import PermissionService
     from app.services.project_service import ProjectService
     from app.services.wpcli_service import WPCLIService
     from app.services.clone_service import CloneService
@@ -201,12 +200,10 @@ def init_app_services(app, socketio):
     from app.services.server_service import ServerService
     from app.services.deployment_service import DeploymentService
 
-    permission_service = PermissionService()
     wpcli_service = WPCLIService(timeout=60)
     git_service = GitService()
     project_service = ProjectService(
         docker_service=services.get('docker'),
-        permission_service=permission_service,
         database_service=services.get('database')
     )
     clone_service = CloneService(
@@ -226,7 +223,6 @@ def init_app_services(app, socketio):
     )
 
     # Ajouter les nouveaux services aux extensions Flask
-    app.extensions['permission_service'] = permission_service
     app.extensions['project_service'] = project_service
     app.extensions['wpcli_service'] = wpcli_service
     app.extensions['clone_service'] = clone_service
