@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Dict, List
 from app.config.docker_config import DockerConfig
 from app.services.database_service import DatabaseService
+from app.utils import root_helpers
 
 
 class SnapshotService:
@@ -544,8 +545,10 @@ class SnapshotService:
                     self._emit_rollback_log(project_name, "🔐 Modification des permissions pour le rollback...", 10, 'processing')
                     try:
                         current_user = os.getenv('USER', 'dev-server')
-                        subprocess.run(['sudo', 'chown', '-R', f'{current_user}:{current_user}', wp_content_path], 
-                                     check=False, capture_output=True, timeout=30)
+                        # Profil `dev` : l'hôte reprend la main le temps du
+                        # rollback, les permissions WordPress sont remises
+                        # ensuite par le profil `www`.
+                        root_helpers.fix_perms(wp_content_path, 'dev', timeout=60)
                         print(f"  ✅ Propriétaire temporaire: {current_user}")
                     except Exception as e:
                         print(f"  ⚠️ Impossible de changer le propriétaire: {e}")
@@ -717,15 +720,10 @@ class SnapshotService:
                     print(f"  🔐 Restauration des permissions WordPress...")
                     self._emit_rollback_log(project_name, "🔐 Restauration des permissions WordPress...", 90, 'processing')
                     try:
-                        # Remettre www-data comme propriétaire pour compatibilité Docker
-                        subprocess.run(['sudo', 'chown', '-R', 'www-data:www-data', wp_content_path], 
-                                     check=False, capture_output=True, timeout=60)
-                        
-                        # Permissions appropriées pour WordPress
-                        subprocess.run(['sudo', 'find', wp_content_path, '-type', 'd', '-exec', 'chmod', '775', '{}', '+'], 
-                                     check=False, capture_output=True, timeout=60)
-                        subprocess.run(['sudo', 'find', wp_content_path, '-type', 'f', '-exec', 'chmod', '664', '{}', '+'], 
-                                     check=False, capture_output=True, timeout=60)
+                        # Profil `www` : www-data propriétaire pour que le
+                        # conteneur écrive, avec setgid pour que les fichiers
+                        # créés ensuite restent dans le groupe partagé.
+                        root_helpers.fix_perms(wp_content_path, 'www', timeout=120)
                         
                         print(f"  ✅ Permissions WordPress restaurées (www-data:www-data)")
                         self._emit_rollback_log(project_name, "✅ Permissions WordPress restaurées", 95, 'processing')

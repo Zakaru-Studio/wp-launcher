@@ -11,6 +11,7 @@ from app.models.project import Project
 from app.config.docker_config import DockerConfig
 from app.utils.project_utils import secure_project_name
 from app.utils.port_utils import find_free_port_for_project
+from app.utils import root_helpers
 
 
 class CloneService:
@@ -631,21 +632,9 @@ class CloneService:
             project_path = os.path.join(self.projects_folder, project_name)
             current_user = os.getenv('USER', 'dev-server')
             
-            import subprocess
-            subprocess.run([
-                'sudo', 'chown', '-R', f'{current_user}:www-data', project_path
-            ], capture_output=True, timeout=120)
-
-            # sudo requis : le chown précédent a changé le groupe vers www-data,
-            # les fichiers antérieurement owned par www-data ne sont pas writable
-            # sans privilèges.
-            subprocess.run([
-                'sudo', 'find', project_path, '-type', 'd', '-exec', 'chmod', '775', '{}', '+'
-            ], capture_output=True, timeout=120)
-
-            subprocess.run([
-                'sudo', 'find', project_path, '-type', 'f', '-exec', 'chmod', '664', '{}', '+'
-            ], capture_output=True, timeout=120)
+            # Profil `shared` : chown, modes et setgid en une passe, via un
+            # helper à arguments validés (voir app/utils/root_helpers.py).
+            root_helpers.fix_perms(project_path, 'shared', timeout=120)
             
         except Exception as e:
             print(f"⚠️ [CLONE] Erreur permissions: {e}")
