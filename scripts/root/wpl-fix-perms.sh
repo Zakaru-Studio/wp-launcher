@@ -21,13 +21,7 @@
 # applicatif, sinon il suffirait de le réécrire pour obtenir un shell root.
 
 set -euo pipefail
-
-BASE_DIR="${WPL_BASE_DIR:-/home/dev-server/Sites/wp-launcher}"
-PROJECTS_DIR="$BASE_DIR/projets"
-DEV_USER="${WPL_DEV_USER:-dev-server}"
-WWW_USER="www-data"
-
-die() { echo "wpl-fix-perms: $*" >&2; exit 1; }
+. "$(dirname "$0")/wpl-common.sh"
 
 [ $# -ge 2 ] || die "usage: $0 <projet> <profil> [sous-chemin]"
 
@@ -35,32 +29,17 @@ PROJECT="$1"
 PROFILE="$2"
 SUBPATH="${3:-}"
 
-# ─── 1. nom de projet ─────────────────────────────────────────────────────
-[[ "$PROJECT" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$ ]] \
-    || die "nom de projet invalide: $PROJECT"
-[[ "$PROJECT" == *".."* ]] && die "nom de projet invalide: $PROJECT"
-
-# ─── 2. sous-chemin ───────────────────────────────────────────────────────
+valid_name "$PROJECT" "nom de projet"
 if [ -n "$SUBPATH" ]; then
-    [[ "$SUBPATH" =~ ^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,199}$ ]] \
-        || die "sous-chemin invalide: $SUBPATH"
-    [[ "$SUBPATH" == *".."* ]] && die "sous-chemin invalide: $SUBPATH"
+    valid_subpath "$SUBPATH"
     TARGET="$PROJECTS_DIR/$PROJECT/$SUBPATH"
 else
     TARGET="$PROJECTS_DIR/$PROJECT"
 fi
 
-[ -e "$TARGET" ] || die "chemin inexistant: $TARGET"
-
-# ─── 3. le chemin résolu doit rester sous la racine des projets ───────────
-# realpath suit les liens symboliques : un wp-content pointant vers /etc est
-# donc écarté ici, pas après le chown.
-RESOLVED="$(realpath -- "$TARGET")"
-RESOLVED_BASE="$(realpath -- "$PROJECTS_DIR")"
-case "$RESOLVED" in
-    "$RESOLVED_BASE"/*) ;;
-    *) die "chemin hors de $RESOLVED_BASE: $RESOLVED" ;;
-esac
+# Le chemin résolu doit rester sous la racine des projets : un wp-content
+# remplacé par un lien vers /etc est écarté ici, avant le chown.
+RESOLVED="$(resolve_under "$TARGET" "$PROJECTS_DIR")"
 
 # ─── 4. profils ───────────────────────────────────────────────────────────
 # `-exec … +` et non `\;` : un fork par fichier sur une arborescence

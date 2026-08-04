@@ -91,6 +91,24 @@ if [ -d "$APP_DIR/.git" ] && [ -x "$APP_DIR/.githooks/pre-commit" ]; then
     echo -e "  ✅ Hook pre-commit activé (blocage des secrets avant commit)"
 fi
 
+# Helpers exécutés en root via sudo.
+#
+# Déployés HORS du dépôt et en root:root, délibérément : le dépôt appartient à
+# l'utilisateur applicatif, qui peut donc y écrire. Y laisser un script que
+# sudo l'autorise à lancer en root reviendrait à lui donner root — on n'aurait
+# fait que déplacer le problème.
+WPL_ROOT_DIR="/opt/wp-launcher-root"
+if [ -d "$APP_DIR/scripts/root" ]; then
+    echo ""
+    echo -e "${YELLOW}Installation des helpers racine dans $WPL_ROOT_DIR...${NC}"
+    sudo install -d -o root -g root -m 0755 "$WPL_ROOT_DIR"
+    sudo install -o root -g root -m 0755 "$APP_DIR"/scripts/root/wpl-*.sh "$WPL_ROOT_DIR/"
+    echo -e "  ✅ $(ls "$APP_DIR"/scripts/root/wpl-*.sh | wc -l) scripts installés en root:root"
+    echo -e "     ${YELLOW}Les règles sudo correspondantes sont dans"
+    echo -e "     scripts/root/sudoers.wp-launcher — à installer une fois que"
+    echo -e "     l'application les utilise réellement.${NC}"
+fi
+
 # 5. Fichier .env
 echo ""
 echo -e "${YELLOW}[5/6] Configuration .env...${NC}"
