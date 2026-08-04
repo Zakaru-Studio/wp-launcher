@@ -5,6 +5,7 @@ import os
 import time
 from flask import Blueprint, request, jsonify, g, current_app
 from app.middleware.auth_middleware import login_required, admin_required
+from app.config.docker_config import DockerConfig
 from app.utils.slug_utils import validate_project_name
 
 
@@ -27,7 +28,10 @@ def create_instance():
         validate_project_name(parent_project)
     except ValueError as exc:
         return jsonify({'success': False, 'error': str(exc)}), 400
-    if not os.path.isdir(os.path.join('projets', parent_project)):
+    # Chemin absolu : un relatif dépendait du répertoire courant du processus,
+    # que les opérations Docker déplacent — le projet parent semblait alors
+    # ne pas exister.
+    if not os.path.isdir(os.path.join(DockerConfig.PROJECTS_FOLDER, parent_project)):
         return jsonify({'success': False, 'error': 'Projet parent introuvable'}), 404
 
     # Déterminer le propriétaire

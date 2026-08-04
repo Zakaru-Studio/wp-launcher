@@ -4,7 +4,6 @@ Service pour vérifier et construire automatiquement l'image WordPress personnal
 """
 
 import subprocess
-import os
 from pathlib import Path
 
 class WordPressImageService:
@@ -38,28 +37,24 @@ class WordPressImageService:
                 print(f"❌ Dockerfile non trouvé: {dockerfile}")
                 return False
             
-            # Changer vers le bon répertoire
-            original_dir = os.getcwd()
-            os.chdir(self.dockerfile_path)
-            
-            try:
-                # Construire l'image
-                result = subprocess.run([
-                    'docker', 'build', '-t', self.image_name, '.'
-                ], capture_output=True, text=True, timeout=300)  # 5 minutes max
-                
-                if result.returncode == 0:
-                    print("✅ Image WordPress personnalisée construite avec succès!")
-                    return self.test_wp_cli_in_image()
-                else:
-                    print(f"❌ Erreur lors de la construction de l'image:")
-                    print(f"STDOUT: {result.stdout}")
-                    print(f"STDERR: {result.stderr}")
-                    return False
-                    
-            finally:
-                os.chdir(original_dir)
-                
+            # cwd= plutôt qu'un os.chdir : le répertoire courant est partagé par
+            # tout le processus, et une opération concurrente le déplaçait sous
+            # nos pieds (cf. DockerService._compose).
+            result = subprocess.run([
+                'docker', 'build', '-t', self.image_name, '.'
+            ], capture_output=True, text=True, timeout=300,  # 5 minutes max
+               cwd=self.dockerfile_path)
+
+            if result.returncode == 0:
+                print("✅ Image WordPress personnalisée construite avec succès!")
+                return self.test_wp_cli_in_image()
+            else:
+                print(f"❌ Erreur lors de la construction de l'image:")
+                print(f"STDOUT: {result.stdout}")
+                print(f"STDERR: {result.stderr}")
+                return False
+
+
         except Exception as e:
             print(f"❌ Erreur lors de la construction de l'image: {e}")
             return False

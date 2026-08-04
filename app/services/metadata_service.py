@@ -5,6 +5,7 @@ import sqlite3
 import os
 import json
 from datetime import datetime
+from app.config.docker_config import DockerConfig
 from app.models.project_metadata import ProjectMetadata
 from app.utils.logger import wp_logger
 
@@ -195,7 +196,9 @@ class MetadataService:
         if not project:
             return
         
-        container_path = os.path.join('containers', project.name)
+        # Chemin absolu : cf. app/config/docker_config.py — le répertoire
+        # courant du processus n'est pas stable pendant les opérations Docker.
+        container_path = os.path.join(DockerConfig.CONTAINERS_FOLDER, project.name)
         if not os.path.exists(container_path):
             return  # Container folder doesn't exist yet
         

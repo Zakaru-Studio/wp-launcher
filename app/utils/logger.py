@@ -10,9 +10,20 @@ from logging.handlers import RotatingFileHandler
 class WPLauncherLogger:
     """Logger spécialisé pour les opérations WordPress Launcher"""
     
-    def __init__(self, logs_dir="logs"):
-        self.logs_dir = Path(logs_dir)
-        self.logs_dir.mkdir(exist_ok=True)
+    #: Racine du dépôt, pour ne jamais dépendre du répertoire courant.
+    _ROOT = Path(__file__).resolve().parent.parent.parent
+
+    def __init__(self, logs_dir=None):
+        # Chemin ABSOLU obligatoire. Le service Docker fait des os.chdir dans
+        # le dossier du conteneur pendant ses opérations — et la suppression
+        # d'un projet supprime ce dossier sous ses propres pieds. Un « logs »
+        # relatif évalué dans cette fenêtre échouait alors sur
+        # « [Errno 2] No such file or directory: 'logs' », ce qui interrompait
+        # la suppression en plein milieu et laissait le projet dans la liste.
+        self.logs_dir = Path(logs_dir) if logs_dir else self._ROOT / 'logs'
+        if not self.logs_dir.is_absolute():
+            self.logs_dir = self._ROOT / self.logs_dir
+        self.logs_dir.mkdir(parents=True, exist_ok=True)
         
         # Créer des sous-dossiers pour chaque type d'opération
         self.operation_dirs = {

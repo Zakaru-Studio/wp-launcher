@@ -193,6 +193,69 @@ class DockerService:
                 return False
         return True
 
+    # Signatures d'un conteneur dont la config runtime figée n'est plus valide :
+    # réseau recréé depuis (l'ID mémorisé à la création n'existe plus), rootfs
+    # désynchronisé de l'image après un pull, bind mount devenu impossible à
+    # remonter. docker-compose considère ces conteneurs à jour et se contente de
+    # les redémarrer — donc ni `start` ni `up -d` ne les répare, il faut recréer.
+    _STALE_CONTAINER_PATTERNS = (
+        r'network [0-9a-f]{12,} not found',
+        r'endpoint with name \S+ already exists',
+        r'oci runtime create failed',
+        r'failed to create shim task',
+        r'error mounting',
+        r'not a directory',
+        r'containerconfig',
+    )
+
+    @classmethod
+    def _is_stale_container_error(cls, stderr):
+        """True si l'échec de démarrage vient de conteneurs périmés (cf.
+        _STALE_CONTAINER_PATTERNS). Les conflits de port sont exclus : ils ont
+        leur propre remédiation en amont et une recréation ne les corrigerait pas."""
+        if not stderr:
+            return False
+        text = stderr.lower()
+        if 'port is already allocated' in text or 'bind for' in text:
+            return False
+        import re as _re
+        return any(_re.search(pattern, text) for pattern in cls._STALE_CONTAINER_PATTERNS)
+
+    def _compose(self, container_path, *args, timeout=60):
+        """Lance docker-compose dans le dossier du projet.
+
+        `cwd=` et jamais `os.chdir` : le répertoire courant appartient au
+        PROCESSUS, pas à l'appel. L'application tourne dans un unique worker
+        eventlet où les opérations se chevauchent — le `finally` d'une tâche
+        qui se termine remettait le répertoire courant à la racine pendant
+        qu'une autre était entre son `chdir` et son `docker-compose`, qui
+        échouait alors sur « Can't find a suitable configuration file ». La
+        bascule de version PHP tombait là-dessus, et la suppression de projet
+        supprimait le répertoire courant sous ses propres pieds.
+        """
+        return subprocess.run(
+            ['docker-compose', *args],
+            capture_output=True, text=True, timeout=timeout, cwd=container_path,
+        )
+
+    def _recreate_containers(self, container_path, timeout):
+        """Détruit puis recrée les conteneurs du projet, seule issue quand ils sont
+        périmés. Les volumes nommés (donc la base MySQL) sont préservés : `down` est
+        appelé sans `-v`, jamais avec. Retourne le CompletedProcess du `up`."""
+        compose_file = os.path.join(container_path, 'docker-compose.yml')
+        print(f"🔄 [DOCKER_SERVICE] Recréation des conteneurs (volumes préservés)...")
+        # `down` peut échouer partiellement : on tente la recréation quoi qu'il arrive.
+        subprocess.run(
+            ['docker-compose', '-f', compose_file, 'down', '--remove-orphans'],
+            capture_output=True, text=True, timeout=90, cwd=container_path,
+        )
+        # Laisser Docker libérer réseau et endpoints avant de recréer
+        time.sleep(2)
+        return subprocess.run(
+            ['docker-compose', '-f', compose_file, 'up', '-d', '--force-recreate'],
+            capture_output=True, text=True, timeout=timeout, cwd=container_path,
+        )
+
     def start_containers(self, container_path, timeout=120):
         """Démarre les conteneurs d'un projet depuis containers/"""
         project_name = os.path.basename(container_path)
@@ -247,26 +310,21 @@ class DockerService:
         # automatiquement si la config a drifté.
         warm_restart = self._can_warm_restart(container_path)
 
-        original_cwd = os.getcwd()
         try:
-            os.chdir(container_path)
             if warm_restart:
                 print(f"⚡ [DOCKER_SERVICE] Warm restart pour {project_name} (containers existants)")
-                result = subprocess.run([
-                    'docker-compose', 'start'
-                ], capture_output=True, text=True, timeout=timeout)
+                result = self._compose(container_path, 'start', timeout=timeout)
                 success = result.returncode == 0
-                if not success:
+                if not success and not self._is_stale_container_error(result.stderr):
+                    # Config qui a drifté : `up -d` reconcilie. Si les conteneurs sont
+                    # périmés en revanche, `up -d` les redémarrerait à l'identique et
+                    # échouerait pareil — on laisse la recréation ci-dessous s'en charger.
                     print(f"⚠️ [DOCKER_SERVICE] Warm restart échoué, fallback sur up -d")
                     warm_restart = False  # fallback path will not skip perms
-                    result = subprocess.run([
-                        'docker-compose', 'up', '-d'
-                    ], capture_output=True, text=True, timeout=timeout)
+                    result = self._compose(container_path, 'up', '-d', timeout=timeout)
                     success = result.returncode == 0
             else:
-                result = subprocess.run([
-                    'docker-compose', 'up', '-d'
-                ], capture_output=True, text=True, timeout=timeout)
+                result = self._compose(container_path, 'up', '-d', timeout=timeout)
                 success = result.returncode == 0
 
             # Second tour si docker-compose signale "port is already allocated"
@@ -276,7 +334,6 @@ class DockerService:
                 or 'Bind for' in result.stderr
             ):
                 print(f"⚠️ [DOCKER_SERVICE] Conflit de port détecté pour {project_name}, retry avec preflight...")
-                os.chdir(original_cwd)
                 try:
                     changed, remap, notes, retry_by_kind = resolve_port_conflicts(
                         container_path, projects_folder=self.projects_folder
@@ -287,52 +344,36 @@ class DockerService:
                     preflight_by_kind.update(retry_by_kind)
                     if changed:
                         # Nettoyer les conteneurs partiellement créés avant retry
-                        subprocess.run(['docker-compose', '-f',
-                                        os.path.join(container_path, 'docker-compose.yml'),
-                                        'down'],
-                                       capture_output=True, text=True, timeout=60)
-                        os.chdir(container_path)
-                        result = subprocess.run([
-                            'docker-compose', 'up', '-d'
-                        ], capture_output=True, text=True, timeout=timeout)
+                        self._compose(container_path, 'down', timeout=60)
+                        result = self._compose(container_path, 'up', '-d', timeout=timeout)
                         success = result.returncode == 0
                         if success:
                             print(f"✅ [DOCKER_SERVICE] Retry réussi après remap des ports")
                 except Exception as retry_err:
                     print(f"❌ [DOCKER_SERVICE] Retry preflight échoué: {retry_err}")
 
-            # Gestion automatique de l'erreur ContainerConfig
-            if not success and result.stderr and 'ContainerConfig' in result.stderr:
-                print(f"⚠️ [DOCKER_SERVICE] Erreur ContainerConfig détectée pour {project_name}")
-                print(f"🔄 [DOCKER_SERVICE] Nettoyage et redémarrage automatique des conteneurs...")
-                
-                # Arrêter complètement les conteneurs
-                stop_result = subprocess.run([
-                    'docker-compose', 'down'
-                ], capture_output=True, text=True, timeout=60)
-                
-                if stop_result.returncode == 0:
-                    print(f"✅ [DOCKER_SERVICE] Conteneurs arrêtés proprement")
-                    
-                    # Attendre 2 secondes
-                    import time
-                    time.sleep(2)
-                    
-                    # Redémarrer les conteneurs
-                    print(f"🚀 [DOCKER_SERVICE] Redémarrage des conteneurs...")
-                    result = subprocess.run([
-                        'docker-compose', 'up', '-d'
-                    ], capture_output=True, text=True, timeout=timeout)
-                    
-                    success = result.returncode == 0
-                    
-                    if success:
-                        print(f"✅ [DOCKER_SERVICE] Conteneurs redémarrés avec succès après correction ContainerConfig")
-                    else:
-                        print(f"❌ [DOCKER_SERVICE] Échec du redémarrage après correction ContainerConfig")
+            # Conteneurs périmés (réseau disparu, rootfs désynchronisé, ContainerConfig) :
+            # docker-compose les croit à jour et les rejoue tels quels, donc l'échec se
+            # reproduit à chaque tentative. Un cycle down + up --force-recreate est la
+            # seule sortie. Cas typique : un projet resté arrêté pendant qu'un réseau a
+            # été recréé ou qu'une image a été re-pull.
+            if not success and self._is_stale_container_error(result.stderr):
+                print(f"⚠️ [DOCKER_SERVICE] Conteneurs périmés détectés pour {project_name}")
+                warm_restart = False  # recréation ⇒ bind mounts remontés, perms à refixer
+                result = self._recreate_containers(container_path, timeout)
+                success = result.returncode == 0
+
+                if success:
+                    print(f"✅ [DOCKER_SERVICE] Conteneurs recréés avec succès")
+                    wp_logger.log_system_info(
+                        f"Conteneurs périmés recréés automatiquement pour {project_name}",
+                        container_path=container_path,
+                        operation="docker_stale_recreate",
+                    )
                 else:
-                    print(f"❌ [DOCKER_SERVICE] Échec de l'arrêt des conteneurs")
-            
+                    print(f"❌ [DOCKER_SERVICE] Échec de la recréation: {result.stderr}")
+
+
             # Si le démarrage a réussi, corriger automatiquement les permissions
             if success:
                 # Extraire le nom du projet depuis le chemin
@@ -442,9 +483,7 @@ class DockerService:
                                          container_path=container_path,
                                          details="Exception démarrage conteneurs")
             return False, str(e)
-        finally:
-            os.chdir(original_cwd)
-    
+
     def stop_containers(self, container_path, timeout=60):
         """Arrête les conteneurs d'un projet depuis containers/"""
         project_name = os.path.basename(container_path)
@@ -452,13 +491,9 @@ class DockerService:
                                  container_path=container_path,
                                  operation="docker_stop")
         
-        original_cwd = os.getcwd()
         try:
-            os.chdir(container_path)
-            result = subprocess.run([
-                'docker-compose', 'stop'
-            ], capture_output=True, text=True, timeout=timeout)
-            
+            result = self._compose(container_path, 'stop', timeout=timeout)
+
             success = result.returncode == 0
 
             # Log du résultat
@@ -489,12 +524,9 @@ class DockerService:
                                          container_path=container_path,
                                          details="Exception arrêt conteneurs")
             return False, str(e)
-        finally:
-            os.chdir(original_cwd)
-    
+
     def remove_containers(self, container_path, timeout=60):
         """Supprime complètement les conteneurs d'un projet depuis containers/"""
-        original_cwd = os.getcwd()
         project_name = os.path.basename(container_path)
         
         wp_logger.log_system_info(f"Suppression complète conteneurs pour {project_name}", 
@@ -506,10 +538,8 @@ class DockerService:
             
             # Étape 1: docker-compose down avec volumes
             print(f"📂 [DOCKER_SERVICE] Arrêt et suppression via docker-compose...")
-            os.chdir(container_path)
-            result = subprocess.run([
-                'docker-compose', 'down', '-v', '--remove-orphans', '--rmi', 'local'
-            ], capture_output=True, text=True, timeout=timeout)
+            result = self._compose(container_path, 'down', '-v', '--remove-orphans',
+                                   '--rmi', 'local', timeout=timeout)
             
             if result.returncode != 0:
                 print(f"⚠️ [DOCKER_SERVICE] docker-compose down a échoué: {result.stderr}")
@@ -635,9 +665,7 @@ class DockerService:
                                          container_path=container_path,
                                          details="Exception suppression conteneurs")
             return False, str(e)
-        finally:
-            os.chdir(original_cwd)
-    
+
     def get_container_status(self, project_name):
         """Vérifie le statut des conteneurs d'un projet"""
         try:
@@ -1437,42 +1465,33 @@ class DockerService:
                                              f"Dossier conteneur non trouvé: {container_path}")
                 return False, f"Dossier conteneur non trouvé: {container_path}"
             
-            original_cwd = os.getcwd()
-            try:
-                os.chdir(container_path)
-                
-                wp_logger.log_docker_operation('restart', project_name, True, 
-                                             f"Redémarrage service {service_name}",
+            wp_logger.log_docker_operation('restart', project_name, True,
+                                         f"Redémarrage service {service_name}",
+                                         "",
+                                         container_path=container_path,
+                                         service=service_name)
+
+            result = self._compose(container_path, 'restart', service_name, timeout=timeout)
+
+            success = result.returncode == 0
+
+            if success:
+                wp_logger.log_docker_operation('restart', project_name, True,
+                                             f"Service {service_name} redémarré avec succès",
                                              "",
                                              container_path=container_path,
                                              service=service_name)
-                
-                result = subprocess.run([
-                    'docker-compose', 'restart', service_name
-                ], capture_output=True, text=True, timeout=timeout)
-                
-                success = result.returncode == 0
-                
-                if success:
-                    wp_logger.log_docker_operation('restart', project_name, True, 
-                                                 f"Service {service_name} redémarré avec succès",
-                                                 "",
-                                                 container_path=container_path,
-                                                 service=service_name)
-                    print(f"✅ [DOCKER_SERVICE] Service {service_name} redémarré pour {project_name}")
-                else:
-                    wp_logger.log_docker_operation('restart', project_name, False, 
-                                                 "",
-                                                 result.stderr,
-                                                 container_path=container_path,
-                                                 service=service_name)
-                    print(f"❌ [DOCKER_SERVICE] Erreur redémarrage {service_name} pour {project_name}: {result.stderr}")
-                
-                return success, result.stderr if result.returncode != 0 else None
-                
-            finally:
-                os.chdir(original_cwd)
-                
+                print(f"✅ [DOCKER_SERVICE] Service {service_name} redémarré pour {project_name}")
+            else:
+                wp_logger.log_docker_operation('restart', project_name, False,
+                                             "",
+                                             result.stderr,
+                                             container_path=container_path,
+                                             service=service_name)
+                print(f"❌ [DOCKER_SERVICE] Erreur redémarrage {service_name} pour {project_name}: {result.stderr}")
+
+            return success, result.stderr if result.returncode != 0 else None
+
         except subprocess.TimeoutExpired:
             wp_logger.log_docker_operation('restart', project_name, False, 
                                          "",
@@ -1633,79 +1652,64 @@ class DockerService:
                 
                 print(f"✅ [DOCKER_SERVICE] Image mise à jour vers wp-launcher-wordpress:php{php_version}")
             
-            original_cwd = os.getcwd()
-            try:
-                os.chdir(container_path)
-                
-                # Faire un down complet pour éviter les erreurs ContainerConfig
-                print(f"🛑 [DOCKER_SERVICE] Arrêt complet des conteneurs...")
-                subprocess.run([
-                    'docker-compose', 'down'
-                ], capture_output=True, text=True, timeout=60)
-                
-                # Attendre un peu que Docker libère les ressources
-                time.sleep(2)
-                
-                # Recréer tous les conteneurs avec la nouvelle image WordPress
-                print(f"🚀 [DOCKER_SERVICE] Création des conteneurs avec PHP {php_version}...")
-                result = subprocess.run([
-                    'docker-compose', 'up', '-d'
-                ], capture_output=True, text=True, timeout=timeout)
-                
-                if result.returncode == 0:
-                    print(f"✅ [DOCKER_SERVICE] Conteneurs recréés avec PHP {php_version}")
-                    
-                    # Attendre que les conteneurs soient prêts
-                    time.sleep(5)
-                    
-                    # Corriger les permissions après rebuild
-                    self.fix_dev_permissions(project_name)
-                    
-                    wp_logger.log_docker_operation('rebuild', project_name, True,
-                                                 f"Conteneurs recréés avec PHP {php_version}",
-                                                 "",
-                                                 container_path=container_path)
-                    return True, None
-                else:
-                    # Vérifier si c'est une erreur ContainerConfig
-                    if 'ContainerConfig' in result.stderr:
-                        print(f"⚠️ [DOCKER_SERVICE] Erreur ContainerConfig détectée, nouvelle tentative...")
-                        wp_logger.log_docker_operation('rebuild', project_name, False,
-                                                     "",
-                                                     "Erreur ContainerConfig, nouvelle tentative",
-                                                     container_path=container_path)
-                        
-                        # Forcer un down avec suppression des volumes orphelins
-                        subprocess.run([
-                            'docker-compose', 'down', '--remove-orphans'
-                        ], capture_output=True, text=True, timeout=60)
-                        
-                        time.sleep(3)
-                        
-                        # Réessayer
-                        result = subprocess.run([
-                            'docker-compose', 'up', '-d'
-                        ], capture_output=True, text=True, timeout=timeout)
-                        
-                        if result.returncode == 0:
-                            print(f"✅ [DOCKER_SERVICE] Conteneurs recréés avec succès après correction")
-                            time.sleep(5)
-                            self.fix_dev_permissions(project_name)
-                            wp_logger.log_docker_operation('rebuild', project_name, True,
-                                                         f"Conteneurs recréés avec PHP {php_version} après correction",
-                                                         "",
-                                                         container_path=container_path)
-                            return True, None
-                    
-                    print(f"❌ [DOCKER_SERVICE] Erreur lors du rebuild: {result.stderr}")
+            # Faire un down complet pour éviter les erreurs ContainerConfig
+            print(f"🛑 [DOCKER_SERVICE] Arrêt complet des conteneurs...")
+            self._compose(container_path, 'down', timeout=60)
+
+            # Attendre un peu que Docker libère les ressources
+            time.sleep(2)
+
+            # Recréer tous les conteneurs avec la nouvelle image WordPress
+            print(f"🚀 [DOCKER_SERVICE] Création des conteneurs avec PHP {php_version}...")
+            result = self._compose(container_path, 'up', '-d', timeout=timeout)
+
+            if result.returncode == 0:
+                print(f"✅ [DOCKER_SERVICE] Conteneurs recréés avec PHP {php_version}")
+
+                # Attendre que les conteneurs soient prêts
+                time.sleep(5)
+
+                # Corriger les permissions après rebuild
+                self.fix_dev_permissions(project_name)
+
+                wp_logger.log_docker_operation('rebuild', project_name, True,
+                                             f"Conteneurs recréés avec PHP {php_version}",
+                                             "",
+                                             container_path=container_path)
+                return True, None
+            else:
+                # Vérifier si c'est une erreur ContainerConfig
+                if 'ContainerConfig' in result.stderr:
+                    print(f"⚠️ [DOCKER_SERVICE] Erreur ContainerConfig détectée, nouvelle tentative...")
                     wp_logger.log_docker_operation('rebuild', project_name, False,
                                                  "",
-                                                 result.stderr,
+                                                 "Erreur ContainerConfig, nouvelle tentative",
                                                  container_path=container_path)
-                    return False, result.stderr
-                    
-            finally:
-                os.chdir(original_cwd)
+
+                    # Forcer un down avec suppression des volumes orphelins
+                    self._compose(container_path, 'down', '--remove-orphans', timeout=60)
+
+                    time.sleep(3)
+
+                    # Réessayer
+                    result = self._compose(container_path, 'up', '-d', timeout=timeout)
+
+                    if result.returncode == 0:
+                        print(f"✅ [DOCKER_SERVICE] Conteneurs recréés avec succès après correction")
+                        time.sleep(5)
+                        self.fix_dev_permissions(project_name)
+                        wp_logger.log_docker_operation('rebuild', project_name, True,
+                                                     f"Conteneurs recréés avec PHP {php_version} après correction",
+                                                     "",
+                                                     container_path=container_path)
+                        return True, None
+
+                print(f"❌ [DOCKER_SERVICE] Erreur lors du rebuild: {result.stderr}")
+                wp_logger.log_docker_operation('rebuild', project_name, False,
+                                             "",
+                                             result.stderr,
+                                             container_path=container_path)
+                return False, result.stderr
 
         except subprocess.TimeoutExpired:
             print(f"❌ [DOCKER_SERVICE] Timeout lors du rebuild")
@@ -1978,18 +1982,13 @@ class DockerService:
                                  container_path=container_path,
                                  operation="docker_rebuild")
         
-        original_cwd = os.getcwd()
         try:
             print(f"🔄 [DOCKER_SERVICE] Rebuild complet des conteneurs pour {project_name}")
-            
-            os.chdir(container_path)
-            
+
             # Étape 1: Arrêter et supprimer les conteneurs (sans supprimer les volumes)
             print(f"🛑 [DOCKER_SERVICE] Arrêt et suppression des conteneurs...")
-            down_result = subprocess.run([
-                'docker-compose', 'down'
-            ], capture_output=True, text=True, timeout=60)
-            
+            down_result = self._compose(container_path, 'down', timeout=60)
+
             if down_result.returncode != 0:
                 print(f"⚠️ [DOCKER_SERVICE] Avertissement lors du down: {down_result.stderr}")
             else:
@@ -2000,9 +1999,8 @@ class DockerService:
             
             # Étape 2: Recréer les conteneurs avec --force-recreate
             print(f"🚀 [DOCKER_SERVICE] Recréation des conteneurs avec --force-recreate...")
-            up_result = subprocess.run([
-                'docker-compose', 'up', '-d', '--force-recreate'
-            ], capture_output=True, text=True, timeout=timeout)
+            up_result = self._compose(container_path, 'up', '-d', '--force-recreate',
+                                      timeout=timeout)
             
             success = up_result.returncode == 0
             
@@ -2045,9 +2043,7 @@ class DockerService:
                                          container_path=container_path,
                                          details="Exception rebuild conteneurs")
             return False, str(e)
-        finally:
-            os.chdir(original_cwd)
-    
+
     def get_individual_container_status(self, container_name):
         """Get status of a specific container (running/stopped)"""
         try:

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Concurrent operations stole each other's working directory. Several Docker
+  routines ran `os.chdir` into a project folder and restored it in a `finally`,
+  but the working directory belongs to the *process*, and the app serves every
+  request from a single eventlet worker. One task's cleanup reset the directory
+  while another sat between its own `chdir` and its `docker-compose` call, which
+  then failed with "Can't find a suitable configuration file" — that was the
+  PHP version switch. Deleting a project was worse: it removed the very
+  directory it was standing in, so the next relative path raised
+  `No such file or directory: 'logs'`, the deletion aborted halfway, and the
+  site stayed in the list. Every `os.chdir` is gone; subprocesses get `cwd=`
+  instead, and a test fails the build if one comes back.
+- Paths that only worked from the repository root are now absolute: the log
+  directories, the pre-import database backups, a project's snapshots (deleting
+  a project silently kept them), the container folder used when changing the
+  WordPress type or the PHP limits, and the parent-project check when creating
+  a dev instance.
+
 ### Security
 - The application no longer needs `NOPASSWD: ALL`. It used to run 81 `sudo
   chown/chmod/find/rm/rsync/cp` calls on paths it composed itself, so a single

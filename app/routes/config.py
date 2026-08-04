@@ -7,6 +7,7 @@ from flask import Blueprint, request, jsonify, current_app, Response
 from app.utils.logger import wp_logger
 from app.middleware.auth_middleware import login_required, admin_required
 from app.config.php_versions import SUPPORTED_PHP_VERSIONS, docker_image_exists
+from app.config.docker_config import DockerConfig
 import json
 
 config_bp = Blueprint('config', __name__, url_prefix='/api/config')
@@ -454,7 +455,10 @@ def update_wordpress_type(project_name):
             }), 500
         
         # Mettre à jour le docker-compose.yml avec les nouvelles limites
-        container_path = os.path.join('containers', project_name)
+        # Chemin absolu : les opérations Docker déplaçaient le répertoire
+        # courant du processus, et un chemin relatif évalué dans cette fenêtre
+        # ne désignait pas le projet.
+        container_path = os.path.join(DockerConfig.CONTAINERS_FOLDER, project_name)
         docker_compose_path = os.path.join(container_path, 'docker-compose.yml')
         
         if not os.path.exists(docker_compose_path):

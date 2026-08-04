@@ -657,7 +657,11 @@ class FastImportService:
         at it. Non-fatal: if the dump fails we log and proceed (the
         user chose to replace the DB anyway).
         """
-        backup_root = os.path.join('logs', 'db-backups', project_name)
+        # Chemin absolu : os.chdir concurrent, cf. app/utils/logger.py.
+        backup_root = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+            'logs', 'db-backups', project_name,
+        )
         os.makedirs(backup_root, exist_ok=True)
         ts = time.strftime('%Y%m%d_%H%M%S')
         backup_path = os.path.join(backup_root, f'pre-import_{ts}.sql.gz')

@@ -295,7 +295,13 @@ class ProjectService:
         """Supprime tous les snapshots d'un projet"""
         import shutil
         
-        snapshots_base_dir = 'snapshots'
+        # Chemin absolu : relatif, il désignait le dossier courant du processus,
+        # que les opérations Docker déplaçaient. Selon le moment, la suppression
+        # ne trouvait rien à supprimer — ou pire, visait le mauvais dossier.
+        snapshots_base_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+            'snapshots',
+        )
         project_snapshots_dir = os.path.join(snapshots_base_dir, project_name)
         
         if os.path.exists(project_snapshots_dir):
