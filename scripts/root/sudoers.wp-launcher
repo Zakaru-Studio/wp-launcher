@@ -1,0 +1,48 @@
+# Règles sudo de WP Launcher — à installer dans /etc/sudoers.d/wp-launcher
+#
+#     sudo install -o root -g root -m 0440 \
+#         scripts/root/sudoers.wp-launcher /etc/sudoers.d/wp-launcher
+#     sudo visudo -c
+#
+# Remplace un `NOPASSWD: ALL` par une liste fermée. L'application n'appelle
+# plus `sudo chown/chmod/find/rm/rsync` sur des chemins qu'elle compose
+# elle-même : elle passe par les scripts ci-dessous, qui valident leurs
+# arguments et refusent tout chemin sortant de l'arborescence des projets.
+#
+# PRÉREQUIS DE SÛRETÉ — sans quoi ces règles ne valent rien : les scripts
+# doivent appartenir à root et ne pas être modifiables par l'utilisateur
+# applicatif. Autrement il lui suffit de réécrire un script pour obtenir un
+# shell root, et on n'a fait que déplacer le problème.
+#
+#     sudo chown root:root /opt/wp-launcher-root/*.sh
+#     sudo chmod 0755      /opt/wp-launcher-root/*.sh
+#
+# Les scripts sont donc déployés HORS du dépôt (le dépôt est modifiable par
+# l'app, qui s'auto-mets à jour). install.sh les copie vers /opt.
+
+Cmnd_Alias WPL_ROOT = \
+    /opt/wp-launcher-root/wpl-fix-perms.sh, \
+    /opt/wp-launcher-root/wpl-delete-project.sh, \
+    /opt/wp-launcher-root/wpl-delete-instance.sh, \
+    /opt/wp-launcher-root/wpl-copy-wp-content.sh, \
+    /opt/wp-launcher-root/wpl-write-wp-config.sh, \
+    /opt/wp-launcher-root/wpl-reset-config.sh
+
+# Redémarrage du service depuis l'UI. Unité nommée explicitement : sans ça,
+# `systemctl restart <n'importe quoi>` revient à contrôler toute la machine.
+Cmnd_Alias WPL_SERVICE = /usr/bin/systemctl --no-block restart wp-launcher.service
+
+dev-server ALL=(root) NOPASSWD: WPL_ROOT, WPL_SERVICE
+
+# Volontairement absent de cette liste :
+#
+#   usermod -a -G www-data <user>
+#       Opération d'installation, pas d'exécution. Elle appartient à
+#       install.sh, lancé une fois par un administrateur — pas à une app qui
+#       tourne en permanence et n'a aucune raison de modifier des groupes.
+#
+#   manage_hosts.sh
+#       Ancienne règle NOPASSWD pointant sur un fichier qui n'existe pas, dans
+#       un répertoire modifiable par l'application. Quiconque pouvait créer ce
+#       fichier obtenait root. À supprimer de /etc/sudoers.d/ en même temps
+#       que l'installation de celui-ci.
