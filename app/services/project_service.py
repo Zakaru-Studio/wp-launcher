@@ -8,6 +8,7 @@ import os
 from app.models.project import Project
 from app.config.docker_config import DockerConfig
 from app.utils.logger import wp_logger
+from app.utils import root_helpers
 
 
 class ProjectService:
@@ -263,32 +264,17 @@ class ProjectService:
             print(f"📸 Suppression des snapshots du projet {project_name}...")
             self._delete_project_snapshots(project_name)
             
-            # Supprimer les dossiers (utiliser le script de suppression sécurisé avec sudo)
-            import subprocess
-            
             print(f"🗑️  Suppression des dossiers du projet {project_name}...")
-            
-            # Utiliser le script de suppression sécurisé avec sudo
-            script_path = os.path.join(
-                os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-                'scripts',
-                'delete_project_folders.sh'
-            )
-            
+
+            # Le script visé vit désormais hors du dépôt, en root:root. La
+            # version précédente pointait sur scripts/delete_project_folders.sh,
+            # propriété de l'utilisateur applicatif : celui-ci pouvait donc
+            # réécrire un fichier que sudo l'autorisait à lancer en root.
             try:
-                result = subprocess.run(
-                    ['sudo', script_path, project_name],
-                    capture_output=True,
-                    text=True,
-                    timeout=30,
-                    check=True
-                )
-                print(result.stdout)
-                if result.stderr:
-                    print(f"⚠️  Warnings: {result.stderr}")
-            except subprocess.CalledProcessError as e:
-                print(f"❌ Erreur lors de la suppression: {e.stderr}")
-                raise Exception(f"Échec de la suppression des dossiers: {e.stderr}")
+                print(root_helpers.delete_project(project_name, timeout=120))
+            except root_helpers.RootHelperError as exc:
+                print(f"❌ Erreur lors de la suppression: {exc}")
+                raise Exception(f"Échec de la suppression des dossiers: {exc}")
             
             wp_logger.log_operation_success('delete', project_name, "Projet supprimé avec succès")
             

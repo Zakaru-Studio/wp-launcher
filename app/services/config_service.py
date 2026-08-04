@@ -5,12 +5,12 @@ Service de gestion des configurations PHP et MySQL par projet
 
 import os
 import shutil
-import subprocess
 import configparser
 from typing import Dict, Any, Optional
 from app.config.docker_config import DockerConfig
 from app.config.php_versions import DEFAULT_PHP_VERSION, SUPPORTED_PHP_VERSIONS, is_supported
 from app.utils.logger import wp_logger
+from app.utils import root_helpers
 
 class ConfigService:
     """Service pour la gestion des configurations PHP et MySQL par projet"""
@@ -57,7 +57,11 @@ class ConfigService:
             try:
                 shutil.rmtree(php_config_file)
             except PermissionError:
-                subprocess.run(['sudo', 'rm', '-rf', php_config_file], check=True)
+                # Créé en dossier par un bind mount Docker : l'app ne peut pas
+                # toujours le retirer elle-même. La fonction reçoit un chemin,
+                # pas un nom de projet — on le dérive.
+                _project, _ = root_helpers.split_project_path(php_config_file)
+                root_helpers.reset_config(_project, 'php')
         
         template_php = os.path.join(self.template_path, 'php-config', 'php.ini')
         if os.path.exists(template_php):
@@ -102,7 +106,8 @@ session.cookie_lifetime = 7200
             try:
                 shutil.rmtree(mysql_config_file)
             except PermissionError:
-                subprocess.run(['sudo', 'rm', '-rf', mysql_config_file], check=True)
+                _project, _ = root_helpers.split_project_path(mysql_config_file)
+                root_helpers.reset_config(_project, 'mysql')
         
         template_mysql = os.path.join(self.template_path, 'mysql-config', 'mysql.cnf')
         if os.path.exists(template_mysql):
@@ -647,10 +652,11 @@ collation-server = utf8mb4_unicode_ci
                 os.remove(tmp_path)
                 
             except PermissionError:
-                # Si on n'a pas les permissions, utiliser sudo
-                wp_logger.log_system_info(f"Utilisation de sudo pour écrire {wp_config_file}")
-                subprocess.run(['sudo', 'cp', tmp_path, wp_config_file], check=True)
-                subprocess.run(['sudo', 'chown', 'www-data:www-data', wp_config_file], check=False)
+                # wp-config.php appartient à www-data : passer par le helper,
+                # qui exige une source régulière dans /tmp et refuse un lien
+                # symbolique — sinon root aurait recopié n'importe quel fichier.
+                wp_logger.log_system_info(f"Écriture privilégiée de {wp_config_file}")
+                root_helpers.write_wp_config(project_name, tmp_path)
                 os.remove(tmp_path)
             
             wp_logger.log_system_info(f"Configuration WordPress mise à jour pour {project_name}")

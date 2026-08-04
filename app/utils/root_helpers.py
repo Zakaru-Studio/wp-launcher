@@ -47,20 +47,34 @@ def available() -> bool:
 def split_project_path(path: str) -> Tuple[str, Optional[str]]:
     """Décompose un chemin absolu en (projet, sous-chemin).
 
-    Lève ``RootHelperError`` si le chemin ne vit pas sous la racine des
-    projets — un appelant qui passerait /etc doit échouer ici, pas côté root.
+    Ne considère que l'arborescence des fichiers éditables. Pour un chemin
+    pouvant relever de l'une ou l'autre racine, voir ``_split_any_root``.
     """
-    projects_root = os.path.realpath(DockerConfig.PROJECTS_FOLDER)
-    resolved = os.path.realpath(path)
-
-    if resolved == projects_root or not resolved.startswith(projects_root + os.sep):
-        raise RootHelperError(f"Chemin hors de {projects_root}: {path}")
-
-    relative = resolved[len(projects_root) + 1:]
-    parts = relative.split(os.sep, 1)
-    project = parts[0]
-    subpath = parts[1] if len(parts) > 1 else None
+    root, project, subpath = _split_any_root(path)
+    if root != 'projects':
+        raise RootHelperError(f"Chemin hors de projets/: {path}")
     return project, subpath
+
+
+def _split_any_root(path: str) -> Tuple[str, str, Optional[str]]:
+    """Décompose en (racine, projet, sous-chemin).
+
+    Racine vaut 'projects' ou 'containers'. Un projet a deux arborescences :
+    ses fichiers éditables et sa configuration Docker. Les deux sont
+    légitimes, mais elles ne sont jamais concaténées — l'appelant ne choisit
+    pas un chemin, il désigne un projet dans l'une des deux.
+    """
+    resolved = os.path.realpath(path)
+    for kind, base in (
+        ('projects', DockerConfig.PROJECTS_FOLDER),
+        ('containers', DockerConfig.CONTAINERS_FOLDER),
+    ):
+        root = os.path.realpath(base)
+        if resolved.startswith(root + os.sep):
+            relative = resolved[len(root) + 1:]
+            parts = relative.split(os.sep, 1)
+            return kind, parts[0], (parts[1] if len(parts) > 1 else None)
+    raise RootHelperError(f"Chemin hors des arborescences de projets: {path}")
 
 
 def _run(script: str, args, timeout: int = DEFAULT_TIMEOUT) -> str:
@@ -88,8 +102,10 @@ def fix_perms(path: str, profile: str, timeout: int = DEFAULT_TIMEOUT) -> str:
     Profils : shared, www, dev, container, uploads, wp-config-lock,
     wp-config-dev, acl.
     """
-    project, subpath = split_project_path(path)
+    root, project, subpath = _split_any_root(path)
     args = [project, profile] + ([subpath] if subpath else [])
+    if root == 'containers':
+        args.append('--containers')
     return _run('wpl-fix-perms.sh', args, timeout)
 
 

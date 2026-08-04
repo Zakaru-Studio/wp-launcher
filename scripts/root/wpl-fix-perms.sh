@@ -23,7 +23,22 @@
 set -euo pipefail
 . "$(dirname "$0")/wpl-common.sh"
 
-[ $# -ge 2 ] || die "usage: $0 <projet> <profil> [sous-chemin]"
+[ $# -ge 2 ] || die "usage: $0 <projet> <profil> [sous-chemin] [--containers]"
+
+# --containers cible l'arborescence Docker du projet plutôt que ses fichiers
+# éditables. Deux racines distinctes, jamais concaténées : le drapeau choisit
+# l'une des deux valeurs connues, il ne construit pas de chemin.
+ROOT_DIR="$PROJECTS_DIR"
+ARGS=()
+for arg in "$@"; do
+    case "$arg" in
+        --containers) ROOT_DIR="$CONTAINERS_DIR" ;;
+        *) ARGS+=("$arg") ;;
+    esac
+done
+set -- "${ARGS[@]}"
+
+[ $# -ge 2 ] || die "usage: $0 <projet> <profil> [sous-chemin] [--containers]"
 
 PROJECT="$1"
 PROFILE="$2"
@@ -32,14 +47,14 @@ SUBPATH="${3:-}"
 valid_name "$PROJECT" "nom de projet"
 if [ -n "$SUBPATH" ]; then
     valid_subpath "$SUBPATH"
-    TARGET="$PROJECTS_DIR/$PROJECT/$SUBPATH"
+    TARGET="$ROOT_DIR/$PROJECT/$SUBPATH"
 else
-    TARGET="$PROJECTS_DIR/$PROJECT"
+    TARGET="$ROOT_DIR/$PROJECT"
 fi
 
-# Le chemin résolu doit rester sous la racine des projets : un wp-content
-# remplacé par un lien vers /etc est écarté ici, avant le chown.
-RESOLVED="$(resolve_under "$TARGET" "$PROJECTS_DIR")"
+# Le chemin résolu doit rester sous la racine choisie : un wp-content remplacé
+# par un lien vers /etc est écarté ici, avant le chown.
+RESOLVED="$(resolve_under "$TARGET" "$ROOT_DIR")"
 
 # ─── 4. profils ───────────────────────────────────────────────────────────
 # `-exec … +` et non `\;` : un fork par fichier sur une arborescence
