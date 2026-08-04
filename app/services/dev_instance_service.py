@@ -20,7 +20,8 @@ from datetime import datetime
 from app.models.dev_instance import DevInstance
 from app.services.database_service import DatabaseService
 from app.services.port_service import PortService
-from app.utils import security_config
+from app.config.docker_config import DockerConfig
+from app.utils import root_helpers, security_config
 from app.utils.project_credentials import get_root_password
 from app.utils.slug_utils import clean_username_for_slug, generate_db_name
 
@@ -32,16 +33,21 @@ _DEFAULT_WP_IMAGE = 'wp-launcher-wordpress:latest'
 class DevInstanceService:
     """Service for managing development instances"""
 
-    def __init__(self, db_path='data/dev_instances.db', projects_folder='projets',
-                 containers_folder='containers'):
+    def __init__(self, db_path='data/dev_instances.db', projects_folder=None,
+                 containers_folder=None):
         # Utiliser un chemin absolu si le chemin est relatif
         if not os.path.isabs(db_path):
             # Obtenir le répertoire racine du projet
             base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
             db_path = os.path.join(base_dir, db_path)
         self.db_path = db_path
-        self.projects_folder = projects_folder
-        self.containers_folder = containers_folder
+        # Chemins ABSOLUS par défaut. Les anciennes valeurs 'projets' et
+        # 'containers' étaient relatives au répertoire courant, que le service
+        # Docker déplace (os.chdir) pendant ses opérations : dans cette
+        # fenêtre, un os.makedirs créait le dossier ailleurs et le helper —
+        # qui recompose le chemin depuis sa propre racine — ne le trouvait pas.
+        self.projects_folder = projects_folder or DockerConfig.PROJECTS_FOLDER
+        self.containers_folder = containers_folder or DockerConfig.CONTAINERS_FOLDER
         self.database_service = DatabaseService()
         self.port_service = PortService()
         self._init_database()
@@ -180,6 +186,15 @@ class DevInstanceService:
 
         # 0. Le projet parent doit exister et son MySQL doit tourner —
         # on échoue AVANT de copier quoi que ce soit, pas au milieu.
+        #
+        # La copie des thèmes et plugins passe par un helper racine ; s'il n'est
+        # pas déployé, autant le dire ici plutôt que d'échouer à mi-parcours sur
+        # un « command not found » et laisser une instance à demi construite.
+        if not root_helpers.available():
+            raise Exception(
+                "Helpers racine absents de "
+                f"{root_helpers.ROOT_HELPERS_DIR} — relancer install.sh."
+            )
         parent_path = os.path.join(self.projects_folder, parent_project)
         if not os.path.isdir(parent_path):
             raise Exception(f"Projet parent introuvable: {parent_project}")
@@ -218,7 +233,7 @@ class DevInstanceService:
         db_created = False
         try:
             # 6. Structure de dossiers + copie des fichiers
-            self._copy_parent_files(parent_project, instance_path)
+            self._copy_parent_files(parent_project, instance_slug, instance_path)
 
             # 7. Clone DB (la DB source s'appelle toujours 'wordpress')
             wp_logger.log_system_info(f"Cloning database wordpress -> {db_name}")
@@ -289,12 +304,12 @@ class DevInstanceService:
             # parasitaient les tentatives suivantes.
             wp_logger.log_system_info(f"Creation failed — cleaning up {instance_full_name}")
             self._cleanup_failed_creation(
-                instance_path, instance_full_name, parent_project,
+                instance_path, instance_slug, instance_full_name, parent_project,
                 db_name if db_created else None
             )
             raise
 
-    def _copy_parent_files(self, parent_project, instance_path):
+    def _copy_parent_files(self, parent_project, instance_slug, instance_path):
         """Copie wp-content du parent vers l'instance.
 
         - thèmes : TOUS copiés (l'ancienne version ne copiait que des
@@ -314,13 +329,13 @@ class DevInstanceService:
             if not os.path.isdir(source):
                 continue
             wp_logger.log_system_info(f"Copying {subdir} from parent")
-            result = subprocess.run(
-                ['sudo', 'rsync', '-a', '--exclude=.git',
-                 f"{source}/", os.path.join(target_wp_content, subdir) + '/'],
-                capture_output=True, text=True, timeout=600
-            )
-            if result.returncode != 0:
-                raise Exception(f"Échec de la copie de {subdir}: {result.stderr.strip()}")
+            # Le helper recompose lui-même source et destination à partir du
+            # projet et du slug : aucun chemin fabriqué ici n'arrive jusqu'à
+            # root, et il refuse un sous-dossier qui sortirait de wp-content.
+            try:
+                root_helpers.copy_wp_content(parent_project, instance_slug, subdir)
+            except root_helpers.RootHelperError as exc:
+                raise Exception(f"Échec de la copie de {subdir}: {exc}")
 
         # uploads : symlink relatif vers le parent
         parent_uploads = os.path.join(parent_wp_content, 'uploads')
@@ -329,11 +344,11 @@ class DevInstanceService:
             os.symlink(f"../../../../{parent_project}/wp-content/uploads", target_link)
             wp_logger.log_system_info("Symlink created for uploads -> parent")
 
-        # Propriété des fichiers copiés
-        subprocess.run(
-            ['sudo', 'chown', '-R', 'dev-server:dev-server', target_wp_content],
-            capture_output=True, timeout=120
-        )
+        # Plus de chown ici : le helper repose déjà la propriété sur chaque
+        # sous-dossier qu'il copie, et tout le reste (wp-content, lien uploads)
+        # est créé par l'application, donc déjà à elle. Le lien `uploads`
+        # ci-dessus ne risquait rien de toute façon — `chown -R` ne descend
+        # pas dans un lien symbolique et n'en modifie pas la cible.
 
     def _verify_cloned_db(self, parent_project, db_name):
         """Vérifie que la DB clonée contient au moins une table."""
@@ -361,7 +376,8 @@ class DevInstanceService:
             raise Exception(f"Échec du clonage de la DB {db_name} - aucune table créée")
         wp_logger.log_system_info(f"DB verification successful: {table_count} tables in {db_name}")
 
-    def _cleanup_failed_creation(self, instance_path, instance_full_name, parent_project, db_name):
+    def _cleanup_failed_creation(self, instance_path, instance_slug, instance_full_name,
+                                 parent_project, db_name):
         """Supprime les artefacts d'une création échouée (best-effort)."""
         from app.utils.logger import wp_logger
 
@@ -375,8 +391,10 @@ class DevInstanceService:
         # Dossier de l'instance
         if instance_path and os.path.isdir(instance_path):
             try:
-                subprocess.run(['sudo', 'rm', '-rf', instance_path],
-                               capture_output=True, timeout=60)
+                # (parent, slug) et non un chemin : le helper le recompose sous
+                # projets/ et refuse un slug vide, qui aurait fait porter le
+                # rm -rf sur .dev-instances/ tout entier.
+                root_helpers.delete_instance(parent_project, instance_slug)
                 wp_logger.log_system_info(f"Cleanup: removed {instance_path}")
             except Exception as e:
                 wp_logger.log_system_info(f"Cleanup: folder removal failed: {e}")
@@ -578,18 +596,16 @@ networks:
             wp_logger.log_system_info(f"Erreur lors de la suppression du conteneur: {str(e)}")
             # Continuer même si le conteneur n'existe pas
 
-        # 2. Supprimer les fichiers de l'instance (avec sudo car wp-content peut appartenir à www-data)
+        # 2. Supprimer les fichiers de l'instance (en root car wp-content peut
+        # appartenir à www-data) — le helper reconstruit le chemin depuis le
+        # projet parent et le slug, qu'il valide tous les deux.
         instance_path = self.instance_path(instance)
         if os.path.exists(instance_path):
             try:
-                result = subprocess.run(
-                    ['sudo', 'rm', '-rf', instance_path],
-                    capture_output=True, text=True, timeout=60
-                )
-                if result.returncode == 0:
-                    wp_logger.log_system_info(f"Fichiers supprimés: {instance_path}")
-                else:
-                    wp_logger.log_system_info(f"Erreur suppression fichiers: {result.stderr}")
+                root_helpers.delete_instance(instance.parent_project, instance.slug)
+                wp_logger.log_system_info(f"Fichiers supprimés: {instance_path}")
+            except root_helpers.RootHelperError as e:
+                wp_logger.log_system_info(f"Erreur suppression fichiers: {e}")
             except Exception as e:
                 wp_logger.log_system_info(f"Erreur lors de la suppression des fichiers: {str(e)}")
 

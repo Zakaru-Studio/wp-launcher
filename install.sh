@@ -103,10 +103,34 @@ if [ -d "$APP_DIR/scripts/root" ]; then
     echo -e "${YELLOW}Installation des helpers racine dans $WPL_ROOT_DIR...${NC}"
     sudo install -d -o root -g root -m 0755 "$WPL_ROOT_DIR"
     sudo install -o root -g root -m 0755 "$APP_DIR"/scripts/root/wpl-*.sh "$WPL_ROOT_DIR/"
+
+    # Les scripts ont besoin de savoir où vit le dépôt et sous quel compte
+    # tourne l'application. Ça ne peut pas passer par l'environnement : sudo
+    # applique env_reset, et s'il ne le faisait pas, exporter WPL_BASE_DIR
+    # suffirait à faire opérer root ailleurs. D'où ce fichier, écrit une fois
+    # par l'administrateur et appartenant à root.
+    sudo tee "$WPL_ROOT_DIR/wpl.conf" >/dev/null <<EOF
+# Généré par install.sh — ne pas modifier depuis l'application.
+WPL_BASE_DIR="$APP_DIR"
+WPL_DEV_USER="$(id -un)"
+EOF
+    sudo chown root:root "$WPL_ROOT_DIR/wpl.conf"
+    sudo chmod 0644 "$WPL_ROOT_DIR/wpl.conf"
+
     echo -e "  ✅ $(ls "$APP_DIR"/scripts/root/wpl-*.sh | wc -l) scripts installés en root:root"
+    echo -e "     wpl.conf : base=$APP_DIR utilisateur=$(id -un)"
     echo -e "     ${YELLOW}Les règles sudo correspondantes sont dans"
     echo -e "     scripts/root/sudoers.wp-launcher — à installer une fois que"
     echo -e "     l'application les utilise réellement.${NC}"
+fi
+
+# Accès en écriture partagé avec les conteneurs. Opération d'installation,
+# volontairement ici et pas dans l'application : celle-ci n'a aucune raison de
+# pouvoir modifier des groupes, et sa règle sudo ne le lui permet pas.
+if getent group www-data >/dev/null && ! id -nG "$(id -un)" | tr ' ' '\n' | grep -qx www-data; then
+    echo -e "${YELLOW}Ajout de $(id -un) au groupe www-data...${NC}"
+    sudo usermod -a -G www-data "$(id -un)"
+    echo -e "  ✅ ajouté — ${YELLOW}déconnexion/reconnexion nécessaire pour que ce soit effectif${NC}"
 fi
 
 # 5. Fichier .env

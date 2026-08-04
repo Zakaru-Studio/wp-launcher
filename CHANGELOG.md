@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- The application no longer needs `NOPASSWD: ALL`. It used to run 81 `sudo
+  chown/chmod/find/rm/rsync/cp` calls on paths it composed itself, so a single
+  controllable value anywhere in that surface was a root shell. Those calls now
+  go through six root-owned helper scripts (`scripts/root/`, installed to
+  `/opt/wp-launcher-root` — outside the repository, which the app can rewrite)
+  that take an intention and a project name rather than a command. Each one
+  revalidates its arguments and resolves the final path with `realpath` before
+  checking it still sits under `projets/` or `containers/`, so a directory
+  swapped for a symlink is refused instead of followed. `scripts/root/sudoers.wp-launcher`
+  ships the closed command list that replaces the blanket rule, along with the
+  switchover order.
+- Deleting a dev instance whose slug resolved to the empty string expanded to
+  `rm -rf projets/<parent>/.dev-instances/`, taking every instance of that
+  project with it. `clean_username_for_slug` can return an empty string for a
+  sufficiently unusual username, and the existence check passed on the
+  truncated path. The helper rejects an empty name.
+- Reviewing the helpers turned up three ways back to root that the rewiring had
+  left open, all fixed before the sudoers switch: `resolve_under` validated its
+  target but never its *root*, so a derived root the app could replace with a
+  symlink (`.dev-instances`, `wp-content`) made the prefix check pass against
+  the link's target — enough to turn deleting an instance into `rm -rf /etc/ssl`;
+  the rsync destination in `wpl-copy-wp-content.sh` was unvalidated, so a
+  symlinked `plugins` directory let root overwrite the helper scripts
+  themselves; and `wpl-write-wp-config.sh` took a source *path*, which the
+  caller could swap for a symlink after the check, so the content now arrives
+  on stdin and lands via `rename` rather than `cp`.
+
 ### Changed
 - New sites are created on the latest supported PHP version (8.5 today)
   instead of 8.4. The default is now derived from `SUPPORTED_PHP_VERSIONS`

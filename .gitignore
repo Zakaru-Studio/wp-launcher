@@ -63,3 +63,5 @@ exposed_sites.json
 
 # WordPress - Docker template
 docker-template/wordpress/
+# Config des helpers racine, générée par install.sh hors du dépôt
+scripts/root/wpl.conf

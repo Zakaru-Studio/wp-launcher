@@ -652,11 +652,13 @@ collation-server = utf8mb4_unicode_ci
                 os.remove(tmp_path)
                 
             except PermissionError:
-                # wp-config.php appartient à www-data : passer par le helper,
-                # qui exige une source régulière dans /tmp et refuse un lien
-                # symbolique — sinon root aurait recopié n'importe quel fichier.
+                # wp-config.php appartient à www-data : passer par le helper.
+                # Le contenu lui est transmis sur stdin plutôt que par un
+                # chemin — un temporaire remplacé par un lien symbolique entre
+                # la vérification du helper et sa lecture aurait fait recopier
+                # n'importe quel fichier de root.
                 wp_logger.log_system_info(f"Écriture privilégiée de {wp_config_file}")
-                root_helpers.write_wp_config(project_name, tmp_path)
+                root_helpers.write_wp_config(project_name, content)
                 os.remove(tmp_path)
             
             wp_logger.log_system_info(f"Configuration WordPress mise à jour pour {project_name}")

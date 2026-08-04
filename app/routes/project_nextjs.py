@@ -8,6 +8,7 @@ import json
 import subprocess
 from flask import Blueprint, request, jsonify, current_app
 from app.utils.logger import wp_logger
+from app.utils import root_helpers
 from app.models.project import Project
 from app.config.docker_config import DockerConfig
 from app.middleware.auth_middleware import login_required, admin_required
@@ -407,41 +408,21 @@ def fix_permissions(project_name):
             try:
                 print(f"🔧 [FIX_PERMISSIONS] Correction de {description}: {path}")
                 
-                # Première méthode : chown simple
-                result = subprocess.run([
-                    'sudo', 'chown', '-R', f'{current_user}:{current_user}', path
-                ], capture_output=True, text=True, timeout=30)
-                
-                if result.returncode == 0:
-                    print(f"✅ [FIX_PERMISSIONS] Propriétaire modifié pour {description}")
-                else:
-                    print(f"⚠️ [FIX_PERMISSIONS] Erreur chown pour {description}: {result.stderr}")
+                # Le chown partait en `sudo` sur un chemin composé ici : une
+                # porte vers root tant que l'utilisateur applicatif garde
+                # NOPASSWD. Le helper ne reçoit plus qu'une intention et un
+                # chemin qu'il revalide de son côté.
+                # Profil `dev` : tout au développeur, 755 sur les dossiers et
+                # 644 sur les fichiers — le chown et les deux `find … chmod`
+                # qui suivaient, à l'identique et en une passe.
+                try:
+                    root_helpers.fix_perms(path, 'dev', timeout=300)
+                except root_helpers.RootHelperError as exc:
+                    print(f"⚠️ [FIX_PERMISSIONS] Erreur permissions pour {description}: {exc}")
                     return False
-                
-                # Définir les permissions appropriées
-                # Dossiers : 755 (rwxr-xr-x) - lecture/écriture pour le propriétaire, lecture pour les autres
-                # Fichiers : 644 (rw-r--r--) - lecture/écriture pour le propriétaire, lecture pour les autres
-                
-                # Permissions des dossiers
-                result = subprocess.run([
-                    'find', path, '-type', 'd', '-exec', 'chmod', '755', '{}', '+'
-                ], capture_output=True, text=True, timeout=30)
-                
-                if result.returncode == 0:
-                    print(f"✅ [FIX_PERMISSIONS] Permissions dossiers modifiées pour {description}")
-                else:
-                    print(f"⚠️ [FIX_PERMISSIONS] Erreur permissions dossiers: {result.stderr}")
-                
-                # Permissions des fichiers
-                result = subprocess.run([
-                    'find', path, '-type', 'f', '-exec', 'chmod', '644', '{}', '+'
-                ], capture_output=True, text=True, timeout=30)
-                
-                if result.returncode == 0:
-                    print(f"✅ [FIX_PERMISSIONS] Permissions fichiers modifiées pour {description}")
-                else:
-                    print(f"⚠️ [FIX_PERMISSIONS] Erreur permissions fichiers: {result.stderr}")
-                
+
+                print(f"✅ [FIX_PERMISSIONS] Profil dev appliqué pour {description}")
+
                 # Permissions spéciales pour les dossiers d'uploads (775 pour permettre l'écriture web)
                 uploads_path = os.path.join(path, 'wp-content', 'uploads')
                 if os.path.exists(uploads_path):

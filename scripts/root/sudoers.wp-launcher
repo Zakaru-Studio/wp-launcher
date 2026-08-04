@@ -1,8 +1,12 @@
-# Règles sudo de WP Launcher — à installer dans /etc/sudoers.d/wp-launcher
+# Règles sudo de WP Launcher — à installer dans /etc/sudoers.d/wp-launcher-root
 #
 #     sudo install -o root -g root -m 0440 \
-#         scripts/root/sudoers.wp-launcher /etc/sudoers.d/wp-launcher
+#         scripts/root/sudoers.wp-launcher /etc/sudoers.d/wp-launcher-root
 #     sudo visudo -c
+#
+# Le nom de fichier diffère volontairement des anciennes règles wp-launcher et
+# wp-launcher-delete, pour que l'installation de celles-ci ne les écrase pas
+# en silence : elles doivent être retirées explicitement (voir plus bas).
 #
 # Remplace un `NOPASSWD: ALL` par une liste fermée. L'application n'appelle
 # plus `sudo chown/chmod/find/rm/rsync` sur des chemins qu'elle compose
@@ -34,12 +38,51 @@ Cmnd_Alias WPL_SERVICE = /usr/bin/systemctl --no-block restart wp-launcher.servi
 
 dev-server ALL=(root) NOPASSWD: WPL_ROOT, WPL_SERVICE
 
+# ─── Bascule : à faire dans cet ordre, une fois l'app rebranchée ─────────
+#
+#   1. Installer ce fichier (voir en-tête) et vérifier `sudo visudo -c`.  [fait]
+#   2. Retirer les règles devenues inutiles ou dangereuses :              [fait]
+#
+#        sudo rm /etc/sudoers.d/wp-launcher         # manage_hosts.sh, fichier inexistant
+#        sudo rm /etc/sudoers.d/wp-launcher-delete  # script dans le dépôt, modifiable par l'app
+#
+#      Toutes deux désignaient un chemin que l'application peut écrire — le
+#      premier n'existait même pas, il suffisait de le créer. Elles donnaient
+#      donc root en une ligne. Plus aucun code ne les appelle.
+#
+#   3. Exercer chaque opération depuis l'UI : création, suppression, snapshot,
+#      clone, instance de dev, bascule de version PHP.
+#
+#   4. Rebrancher les derniers appels sudo de docker_service.py, seul fichier
+#      qui en contienne encore. Tant qu'ils sont là, l'étape 5 casse l'app.
+#
+#   5. En dernier seulement, retirer la ligne 60 de /etc/sudoers :
+#
+#        dev-server ALL=(ALL) NOPASSWD:ALL
+#
+#      Toujours via `sudo visudo`, jamais avec un éditeur direct : visudo
+#      valide la syntaxe avant d'écrire, une faute de frappe dans ce fichier
+#      rend sudo inutilisable sur la machine.
+#
+#      Cette suppression n'enferme personne dehors : dev-server appartient au
+#      groupe `sudo`, donc la règle `%sudo ALL=(ALL:ALL) ALL` lui laisse
+#      l'accès administrateur avec mot de passe. Seule l'application perd son
+#      root implicite, en gardant les commandes listées ci-dessus.
+#
 # Volontairement absent de cette liste :
 #
 #   usermod -a -G www-data <user>
 #       Opération d'installation, pas d'exécution. Elle appartient à
-#       install.sh, lancé une fois par un administrateur — pas à une app qui
+#       install.sh — qui la fait désormais réellement — et non à une app qui
 #       tourne en permanence et n'a aucune raison de modifier des groupes.
+#
+#   Toute transmission de variables d'environnement (env_keep)
+#       Les scripts lisent leur configuration dans
+#       /opt/wp-launcher-root/wpl.conf, écrit par install.sh et appartenant à
+#       root. Autoriser WPL_BASE_DIR ou WPL_DEV_USER à franchir sudo
+#       reviendrait à laisser l'appelant choisir sur quelle arborescence root
+#       opère et à qui il donne les fichiers — soit exactement ce que les
+#       validations de chemin cherchent à empêcher.
 #
 #   manage_hosts.sh
 #       Ancienne règle NOPASSWD pointant sur un fichier qui n'existe pas, dans

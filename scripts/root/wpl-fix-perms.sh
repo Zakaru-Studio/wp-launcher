@@ -57,33 +57,48 @@ fi
 RESOLVED="$(resolve_under "$TARGET" "$ROOT_DIR")"
 
 # ─── 4. profils ───────────────────────────────────────────────────────────
-# `-exec … +` et non `\;` : un fork par fichier sur une arborescence
-# d'uploads volumineuse prenait des heures et bloquait le démarrage d'Apache.
+# Modes symboliques et `chmod -R` plutôt que `find -type f -exec chmod` :
+#
+#   — sûreté. `chmod` suit les liens symboliques qu'on lui passe, et toute
+#     l'arborescence traitée ici est inscriptible par l'application. Entre le
+#     moment où find décide qu'un chemin est un dossier et celui où chmod
+#     s'exécute, ce chemin peut être devenu un lien vers un binaire de root :
+#     un `chmod g+s` dessus donnait un exécutable setgid root. `chmod -R`,
+#     lui, ignore les liens rencontrés pendant la descente (vérifié).
+#   — vitesse. C'est aussi un seul processus au lieu d'un par lot, là où un
+#     fork par fichier sur des uploads volumineux prenait des heures et
+#     bloquait le démarrage d'Apache.
+#
+# `X` (majuscule) donne le bit d'exécution aux dossiers seulement — et aux
+# fichiers qui l'avaient déjà, ce qui préserve les scripts livrés par un
+# thème ou un plugin, là où un 664 en dur les cassait.
 apply() {
-    local owner="$1" dirmode="$2" filemode="$3" setgid="${4:-}"
+    local owner="$1" mode="$2" setgid="${3:-}"
     chown -R "$owner" "$RESOLVED"
-    find "$RESOLVED" -type d -exec chmod "$dirmode" {} +
-    find "$RESOLVED" -type f -exec chmod "$filemode" {} +
-    # setgid sur les dossiers : les fichiers créés ensuite héritent du groupe
-    # du répertoire plutôt que du groupe primaire de qui les crée. Sans ça,
-    # un fichier déposé par le conteneur sort du groupe partagé et redevient
-    # inaccessible en écriture depuis l'hôte.
+    chmod -R "$mode" "$RESOLVED"
+    # setgid : les fichiers créés ensuite héritent du groupe du répertoire
+    # plutôt que du groupe primaire de qui les crée. Sans ça, un fichier
+    # déposé par le conteneur sort du groupe partagé et redevient
+    # inaccessible en écriture depuis l'hôte. Le bit atterrit aussi sur les
+    # fichiers, ce que la passe `find` évitait ; c'est le prix de la sûreté
+    # ci-dessus, et il est modeste — un setgid dont le groupe est www-data ou
+    # le développeur ne donne rien de plus que ce que l'appelant a déjà.
     if [ -n "$setgid" ]; then
-        find "$RESOLVED" -type d -exec chmod g+s {} +
+        chmod -R g+s "$RESOLVED"
     fi
 }
 
 case "$PROFILE" in
     # Le développeur possède, www-data écrit via le groupe. Profil courant.
-    shared)      apply "$DEV_USER:$WWW_USER" 775 664 setgid ;;
+    shared)      apply "$DEV_USER:$WWW_USER" u=rwX,g=rwX,o=rX setgid ;;
     # Tout à www-data : le conteneur écrit, l'hôte lit.
-    www)         apply "$WWW_USER:$WWW_USER" 775 664 setgid ;;
+    www)         apply "$WWW_USER:$WWW_USER" u=rwX,g=rwX,o=rX setgid ;;
     # Tout au développeur : édition depuis l'hôte.
-    dev)         apply "$DEV_USER:$DEV_USER" 755 644 ;;
+    dev)         apply "$DEV_USER:$DEV_USER" u=rwX,g=rX,o=rX ;;
     # wp-content côté conteneur, plus restrictif.
-    container)   apply "$WWW_USER:$WWW_USER" 755 644 ;;
+    container)   apply "$WWW_USER:$WWW_USER" u=rwX,g=rX,o=rX ;;
     # Uploads : www-data doit pouvoir créer des fichiers.
-    uploads)     apply "$DEV_USER:$WWW_USER" 775 664 setgid ;;
+    uploads)     apply "$DEV_USER:$WWW_USER" u=rwX,g=rwX,o=rX setgid ;;
 
     # wp-config.php seul : lisible par le conteneur uniquement.
     wp-config-lock)

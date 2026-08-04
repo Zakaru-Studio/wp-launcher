@@ -8,6 +8,7 @@ import subprocess
 from flask import Blueprint, request, jsonify, current_app
 from werkzeug.utils import secure_filename
 from app.utils.logger import wp_logger
+from app.utils import root_helpers
 from app.utils.project_utils import secure_project_name
 from app.models.project import Project
 from app.utils.port_conflict_resolver import PortConflictResolver
@@ -319,38 +320,27 @@ def fix_permissions(project_name):
 
                 # Propriétaire configurable (par défaut current_user:www-data)
                 ownership = owner or f'{current_user}:www-data'
-                chown_cmd = ['sudo', 'chown', '-R']
-                if not follow_symlinks:
-                    chown_cmd.append('-h')
-                chown_cmd.extend([ownership, path])
 
-                result = subprocess.run(chown_cmd, capture_output=True, text=True, timeout=60)
+                # Le chown et les deux chmod partaient en `sudo` sur un chemin
+                # composé ici : trois portes vers root tant que l'utilisateur
+                # applicatif garde NOPASSWD. Le helper ne reçoit plus qu'une
+                # intention et un chemin qu'il revalide lui-même.
+                # Les deux seules combinaisons demandées par les appelants ont
+                # chacune leur profil : `www` pour www-data:www-data en 775/664,
+                # `shared` pour « le développeur possède, www-data écrit via le
+                # groupe ». Les modes sont identiques à ceux d'avant.
+                # `follow_symlinks` reste sans effet : sous `-R`, chown ne suit
+                # jamais la cible d'un lien, donc le `-h` d'origine était déjà
+                # un no-op et le helper se comporte pareil.
+                profile = 'www' if owner == 'www-data:www-data' else 'shared'
 
-                if result.returncode == 0:
-                    print(f"✅ [FIX_PERMISSIONS] Propriétaire modifié pour {description} ({ownership})")
-                else:
-                    print(f"⚠️ [FIX_PERMISSIONS] Erreur chown pour {description}: {result.stderr}")
+                try:
+                    root_helpers.fix_perms(path, profile, timeout=300)
+                except root_helpers.RootHelperError as exc:
+                    print(f"⚠️ [FIX_PERMISSIONS] Erreur permissions pour {description}: {exc}")
                     return False
 
-                # Permissions des dossiers : 775 (www-data peut écrire)
-                result = subprocess.run([
-                    'find', '-P', path, '-type', 'd', '-exec', 'chmod', '775', '{}', '+'
-                ], capture_output=True, text=True, timeout=60)
-
-                if result.returncode == 0:
-                    print(f"✅ [FIX_PERMISSIONS] Permissions dossiers 775 pour {description}")
-                else:
-                    print(f"⚠️ [FIX_PERMISSIONS] Erreur permissions dossiers: {result.stderr}")
-
-                # Permissions des fichiers : 664 (www-data peut écrire)
-                result = subprocess.run([
-                    'find', '-P', path, '-type', 'f', '-exec', 'chmod', '664', '{}', '+'
-                ], capture_output=True, text=True, timeout=60)
-
-                if result.returncode == 0:
-                    print(f"✅ [FIX_PERMISSIONS] Permissions fichiers 664 pour {description}")
-                else:
-                    print(f"⚠️ [FIX_PERMISSIONS] Erreur permissions fichiers: {result.stderr}")
+                print(f"✅ [FIX_PERMISSIONS] Profil {profile} appliqué pour {description} ({ownership})")
 
                 # Réappliquer des ACL permissives pour dev-server et www-data
                 apply_permissive_acls(path, description)
@@ -382,13 +372,20 @@ def fix_permissions(project_name):
             print(f"ℹ️ [FIX_PERMISSIONS] Pas de dossier containers WordPress: {container_wp_path}")
         
         # Si c'est une instance dev, corriger aussi les permissions de l'instance elle-même
+        #
+        # La valeur de retour est prise en compte : elle était jetée, si bien
+        # qu'une instance en échec était quand même comptée dans
+        # `instances_fixed` et la route répondait « succès ».
         instances_fixed = []
+        instances_failed = []
         if is_dev_instance and instance_slug:
             instance_path = os.path.join(project_path, '.dev-instances', instance_slug)
             if os.path.exists(instance_path):
                 print(f"🔧 [FIX_PERMISSIONS] Correction instance dev: {instance_path}")
-                fix_directory_permissions(instance_path, f"instance {instance_slug}")
-                instances_fixed.append(instance_slug)
+                if fix_directory_permissions(instance_path, f"instance {instance_slug}"):
+                    instances_fixed.append(instance_slug)
+                else:
+                    instances_failed.append(instance_slug)
         else:
             # Corriger toutes les instances dev du projet
             dev_instances_path = os.path.join(project_path, '.dev-instances')
@@ -397,8 +394,13 @@ def fix_permissions(project_name):
                     instance_path = os.path.join(dev_instances_path, slug)
                     if os.path.isdir(instance_path):
                         print(f"🔧 [FIX_PERMISSIONS] Correction instance dev: {slug}")
-                        fix_directory_permissions(instance_path, f"instance {slug}")
-                        instances_fixed.append(slug)
+                        if fix_directory_permissions(instance_path, f"instance {slug}"):
+                            instances_fixed.append(slug)
+                        else:
+                            instances_failed.append(slug)
+        if instances_failed:
+            success = False
+            print(f"❌ [FIX_PERMISSIONS] Instances en échec: {', '.join(instances_failed)}")
         
         # Redémarrer le projet s'il était en cours d'exécution
         if was_running and docker_service:
@@ -422,9 +424,14 @@ def fix_permissions(project_name):
                 }
             })
         else:
+            message = f'Erreur lors de la correction des permissions pour {target_project}'
+            if instances_failed:
+                message += f" — instance(s) en échec : {', '.join(instances_failed)}"
             return jsonify({
                 'success': False,
-                'message': f'Erreur lors de la correction des permissions pour {target_project}'
+                'message': message,
+                'details': {'instances_fixed': instances_fixed,
+                            'instances_failed': instances_failed}
             })
         
     except Exception as e:
@@ -822,56 +829,21 @@ def fix_wordpress_permissions(project_name):
             # Propriétaire: current_user:www-data (dev-server peut éditer, www-data peut lire/écrire via groupe)
             ownership = f'{current_user}:www-data'
 
-            # 1. Corriger le propriétaire de wp-content (sans suivre symlinks)
-            result = subprocess.run(
-                ['sudo', 'chown', '-h', ownership, wp_content_path],
-                capture_output=True, text=True, timeout=10
-            )
-            if result.returncode == 0:
-                commands_executed.append(f'{label}: chown {ownership} wp-content')
-                print(f"✅ [{label}] Propriétaire wp-content changé → {ownership}")
-            else:
-                errors.append(f'{label} chown wp-content: {result.stderr}')
-
-            # 2. Chmod wp-content
-            result = subprocess.run(
-                ['sudo', 'chmod', '775', wp_content_path],
-                capture_output=True, text=True, timeout=10
-            )
-            if result.returncode == 0:
-                commands_executed.append(f'{label}: chmod 775 wp-content')
-            else:
-                errors.append(f'{label} chmod wp-content: {result.stderr}')
-
-            # Corriger les sous-dossiers (seulement si ce ne sont pas des symlinks)
-            for subdir in ['uploads', 'plugins', 'themes', 'upgrade', 'upgrade-temp-backup']:
-                subdir_path = os.path.join(wp_content_path, subdir)
-                if os.path.exists(subdir_path):
-                    # Vérifier si c'est un symlink
-                    if os.path.islink(subdir_path):
-                        print(f"ℹ️ [{label}] {subdir} est un symlink, ignoré")
-                        continue
-
-                    # chown récursif sans suivre les symlinks
-                    result = subprocess.run(
-                        ['sudo', 'chown', '-R', '-h', ownership, subdir_path],
-                        capture_output=True, text=True, timeout=60
-                    )
-                    if result.returncode == 0:
-                        commands_executed.append(f'{label}: chown -R {ownership} {subdir}')
-                        print(f"✅ [{label}] Propriétaire {subdir} changé → {ownership}")
-                    else:
-                        errors.append(f'{label} chown {subdir}: {result.stderr}')
-
-                    # chmod récursif
-                    result = subprocess.run(
-                        ['sudo', 'chmod', '-R', '775', subdir_path],
-                        capture_output=True, text=True, timeout=60
-                    )
-                    if result.returncode == 0:
-                        commands_executed.append(f'{label}: chmod -R 775 {subdir}')
-                    else:
-                        errors.append(f'{label} chmod {subdir}: {result.stderr}')
+            # Douze appels `sudo` sur des chemins composés ici — le wp-content
+            # puis un chown et un chmod par sous-dossier — pour une seule
+            # intention : « le développeur possède, www-data écrit via le
+            # groupe ». C'est le profil `shared`, appliqué en une passe.
+            # Passer par la racine du wp-content plutôt que par une liste de
+            # sous-dossiers ne rate plus mu-plugins ni languages, et reste sûr
+            # pour les uploads liés symboliquement d'une instance de dev :
+            # `chown -R` ne descend pas dans un lien et n'en touche pas la
+            # cible, exactement ce que garantissait le test islink.
+            try:
+                root_helpers.fix_perms(wp_content_path, 'shared', timeout=300)
+                commands_executed.append(f'{label}: profil shared ({ownership}) sur wp-content')
+                print(f"✅ [{label}] Permissions wp-content appliquées → {ownership}")
+            except root_helpers.RootHelperError as exc:
+                errors.append(f'{label} permissions wp-content: {exc}')
 
         # Fonction helper pour corriger le dossier WordPress dans containers/
         def fix_container_wordpress_permissions(container_wp_path, label, commands_executed, errors):
@@ -885,36 +857,18 @@ def fix_wordpress_permissions(project_name):
             # Nettoyer les ACL Samba
             clean_and_reapply_acls(container_wp_path, label, commands_executed, errors)
 
-            # Propriétaire www-data:www-data (Apache doit pouvoir écrire pour les mises à jour)
-            result = subprocess.run(
-                ['sudo', 'chown', '-R', 'www-data:www-data', container_wp_path],
-                capture_output=True, text=True, timeout=120
-            )
-            if result.returncode == 0:
-                commands_executed.append(f'{label}: chown -R www-data:www-data wordpress/')
+            # Profil `container` : www-data propriétaire (Apache doit pouvoir
+            # écrire pour les mises à jour), 755 sur les dossiers et 644 sur les
+            # fichiers — le standard WordPress, et exactement ce que faisaient
+            # le chown et les deux `find … chmod` qui partaient en sudo ici.
+            # Le helper reconnaît seul la racine containers/ : ce n'est plus
+            # l'app qui décide du chemin exécuté en root.
+            try:
+                root_helpers.fix_perms(container_wp_path, 'container', timeout=300)
+                commands_executed.append(f'{label}: profil container (www-data:www-data, 755/644) sur wordpress/')
                 print(f"✅ [{label}] Propriétaire WordPress core changé → www-data:www-data")
-            else:
-                errors.append(f'{label} chown wordpress/: {result.stderr}')
-
-            # Permissions: 755 dirs, 644 files (standard WordPress)
-            # sudo nécessaire car les fichiers viennent d'être chown → www-data
-            result = subprocess.run(
-                ['sudo', 'find', '-P', container_wp_path, '-type', 'd', '-exec', 'chmod', '755', '{}', '+'],
-                capture_output=True, text=True, timeout=60
-            )
-            if result.returncode == 0:
-                commands_executed.append(f'{label}: chmod 755 wordpress/ dirs')
-            else:
-                errors.append(f'{label} chmod dirs: {result.stderr}')
-
-            result = subprocess.run(
-                ['sudo', 'find', '-P', container_wp_path, '-type', 'f', '-exec', 'chmod', '644', '{}', '+'],
-                capture_output=True, text=True, timeout=60
-            )
-            if result.returncode == 0:
-                commands_executed.append(f'{label}: chmod 644 wordpress/ files')
-            else:
-                errors.append(f'{label} chmod files: {result.stderr}')
+            except root_helpers.RootHelperError as exc:
+                errors.append(f'{label} permissions wordpress/: {exc}')
         
         # Exécuter les commandes de correction de permissions
         commands_executed = []

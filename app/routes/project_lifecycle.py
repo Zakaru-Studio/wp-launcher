@@ -20,6 +20,7 @@ from app.utils.project_utils import (
 from app.utils.database_utils import (
     create_clean_wordpress_database, intelligent_mysql_wait
 )
+from app.utils import root_helpers
 from app.utils.logger import wp_logger
 from app.models.project import Project
 from app.utils.port_conflict_resolver import PortConflictResolver
@@ -332,11 +333,12 @@ def _create_wordpress_project(project_name, editable_path, container_path, enabl
         wp_content_path = os.path.join(editable_path, 'wp-content')
         if os.path.exists(wp_content_path):
             try:
-                import subprocess
-                current_user = os.getenv('USER', 'dev-server')
-                subprocess.run(['sudo', 'chown', '-R', f'{current_user}:{current_user}', wp_content_path], check=True)
-                subprocess.run(['chmod', '-R', '755', wp_content_path], check=True)
-                
+                # Profil `dev` : c'est l'application qui écrit les fichiers de
+                # base juste après, elle doit donc posséder l'arborescence.
+                # Le helper fait chown et modes en une passe, sur un chemin
+                # qu'il revalide comme étant sous projets/.
+                root_helpers.fix_perms(wp_content_path, 'dev')
+
                 if debug_logger:
                     debug_logger.success("PRE_FIX_WP_CONTENT_PERMISSIONS", "wp-content permissions fixed before file creation")
                 print(f"✅ Permissions wp-content pré-corrigées pour {project_name}")
@@ -361,17 +363,17 @@ def _create_wordpress_project(project_name, editable_path, container_path, enabl
         # Corriger les permissions après la création aussi
         if os.path.exists(wp_content_path):
             try:
-                import subprocess
-                current_user = os.getenv('USER', 'dev-server')
-                subprocess.run(['sudo', 'chown', '-R', f'{current_user}:{current_user}', wp_content_path], check=True)
-                subprocess.run(['chmod', '-R', '755', wp_content_path], check=True)
+                # Même profil `dev` qu'avant la création des fichiers : ceux
+                # qui viennent d'être écrits repassent au développeur.
+                root_helpers.fix_perms(wp_content_path, 'dev')
                 # Créer le dossier uploads s'il n'existe pas
                 uploads_dir = os.path.join(wp_content_path, 'uploads')
                 if not os.path.exists(uploads_dir):
                     os.makedirs(uploads_dir, mode=0o775, exist_ok=True)
-                    subprocess.run(['sudo', 'chown', '-R', f'{current_user}:{current_user}', uploads_dir], check=True)
-                subprocess.run(['chmod', '-R', '775', uploads_dir], check=True)
-                
+                # Profil `uploads` : c'est le seul dossier où le conteneur doit
+                # pouvoir créer des fichiers dès le premier démarrage.
+                root_helpers.fix_perms(uploads_dir, 'uploads')
+
                 if debug_logger:
                     debug_logger.success("POST_FIX_WP_CONTENT_PERMISSIONS", "wp-content permissions fixed after file creation")
                 print(f"✅ Permissions wp-content post-corrigées pour {project_name}")

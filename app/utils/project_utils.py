@@ -4,7 +4,6 @@ Utilitaires pour la gestion et création des projets
 """
 import os
 import shutil
-import subprocess
 import json
 from werkzeug.utils import secure_filename
 from app.config.docker_config import DockerConfig
@@ -217,24 +216,19 @@ def create_default_wp_content(wp_content_dest):
     # S'assurer que le dossier wp-content existe
     os.makedirs(wp_content_dest, exist_ok=True)
     
+    # Défini hors du try : les messages et le rattrapage de permissions plus
+    # bas s'en servent, y compris lorsque la pose de permissions échoue.
+    current_user = os.getenv('USER', 'dev-server')
+
     # Appliquer les bonnes permissions au dossier wp-content AVANT de créer les fichiers
     try:
-        import subprocess
-        current_user = os.getenv('USER', 'dev-server')
-        
-        # Changer le propriétaire du dossier wp-content
-        subprocess.run(['sudo', 'chown', '-R', f'{current_user}:{current_user}', wp_content_dest], 
-                      check=True, capture_output=True)
-        
-        # Définir les permissions appropriées
-        subprocess.run(['chmod', '-R', '755', wp_content_dest], 
-                      check=True, capture_output=True)
-        
+        # Profil `dev` : l'utilisateur applicatif possède le dossier le temps
+        # d'y déposer le template, puisque c'est lui qui écrit les fichiers.
+        # Les permissions définitives (www-data) sont posées en fin de fonction.
+        root_helpers.fix_perms(wp_content_dest, 'dev')
         print(f"✅ Permissions wp-content configurées pour {current_user}")
-    except subprocess.CalledProcessError as e:
-        print(f"⚠️ Erreur lors de la configuration des permissions wp-content: {e}")
     except Exception as e:
-        print(f"⚠️ Erreur inattendue lors de la configuration des permissions: {e}")
+        print(f"⚠️ Erreur lors de la configuration des permissions wp-content: {e}")
     
     # Créer les dossiers de base
     try:
@@ -322,10 +316,11 @@ def create_default_wp_content(wp_content_dest):
                 print(f"❌ Erreur de permissions pour {index_file}: {e}")
                 # Essayer de corriger les permissions et réessayer
                 try:
-                    subprocess.run(['sudo', 'chown', current_user, os.path.dirname(index_file)], 
-                                  check=True, capture_output=True)
-                    subprocess.run(['chmod', '755', os.path.dirname(index_file)], 
-                                  check=True, capture_output=True)
+                    # Même profil `dev` que plus haut, pour rendre le dossier
+                    # inscriptible à l'utilisateur applicatif. La passe est
+                    # récursive là où l'ancien chown ne l'était pas : sans
+                    # conséquence, les permissions finales réécrivent l'arbre.
+                    root_helpers.fix_perms(os.path.dirname(index_file), 'dev')
                     with open(index_file, 'w') as f:
                         f.write(index_content)
                     print(f"✅ Fichier créé après correction des permissions: {index_file}")
@@ -381,25 +376,22 @@ def create_wordpress_base_files(project_path, credentials=None):
         project_name = os.path.basename(os.path.normpath(project_path))
         credentials = get_mysql_credentials(project_name)
 
+    # Défini hors du try : les deux rattrapages de permissions et la passe
+    # finale plus bas y font référence même si ce bloc échoue.
+    current_user = os.getenv('USER', 'dev-server')
+
     # S'assurer que le dossier du projet existe et a les bonnes permissions
     try:
-        import subprocess
-        current_user = os.getenv('USER', 'dev-server')
-        
         # Créer le dossier du projet s'il n'existe pas
         os.makedirs(project_path, exist_ok=True)
-        
-        # Appliquer les bonnes permissions au dossier du projet
-        subprocess.run(['sudo', 'chown', '-R', f'{current_user}:{current_user}', project_path], 
-                      check=True, capture_output=True)
-        subprocess.run(['chmod', '755', project_path], 
-                      check=True, capture_output=True)
-        
+
+        # Profil `dev` : .htaccess et wp-config.php sont écrits juste après par
+        # l'application elle-même, elle doit donc posséder le dossier.
+        root_helpers.fix_perms(project_path, 'dev')
+
         print(f"✅ Permissions du dossier projet configurées pour {current_user}")
-    except subprocess.CalledProcessError as e:
-        print(f"⚠️ Erreur lors de la configuration des permissions du projet: {e}")
     except Exception as e:
-        print(f"⚠️ Erreur inattendue lors de la configuration des permissions: {e}")
+        print(f"⚠️ Erreur lors de la configuration des permissions du projet: {e}")
     
     # Créer le fichier .htaccess
     htaccess_content = r"""# BEGIN WordPress
@@ -423,8 +415,7 @@ RewriteRule . /index.php [L]
     except PermissionError as e:
         print(f"❌ Erreur de permissions pour .htaccess: {e}")
         try:
-            subprocess.run(['sudo', 'chown', current_user, project_path], 
-                          check=True, capture_output=True)
+            root_helpers.fix_perms(project_path, 'dev')
             with open(htaccess_path, 'w') as f:
                 f.write(htaccess_content)
             print(f"✅ Fichier .htaccess créé après correction des permissions: {htaccess_path}")
@@ -575,8 +566,7 @@ require_once ABSPATH . 'wp-settings.php';
     except PermissionError as e:
         print(f"❌ Erreur de permissions pour wp-config.php: {e}")
         try:
-            subprocess.run(['sudo', 'chown', current_user, project_path], 
-                          check=True, capture_output=True)
+            root_helpers.fix_perms(project_path, 'dev')
             with open(wp_config_path, 'w') as f:
                 f.write(wp_config_content)
             print(f"✅ Fichier wp-config.php créé après correction des permissions: {wp_config_path}")
@@ -594,10 +584,9 @@ require_once ABSPATH . 'wp-settings.php';
     
     # Appliquer les permissions finales sur tous les fichiers créés
     try:
-        subprocess.run(['sudo', 'chown', '-R', f'{current_user}:{current_user}', project_path], 
-                      check=True, capture_output=True)
-        subprocess.run(['find', project_path, '-type', 'f', '-exec', 'chmod', '644', '{}', ';'], 
-                      check=True, capture_output=True)
+        # Profil `dev` : propriétaire utilisateur, dossiers 755, fichiers 644 —
+        # soit exactement le chown -R suivi du find -exec chmod 644.
+        root_helpers.fix_perms(project_path, 'dev')
         print("✅ Permissions finales appliquées aux fichiers de base WordPress")
     except Exception as e:
         print(f"⚠️ Erreur lors de l'application des permissions finales: {e}")
@@ -1625,20 +1614,26 @@ def _ensure_wordpress_docker_permissions(project_path, current_user):
     """S'assure que WordPress dans Docker peut écrire (www-data)"""
     try:
         print(f"🔧 Configuration permissions Docker WordPress...")
-        
-        # S'assurer que www-data est dans le groupe
-        subprocess.run(['sudo', 'usermod', '-a', '-G', 'www-data', current_user], 
-                      capture_output=True, text=True, timeout=10)
-        
-        # Forcer le groupe www-data sur tout le projet
-        result = subprocess.run([
-            'sudo', 'chgrp', '-R', 'www-data', project_path
-        ], capture_output=True, text=True, timeout=30)
-        
-        if result.returncode != 0:
-            print(f"⚠️ Erreur lors du changement de groupe: {result.stderr}")
+
+        # L'ajout de l'utilisateur au groupe www-data était fait ici par un
+        # `usermod`. C'est un prérequis d'installation, posé une fois pour
+        # toutes par install.sh : une application qui tourne en permanence n'a
+        # pas à pouvoir modifier les groupes système, et l'exposer via un
+        # helper reviendrait à garder ouverte la porte qu'on cherche à fermer.
+
+        # Forcer le groupe www-data sur tout le projet.
+        # Profil `shared` : dossiers 775, fichiers 664, groupe www-data — soit
+        # le chgrp -R suivi des chmod effectués plus bas, à deux différences
+        # près : il fixe aussi le PROPRIÉTAIRE au développeur (l'ancien chgrp
+        # ne touchait que le groupe, mais tout ce qui arrive ici lui appartient
+        # déjà), et il pose le setgid, qui maintient dans le groupe partagé les
+        # fichiers que le conteneur déposera ensuite.
+        try:
+            root_helpers.fix_perms(project_path, 'shared')
+        except root_helpers.RootHelperError as exc:
+            print(f"⚠️ Erreur lors du changement de groupe: {exc}")
             return False
-        
+
         # Permissions spéciales pour les dossiers critiques WordPress
         wp_critical_dirs = [
             os.path.join(project_path, 'wp-content'),
@@ -1650,23 +1645,16 @@ def _ensure_wordpress_docker_permissions(project_path, current_user):
         
         for dir_path in wp_critical_dirs:
             if os.path.exists(dir_path):
-                # Permissions 775 pour permettre l'écriture par le groupe
-                subprocess.run(['chmod', '775', dir_path], 
-                             capture_output=True, text=True, timeout=5)
-                # S'assurer du bon groupe
-                subprocess.run(['sudo', 'chgrp', 'www-data', dir_path], 
-                             capture_output=True, text=True, timeout=5)
-                
                 # IMPORTANT: Forcer les permissions sur TOUS les sous-fichiers et dossiers
                 # Car le wp-content de référence peut être copié après les permissions initiales
-                subprocess.run(['sudo', 'chgrp', '-R', 'www-data', dir_path], 
-                             capture_output=True, text=True, timeout=10)
-                subprocess.run(['find', dir_path, '-type', 'd', '-exec', 'chmod', '775', '{}', '+'], 
-                             capture_output=True, text=True, timeout=10)
-                subprocess.run(['find', dir_path, '-type', 'f', '-exec', 'chmod', '664', '{}', '+'], 
-                             capture_output=True, text=True, timeout=10)
-                
-                print(f"✅ Permissions WordPress configurées (récursif): {dir_path}")
+                try:
+                    root_helpers.fix_perms(dir_path, 'shared')
+                    print(f"✅ Permissions WordPress configurées (récursif): {dir_path}")
+                except root_helpers.RootHelperError as exc:
+                    # Ces passes étaient lancées sans `check` : un échec sur un
+                    # dossier ne doit pas interrompre les suivants ni la
+                    # fonction. On conserve cette tolérance.
+                    print(f"⚠️ Permissions non appliquées sur {dir_path}: {exc}")
         
         # Test final : vérifier qu'on peut créer un fichier
         test_file = os.path.join(project_path, 'wp-content', '.write_test_wp')

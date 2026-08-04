@@ -77,10 +77,12 @@ def _split_any_root(path: str) -> Tuple[str, str, Optional[str]]:
     raise RootHelperError(f"Chemin hors des arborescences de projets: {path}")
 
 
-def _run(script: str, args, timeout: int = DEFAULT_TIMEOUT) -> str:
+def _run(script: str, args, timeout: int = DEFAULT_TIMEOUT,
+         stdin_data: Optional[str] = None) -> str:
     cmd = ['sudo', '-n', _script(script), *args]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
+                                input=stdin_data)
     except subprocess.TimeoutExpired:
         raise RootHelperError(f"{script}: délai dépassé ({timeout}s)")
     except (FileNotFoundError, OSError) as exc:
@@ -125,9 +127,16 @@ def copy_wp_content(parent_project: str, slug: str, subdir: str,
     return _run('wpl-copy-wp-content.sh', [parent_project, slug, subdir], timeout)
 
 
-def write_wp_config(project_name: str, source_file: str, timeout: int = 60) -> str:
-    """Écrit wp-config.php depuis un temporaire, quand l'app n'a pas les droits."""
-    return _run('wpl-write-wp-config.sh', [project_name, source_file], timeout)
+def write_wp_config(project_name: str, content: str, timeout: int = 60) -> str:
+    """Écrit wp-config.php quand l'app n'a pas les droits.
+
+    Le contenu transite par l'entrée standard : passer un chemin de fichier
+    laissait à l'appelant la possibilité de le remplacer par un lien
+    symbolique après la vérification du helper et de faire ainsi recopier un
+    fichier de root.
+    """
+    return _run('wpl-write-wp-config.sh', [project_name], timeout,
+                stdin_data=content)
 
 
 def reset_config(project_name: str, kind: str, timeout: int = 60) -> str:

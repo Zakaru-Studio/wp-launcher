@@ -25,7 +25,10 @@ import subprocess
 
 from app.utils.logger import wp_logger
 
-DEFAULT_UNIT = 'wp-launcher'
+# Suffixe « .service » explicite : la règle sudoers autorise une commande au
+# caractère près. Sans lui, sudo refusait le redémarrage et l'app retombait
+# silencieusement sur SIGHUP puis kill.
+DEFAULT_UNIT = 'wp-launcher.service'
 
 
 def _unit_name() -> str:

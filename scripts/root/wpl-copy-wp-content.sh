@@ -18,8 +18,36 @@ DEST_PARENT="$PROJECTS_DIR/$1/.dev-instances/$2/wp-content"
 SRC_R="$(resolve_under "$SRC" "$PROJECTS_DIR/$1/wp-content")"
 DEST_R="$(resolve_under "$DEST_PARENT" "$PROJECTS_DIR/$1/.dev-instances")"
 
-# --no-links : une instance ne doit pas hériter d'un lien du parent qui
-# pointerait hors de l'arborescence.
-rsync -a --no-links --exclude=.git -- "$SRC_R/" "$DEST_R/$3/"
-chown -R "$DEV_USER:$DEV_USER" "$DEST_R/$3"
-echo "${0##*/}: $3 copié vers $DEST_R"
+# La destination finale doit être validée elle aussi : --no-links ne protège
+# que la SOURCE. Un « …/wp-content/plugins » remplacé par un lien vers
+# /opt/wp-launcher-root faisait écrire rsync à travers le lien, en root, et
+# écrasait les helpers eux-mêmes — donc un shell root à l'appel suivant.
+DEST_FINAL="$DEST_R/$3"
+[ -L "$DEST_FINAL" ] && die "destination liée: $DEST_FINAL"
+mkdir -p -- "$DEST_FINAL"
+DEST_FINAL="$(resolve_under "$DEST_FINAL" "$PROJECTS_DIR")"
+
+# --safe-links plutôt que --no-links : une instance ne doit pas hériter d'un
+# lien du parent qui sortirait de l'arborescence copiée, mais elle a toutes
+# les raisons de garder les liens internes. --no-links écartait les deux, et
+# faisait donc disparaître sans un mot un thème ou un plugin lié depuis le
+# poste du développeur. Les liens écartés sont signalés ci-dessous : rsync ne
+# les mentionne que sur stderr, et sort malgré tout en 0.
+RSYNC_ERR="$(mktemp)"
+trap 'rm -f -- "$RSYNC_ERR"' EXIT
+
+# Un échec de rsync doit rester fatal : la copie est un préalable au reste de
+# la création d'instance. On ne détourne stderr que pour pouvoir le rapporter,
+# jamais pour l'ignorer.
+if ! rsync -a --safe-links --exclude=.git -- "$SRC_R/" "$DEST_FINAL/" 2>"$RSYNC_ERR"; then
+    cat "$RSYNC_ERR" >&2
+    die "échec de la copie de $3"
+fi
+
+chown -R "$DEV_USER:$DEV_USER" "$DEST_FINAL"
+
+if [ -s "$RSYNC_ERR" ]; then
+    echo "${0##*/}: liens ignorés lors de la copie de $3 :"
+    sed 's/^/  /' "$RSYNC_ERR"
+fi
+echo "${0##*/}: $3 copié vers $DEST_FINAL"
