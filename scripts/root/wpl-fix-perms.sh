@@ -45,23 +45,30 @@ RESOLVED="$(resolve_under "$TARGET" "$PROJECTS_DIR")"
 # `-exec … +` et non `\;` : un fork par fichier sur une arborescence
 # d'uploads volumineuse prenait des heures et bloquait le démarrage d'Apache.
 apply() {
-    local owner="$1" dirmode="$2" filemode="$3"
+    local owner="$1" dirmode="$2" filemode="$3" setgid="${4:-}"
     chown -R "$owner" "$RESOLVED"
     find "$RESOLVED" -type d -exec chmod "$dirmode" {} +
     find "$RESOLVED" -type f -exec chmod "$filemode" {} +
+    # setgid sur les dossiers : les fichiers créés ensuite héritent du groupe
+    # du répertoire plutôt que du groupe primaire de qui les crée. Sans ça,
+    # un fichier déposé par le conteneur sort du groupe partagé et redevient
+    # inaccessible en écriture depuis l'hôte.
+    if [ -n "$setgid" ]; then
+        find "$RESOLVED" -type d -exec chmod g+s {} +
+    fi
 }
 
 case "$PROFILE" in
     # Le développeur possède, www-data écrit via le groupe. Profil courant.
-    shared)      apply "$DEV_USER:$WWW_USER" 775 664 ;;
+    shared)      apply "$DEV_USER:$WWW_USER" 775 664 setgid ;;
     # Tout à www-data : le conteneur écrit, l'hôte lit.
-    www)         apply "$WWW_USER:$WWW_USER" 775 664 ;;
+    www)         apply "$WWW_USER:$WWW_USER" 775 664 setgid ;;
     # Tout au développeur : édition depuis l'hôte.
     dev)         apply "$DEV_USER:$DEV_USER" 755 644 ;;
     # wp-content côté conteneur, plus restrictif.
     container)   apply "$WWW_USER:$WWW_USER" 755 644 ;;
     # Uploads : www-data doit pouvoir créer des fichiers.
-    uploads)     apply "$DEV_USER:$WWW_USER" 775 664 ;;
+    uploads)     apply "$DEV_USER:$WWW_USER" 775 664 setgid ;;
 
     # wp-config.php seul : lisible par le conteneur uniquement.
     wp-config-lock)

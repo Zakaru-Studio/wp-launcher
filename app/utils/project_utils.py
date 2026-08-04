@@ -8,6 +8,7 @@ import subprocess
 import json
 from werkzeug.utils import secure_filename
 from app.config.docker_config import DockerConfig
+from app.utils import root_helpers
 
 
 def secure_project_name(project_name):
@@ -335,49 +336,24 @@ def create_default_wp_content(wp_content_dest):
         
         # Appliquer les permissions finales avec stratégie de groupe partagé
         try:
-            # S'assurer que dev-server et www-data font partie du groupe www-data
-            try:
-                subprocess.run(['sudo', 'usermod', '-a', '-G', 'www-data', current_user], 
-                              check=True, capture_output=True)
-                print(f"✅ {current_user} ajouté au groupe www-data")
-            except subprocess.CalledProcessError:
-                print(f"⚠️ Impossible d'ajouter {current_user} au groupe www-data")
-            
-            # www-data propriétaire, groupe www-data pour accès partagé
-            subprocess.run(['sudo', 'chown', '-R', '33:www-data', wp_content_dest], 
-                          check=True, capture_output=True)
-            
-            # Permissions: propriétaire (www-data) et groupe (www-data) ont lecture/écriture
-            subprocess.run(['find', wp_content_dest, '-type', 'd', '-exec', 'chmod', '775', '{}', ';'], 
-                          check=True, capture_output=True)
-            subprocess.run(['find', wp_content_dest, '-type', 'f', '-exec', 'chmod', '664', '{}', ';'], 
-                          check=True, capture_output=True)
-            
-            # Permissions spéciales pour uploads
+            # Le profil `www` fait le chown vers www-data, les modes 775/664 et
+            # le setgid sur les dossiers, en une passe. L'appartenance de
+            # l'utilisateur au groupe www-data est un prérequis d'installation,
+            # traité par install.sh — une application qui tourne en permanence
+            # n'a pas à pouvoir modifier des groupes système.
+            root_helpers.fix_perms(wp_content_dest, 'www')
+
             uploads_dir = os.path.join(wp_content_dest, 'uploads')
             if os.path.exists(uploads_dir):
-                subprocess.run(['chmod', '-R', '775', uploads_dir], 
-                              check=True, capture_output=True)
-            
-            # Mettre le sticky bit sur les dossiers pour préserver le groupe
-            subprocess.run(['find', wp_content_dest, '-type', 'd', '-exec', 'chmod', 'g+s', '{}', ';'], 
-                          check=True, capture_output=True)
-            
-            # Ajouter des ACL pour renforcer l'accès dev-server
+                root_helpers.fix_perms(uploads_dir, 'uploads')
+
+            # ACL : garantit que www-data conserve l'écriture sur les fichiers
+            # créés ensuite, et réaffirme le masque qu'un chmod rabattrait.
             try:
-                subprocess.run(['which', 'setfacl'], check=True, capture_output=True)
-                
-                # ACL pour dev-server : lecture/écriture/exécution
-                subprocess.run(['sudo', 'setfacl', '-R', '-m', f'u:{current_user}:rwx', wp_content_dest], 
-                              check=True, capture_output=True)
-                # ACL par défaut pour les nouveaux fichiers
-                subprocess.run(['sudo', 'setfacl', '-R', '-d', '-m', f'u:{current_user}:rwx', wp_content_dest], 
-                              check=True, capture_output=True)
-                subprocess.run(['sudo', 'setfacl', '-R', '-d', '-m', 'g:www-data:rwx', wp_content_dest], 
-                              check=True, capture_output=True)
+                root_helpers.fix_perms(wp_content_dest, 'acl')
                 print(f"✅ ACL avancées configurées pour {current_user} et www-data")
-            except (subprocess.CalledProcessError, FileNotFoundError):
-                print("⚠️ setfacl non disponible, utilisation des permissions de groupe uniquement")
+            except root_helpers.RootHelperError as exc:
+                print(f"⚠️ ACL non appliquées ({exc}), permissions de groupe uniquement")
             
             print("✅ Permissions partagées appliquées (www-data propriétaire, groupe www-data pour dev-server)")
         except Exception as e:
@@ -1570,43 +1546,23 @@ def set_project_permissions(project_path, current_user=None):
             print(f"❌ Le projet n'existe pas: {project_path}")
             return False
         
-        # Changer le propriétaire vers dev-server:www-data
-        print(f"🔧 Changement propriétaire: {current_user}:www-data")
-        result = subprocess.run([
-            'sudo', 'chown', '-R', f'{current_user}:www-data', project_path
-        ], capture_output=True, text=True, timeout=30)
-        
-        if result.returncode != 0:
-            print(f"⚠️ Erreur lors du changement de propriétaire: {result.stderr}")
+        # Profil `shared` : le développeur possède, www-data écrit via le
+        # groupe, setgid pour que les fichiers créés ensuite restent dans ce
+        # groupe. Une seule passe au lieu de quatre commandes sudo.
+        print(f"🔧 Application du profil de permissions partagé...")
+        try:
+            root_helpers.fix_perms(project_path, 'shared', timeout=300)
+        except root_helpers.RootHelperError as exc:
+            print(f"⚠️ Échec de l'application des permissions : {exc}")
             return False
-        
-        # Permissions des dossiers (775 - lecture/écriture pour owner et group)
-        print(f"📁 Application permissions dossiers (775)...")
-        result = subprocess.run([
-            'find', project_path, '-type', 'd', '-exec', 'chmod', '775', '{}', '+'
-        ], capture_output=True, text=True, timeout=30)
-        
-        if result.returncode != 0:
-            print(f"⚠️ Erreur lors des permissions dossiers: {result.stderr}")
-            return False
-        
-        # Permissions des fichiers (664 - lecture/écriture pour owner et group)
-        print(f"📄 Application permissions fichiers (664)...")
-        result = subprocess.run([
-            'find', project_path, '-type', 'f', '-exec', 'chmod', '664', '{}', '+'
-        ], capture_output=True, text=True, timeout=30)
-        
-        if result.returncode != 0:
-            print(f"⚠️ Erreur lors des permissions fichiers: {result.stderr}")
-            return False
-        
-        # Permissions spéciales pour wp-content/uploads si c'est un projet WordPress
+
         uploads_path = os.path.join(project_path, 'wp-content', 'uploads')
         if os.path.exists(uploads_path):
-            print(f"📷 Permissions spéciales uploads (775)...")
-            subprocess.run(['chmod', '-R', '775', uploads_path], 
-                         capture_output=True, text=True, timeout=10)
-            print(f"✅ Permissions uploads spéciales appliquées")
+            try:
+                root_helpers.fix_perms(uploads_path, 'uploads', timeout=300)
+                print(f"✅ Permissions uploads spéciales appliquées")
+            except root_helpers.RootHelperError as exc:
+                print(f"⚠️ Permissions uploads : {exc}")
         
         # Vérification finale
         test_file = os.path.join(project_path, '.permission_test')
