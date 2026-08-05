@@ -115,11 +115,19 @@ class DevInstanceService:
         return ['docker-compose', '-p', self._compose_project_name(instance_full_name)] + list(args)
 
     def _parent_mysql_container(self, parent_project):
-        """Nom du conteneur MySQL du parent s'il tourne, sinon None."""
+        """Nom du conteneur MySQL qui porte la base du parent, s'il tourne.
+
+        `db_target` répond d'abord : il connaît le serveur partagé comme le
+        conteneur dédié. Le repli sur `<parent>_mysql` couvre les instances
+        historiques dont le conteneur n'a pas le suffixe `_1`.
+        """
+        from app.utils.db_target import db_target
+
         result = subprocess.run(['docker', 'ps', '--format', '{{.Names}}'],
                                 capture_output=True, text=True, timeout=15)
         names = set(result.stdout.split())
-        for candidate in (f"{parent_project}_mysql_1", f"{parent_project}_mysql"):
+        for candidate in (db_target(parent_project).container,
+                          f"{parent_project}_mysql"):
             if candidate in names:
                 return candidate
         return None
@@ -424,7 +432,9 @@ class DevInstanceService:
         # nommés <parent>_mysql (sans _1) — le détecter plutôt que de
         # supposer le suffixe.
         if db_host is None:
-            db_host = self._parent_mysql_container(parent_project) or f"{parent_project}_mysql_1"
+            from app.utils.db_target import db_target
+            db_host = (self._parent_mysql_container(parent_project)
+                       or db_target(parent_project).container)
 
         # L'instance se connecte au MySQL du parent : elle doit donc utiliser
         # le mot de passe root de ce parent, désormais propre à chaque projet.

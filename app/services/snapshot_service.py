@@ -12,6 +12,7 @@ import subprocess
 from datetime import datetime
 from typing import Dict, List
 from app.config.docker_config import DockerConfig
+from app.utils.db_target import db_target
 from app.services.database_service import DatabaseService
 from app.utils import root_helpers
 
@@ -56,8 +57,9 @@ class SnapshotService:
         import re
         
         try:
-            container_name = f"{project_name}_mysql_1"
-            
+            target = db_target(project_name)
+            container_name = target.container
+
             # Vérifier que le conteneur existe
             check_cmd = ['docker', 'ps', '--filter', f'name={container_name}', '--format', '{{.Names}}']
             result = subprocess.run(check_cmd, capture_output=True, text=True, timeout=10)
@@ -83,10 +85,9 @@ class SnapshotService:
             # Import de la base de données
             self._emit_rollback_log(project_name, "🔄 Import en cours...", 77, 'processing')
             
-            import_cmd = [
-                'docker', 'exec', '-i', container_name,
-                'mysql', '-u', 'wordpress', '-pwordpress', 'wordpress'
-            ]
+            # Le dump ne contient pas de CREATE DATABASE : il faut donc
+            # sélectionner explicitement le schéma du projet.
+            import_cmd = target.mysql_cmd(interactive=True)
             
             with open(sql_file, 'r') as f:
                 result = subprocess.run(import_cmd, stdin=f, capture_output=True, text=True, timeout=300)
@@ -323,17 +324,15 @@ class SnapshotService:
                 # Essayer l'export direct via mysqldump dans le conteneur MySQL
                 import subprocess
                 try:
-                    container_name = f"{project_name}_mysql_1"
-                    export_cmd = [
-                        'docker', 'exec', container_name,
-                        'mysqldump', 
-                        '-u', 'wordpress', 
-                        '-pwordpress',
+                    # --lock-tables reste désactivé par --single-transaction :
+                    # sur le serveur partagé un verrou global bloquerait les
+                    # autres sites le temps du dump.
+                    export_cmd = db_target(project_name).mysqldump_cmd(
                         '--single-transaction',
                         '--routines',
                         '--triggers',
-                        'wordpress'
-                    ]
+                        '--no-tablespaces',
+                    )
                     
                     with open(db_file, 'w') as f:
                         result = subprocess.run(export_cmd, stdout=f, stderr=subprocess.PIPE, text=True, timeout=300)

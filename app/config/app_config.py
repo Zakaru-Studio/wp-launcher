@@ -62,7 +62,6 @@ def init_services(socketio):
     from app.services.port_service import PortService
     from app.services.database_service import DatabaseService
     from app.services.fast_import_service import FastImportService
-    from app.services.mysql_manager import MySQLManager
     from app.services.config_service import ConfigService
     from app.services.monitoring_service import MonitoringService
     
@@ -71,7 +70,6 @@ def init_services(socketio):
     port_service = PortService()
     database_service = DatabaseService(socketio)
     fast_import_service = FastImportService(socketio)
-    mysql_manager = MySQLManager(socketio)
     config_service = ConfigService()
     monitoring_service = MonitoringService()
     
@@ -80,7 +78,6 @@ def init_services(socketio):
         'port': port_service,
         'database_service': database_service,
         'fast_import_service': fast_import_service,
-        'mysql_manager': mysql_manager,
         'config': config_service,
         'monitoring': monitoring_service
     } 

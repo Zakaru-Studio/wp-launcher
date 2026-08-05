@@ -197,10 +197,11 @@ def _update_wp_config(projects_folder: str, project_name: str,
 
 def _update_wp_db_urls(project_name: str, new_port: int) -> bool:
     """Best-effort: update wp_options.siteurl/home via docker exec if MySQL is up."""
-    container = f"{project_name}_mysql_1"
+    from app.utils.db_target import db_target
+    target = db_target(project_name)
     try:
         probe = subprocess.run(
-            ['docker', 'inspect', '--format={{.State.Running}}', container],
+            ['docker', 'inspect', '--format={{.State.Running}}', target.container],
             capture_output=True, text=True, timeout=5,
         )
     except (subprocess.TimeoutExpired, FileNotFoundError):
@@ -216,15 +217,9 @@ def _update_wp_db_urls(project_name: str, new_port: int) -> bool:
         f"SET option_value = '{new_url}' "
         "WHERE option_name IN ('siteurl','home');"
     )
-    # Identifiants propres au projet (aléatoires depuis le durcissement)
-    from app.utils.project_credentials import get_mysql_credentials
-    creds = get_mysql_credentials(project_name, container_name=container)
-
     try:
         result = subprocess.run(
-            ['docker', 'exec', container, 'mysql',
-             '-uroot', f'-p{creds["root_password"]}',
-             creds['database'], '--execute', sql],
+            target.mysql_cmd('--execute', sql, as_root=True),
             capture_output=True, text=True, timeout=30,
         )
     except subprocess.TimeoutExpired:

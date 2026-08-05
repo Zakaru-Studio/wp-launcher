@@ -11,6 +11,7 @@ import time
 from app.utils.file_utils import extract_zip, get_file_size_mb
 from app.utils.database_utils import detect_file_encoding
 from app.utils.project_credentials import get_mysql_credentials, get_root_password
+from app.utils.db_target import db_target
 from app.services.docker_service import DockerService
 from app.utils.logger import wp_logger
 from app.config.docker_config import DockerConfig
@@ -61,7 +62,7 @@ class DatabaseService:
             print(f"🔍 [DB_IMPORT] Début import DB pour {project_name}")
             print(f"🔍 [DB_IMPORT] Chemin projet: {project_path}")
             print(f"🔍 [DB_IMPORT] Fichier DB: {db_file_path}")
-            print(f"🔍 [DB_IMPORT] Nom du conteneur MySQL: {project_name}_mysql_1")
+            print(f"🔍 [DB_IMPORT] Nom du conteneur MySQL: {db_target(project_name).container}")
             
             # Envoyer le statut initial
             self._emit_progress(project_name, 0, 'Initialisation...', 'starting')
@@ -211,7 +212,7 @@ class DatabaseService:
             
             # Copier le contenu SQL dans le conteneur
             print(f"📋 [PERFORM_IMPORT] Copie du fichier SQL dans le conteneur...")
-            container_name = f"{project_name}_mysql_1"
+            container_name = db_target(project_name).container
             
             # Créer un fichier temporaire local
             import tempfile
@@ -255,7 +256,7 @@ class DatabaseService:
         """Import standard pour les bases de données de taille normale"""
         try:
             print(f"🔍 [STANDARD_IMPORT] Début de l'import standard pour {project_name}")
-            container_name = f"{project_name}_mysql_1"
+            container_name = db_target(project_name).container
             
             # Vérifier que le conteneur existe et est actif
             print(f"🔍 [STANDARD_IMPORT] Vérification du conteneur {container_name}")
@@ -312,9 +313,11 @@ class DatabaseService:
             print(f"🚀 [STANDARD_IMPORT] Méthode 1: Import direct via mysql...")
             
             # Importer depuis le fichier temporaire dans le conteneur
+            _t = db_target(project_name)
             success, stdout, stderr = self.docker_service.execute_command_in_container(
                 project_name, 'mysql',
-                ['mysql', '-u', 'wordpress', '-pwordpress', 'wordpress', '-e', 'source /tmp/import.sql'],
+                ['mysql', '-u', _t.user, f'-p{_t.password}', _t.database,
+                 '-e', 'source /tmp/import.sql'],
                 timeout=300  # 5 minutes max
             )
             
@@ -341,7 +344,7 @@ class DatabaseService:
                     # Importer via stdin
                     import_success, import_stdout, import_stderr = self.docker_service.execute_command_in_container(
                         project_name, 'mysql',
-                        ['mysql', '-u', 'wordpress', '-pwordpress', 'wordpress'],
+                        ['mysql', '-u', _t.user, f'-p{_t.password}', _t.database],
                         input_data=file_content,
                         timeout=300
                     )
@@ -368,7 +371,7 @@ class DatabaseService:
         """Import optimisé pour les grosses bases de données"""
         try:
             print(f"🔍 [LARGE_IMPORT] Début de l'import optimisé pour {project_name}")
-            container_name = f"{project_name}_mysql_1"
+            container_name = db_target(project_name).container
             
             # Vérifier que le conteneur existe et est actif
             print(f"🔍 [LARGE_IMPORT] Vérification du conteneur {container_name}")
@@ -411,12 +414,12 @@ class DatabaseService:
             success, stdout, stderr = self.docker_service.execute_command_in_container(
                 project_name, 'mysql',
                 [
-                    'mysql', 
-                    '-u', 'wordpress', 
-                    '-pwordpress',
+                    'mysql',
+                    '-u', _creds['user'],
+                    f'-p{_creds["password"]}',
                     '--max_allowed_packet=1G',
                     '--default-character-set=utf8mb4',
-                    'wordpress',
+                    _creds['database'],
                     '-e', 'source /tmp/import.sql'
                 ],
                 timeout=1800  # 30 minutes max
@@ -449,13 +452,14 @@ class DatabaseService:
             
             success_count = 0
             error_count = 0
-            
+            _t = db_target(project_name)
+
             for i, statement in enumerate(statements):
                 if statement.strip():
                     try:
                         chunk_success, chunk_stdout, chunk_stderr = self.docker_service.execute_command_in_container(
                             project_name, 'mysql',
-                            ['mysql', '-u', 'wordpress', '-pwordpress', 'wordpress'],
+                            ['mysql', '-u', _t.user, f'-p{_t.password}', _t.database],
                             input_data=statement + ';',
                             timeout=30
                         )
@@ -494,22 +498,26 @@ class DatabaseService:
     def create_clean_database(self, project_path, project_name):
         """Crée une base de données WordPress vierge prête pour l'installation"""
         try:
-            print(f"🐳 Conteneur MySQL: {project_name}_mysql_1")
-            
+            _t = db_target(project_name)
+            print(f"🐳 Conteneur MySQL: {_t.container}")
+
             # Attendre que MySQL soit prêt
             print("🧠 Attente silencieuse de la disponibilité MySQL...")
-            
+
             if not self.docker_service.wait_for_mysql(project_name, max_wait_time=60):
                 print("❌ MySQL n'est pas prêt après 60 tentatives")
                 return False
-            
-            # Créer la base de données WordPress vierge
+
+            # Créer la base de données WordPress vierge.
+            # En root : sur le serveur partagé l'utilisateur du site n'a de
+            # droits que sur son propre schéma et ne peut pas le (re)créer.
             print("🗃️ Création de la base de données WordPress vierge...")
             success, stdout, stderr = self.docker_service.execute_command_in_container(
                 project_name, 'mysql',
                 [
-                    'mysql', '-u', 'wordpress', '-pwordpress', 
-                    '-e', 'CREATE DATABASE IF NOT EXISTS wordpress DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;'
+                    'mysql', '-u', 'root', f'-p{_t.root_password}',
+                    '-e', f'CREATE DATABASE IF NOT EXISTS `{_safe_ident(_t.database)}` '
+                          'DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;'
                 ],
                 timeout=30
             )
@@ -535,15 +543,15 @@ class DatabaseService:
             if not self.docker_service.check_mysql_ready(project_name):
                 return False, "MySQL n'est pas accessible"
 
+            _t = db_target(project_name)
+
             # Créer un fichier de configuration MySQL temporaire
             with tempfile.NamedTemporaryFile(mode='w', suffix='.cnf', delete=False) as config_file:
-                config_file.write("[mysqldump]\n")
-                config_file.write("user=wordpress\n")
-                config_file.write("password=wordpress\n")
+                config_file.write(_t.defaults_file_body(section='mysqldump'))
                 config_path = config_file.name
 
             try:
-                mysql_container = f"{project_name}_mysql_1"
+                mysql_container = _t.container
 
                 # Copier le fichier de config dans le conteneur
                 subprocess.run(
@@ -562,7 +570,7 @@ class DatabaseService:
                         '--routines',
                         '--triggers',
                         '--no-tablespaces',
-                        'wordpress'
+                        _t.database
                     ],
                     timeout=300
                 )
@@ -927,22 +935,24 @@ class DatabaseService:
 
             # 1. Export DB source
             export_file = f'/tmp/clone_{target_db_name}_{int(time.time())}.sql'
-            mysql_container = f"{source_project}_mysql_1"
-            
+            _source = db_target(source_project)
+            mysql_container = _source.container
+
             # Vérifier que le conteneur existe et est actif
             check_cmd = ['docker', 'ps', '--filter', f'name={mysql_container}', '--format', '{{.Names}}']
             check_result = subprocess.run(check_cmd, capture_output=True, text=True)
-            
+
             if mysql_container not in check_result.stdout:
-                # Essayer sans le _1
+                # Repli sur la forme sans `_1` : certaines instances de dev
+                # historiques nomment leur conteneur `<projet>_mysql`.
                 mysql_container_alt = f"{source_project}_mysql"
-                check_result_alt = subprocess.run(['docker', 'ps', '--filter', f'name={mysql_container_alt}', '--format', '{{.Names}}'], 
+                check_result_alt = subprocess.run(['docker', 'ps', '--filter', f'name={mysql_container_alt}', '--format', '{{.Names}}'],
                                                  capture_output=True, text=True)
                 if mysql_container_alt in check_result_alt.stdout:
                     mysql_container = mysql_container_alt
                 else:
                     raise Exception(f"Conteneur MySQL introuvable pour le projet {source_project}. Vérifiez que le projet est démarré.")
-            
+
             # Fichier de config MySQL ([client] couvre mysqldump ET mysql) :
             # évite de passer le mot de passe en argument, et donc le
             # "[Warning] Using a password..." qui polluait stderr et
@@ -1105,113 +1115,3 @@ class DatabaseService:
                     'message': f'Erreur: {str(e)}'
                 })
             raise Exception(f"Erreur lors du clonage de la DB: {str(e)}")
-    
-    def export_database_with_db_name(self, project_name, db_name=None, output_file=None):
-        """
-        Export une base de données (compatible instances dev).
-        
-        Args:
-            project_name: Nom du projet (pour retrouver le conteneur MySQL)
-            db_name: Nom de la DB (optionnel, par défaut = project_name formaté)
-            output_file: Chemin du fichier de sortie
-        """
-        import subprocess
-        from datetime import datetime
-        
-        if db_name is None:
-            db_name = project_name.replace('-', '_')
-        
-        if output_file is None:
-            output_file = f'backups/{db_name}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.sql'
-
-        # Utiliser le conteneur MySQL du projet parent
-        # Si c'est une instance dev, extraire le projet parent du nom
-        if '-dev-' in project_name:
-            parent_project = project_name.split('-dev-')[0]
-            mysql_container = f"{parent_project}_mysql"
-        else:
-            mysql_container = f"{project_name}_mysql"
-
-        # Validation stricte des identifiants injectés dans les commandes
-        _safe_ident(mysql_container)
-        _safe_ident(db_name)
-
-        # Utiliser un fichier de config MySQL pour éviter les avertissements
-        import tempfile
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.cnf', delete=False) as config_file:
-            config_file.write("[mysqldump]\n")
-            config_file.write("user=root\n")
-            config_file.write("password=root_password\n")
-            config_path = config_file.name
-
-        try:
-            # Copier le fichier de config dans le conteneur
-            subprocess.run(
-                ['docker', 'cp', config_path, f"{mysql_container}:/tmp/.mysqldump_dev.cnf"],
-                check=True,
-                capture_output=True,
-                timeout=60
-            )
-
-            # mysqldump via args en liste + redirection de stdout vers un fichier (pas de shell=True)
-            dump_cmd = [
-                'docker', 'exec', mysql_container, 'mysqldump',
-                '--defaults-file=/tmp/.mysqldump_dev.cnf',
-                '--no-tablespaces', db_name
-            ]
-            with open(output_file, 'wb') as out_f:
-                result = subprocess.run(
-                    dump_cmd,
-                    stdout=out_f,
-                    stderr=subprocess.PIPE,
-                    timeout=1800
-                )
-                if result.returncode != 0:
-                    raise Exception(
-                        f"Erreur mysqldump: {result.stderr.decode('utf-8', errors='replace')}"
-                    )
-
-        finally:
-            # Nettoyer le fichier temporaire
-            subprocess.run(['docker', 'exec', mysql_container, 'rm', '-f', '/tmp/.mysqldump_dev.cnf'],
-                          capture_output=True)
-            os.unlink(config_path)
-
-        return output_file
-    
-    def import_database_with_db_name(self, project_name, db_name=None, import_file=None):
-        """
-        Import une base de données (compatible instances dev).
-        """
-        import subprocess
-        
-        if db_name is None:
-            db_name = project_name.replace('-', '_')
-        
-        # Même logique pour trouver le bon conteneur MySQL
-        if '-dev-' in project_name:
-            parent_project = project_name.split('-dev-')[0]
-            mysql_container = f"{parent_project}_mysql"
-        else:
-            mysql_container = f"{project_name}_mysql"
-
-        # Validation stricte des identifiants avant interpolation
-        _safe_ident(mysql_container)
-        _safe_ident(db_name)
-
-        # Import via args en liste + stdin redirigé depuis le fichier (pas de shell=True)
-        import_cmd = [
-            'docker', 'exec', '-i', mysql_container,
-            'mysql', '-u', 'root', '-proot_password', db_name
-        ]
-        with open(import_file, 'rb') as in_f:
-            result = subprocess.run(
-                import_cmd,
-                stdin=in_f,
-                stderr=subprocess.PIPE,
-                timeout=1800
-            )
-            if result.returncode != 0:
-                raise Exception(
-                    f"Erreur mysql import: {result.stderr.decode('utf-8', errors='replace')}"
-                ) 

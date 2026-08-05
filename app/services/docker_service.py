@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import time
 from app.config.docker_config import DockerConfig
+from app.utils.db_target import db_target
 from app.utils.logger import wp_logger
 from app.utils.port_preflight import resolve_port_conflicts
 from app.services.config_service import ConfigService
@@ -269,7 +270,7 @@ class DockerService:
             parent_name = project_name.split('-dev-')[0]
             
             # Vérifier que le parent est running
-            parent_mysql = f"{parent_name}_mysql_1"
+            parent_mysql = db_target(parent_name).container
             try:
                 result = subprocess.run([
                     'docker', 'inspect', '--format={{.State.Running}}', parent_mysql
@@ -417,7 +418,8 @@ class DockerService:
                 # mettre à jour wp_options.siteurl/home maintenant que MySQL est démarré.
                 if 'wordpress' in preflight_by_kind:
                     old_wp_port, new_wp_port = preflight_by_kind['wordpress']
-                    mysql_container = f"{project_name}_mysql_1"
+                    _t = db_target(project_name)
+                    mysql_container = _t.container
                     # Attendre que MySQL soit healthy (jusqu'à 60s)
                     healthy = False
                     for _ in range(30):
@@ -437,16 +439,8 @@ class DockerService:
                             f"SET option_value = '{new_url}' "
                             "WHERE option_name IN ('siteurl','home');"
                         )
-                        # Identifiants relus depuis le conteneur : ils sont
-                        # aléatoires par projet depuis le durcissement.
-                        from app.utils.project_credentials import get_mysql_credentials
-                        creds = get_mysql_credentials(
-                            project_name, container_name=mysql_container
-                        )
                         db_sync = subprocess.run(
-                            ['docker', 'exec', mysql_container, 'mysql',
-                             '-uroot', f'-p{creds["root_password"]}',
-                             creds['database'], '--execute', sql],
+                            _t.mysql_cmd('--execute', sql, as_root=True),
                             capture_output=True, text=True, timeout=30,
                         )
                         if db_sync.returncode == 0:
@@ -713,10 +707,23 @@ class DockerService:
         except Exception:
             return 'error'
     
+    def container_for(self, project_name, service_name):
+        """Nom du conteneur qui porte un service pour un projet.
+
+        Tout suit `<projet>_<service>_1`, sauf la base de données : un projet
+        migré sur le serveur MySQL partagé n'a plus de conteneur mysql à lui,
+        et `db_target` sait où vit réellement son schéma. Passer par ici plutôt
+        que de reconstruire la f-string évite d'avoir à reconvertir chaque
+        appelant le jour de la migration.
+        """
+        if service_name == 'mysql':
+            return db_target(project_name).container
+        return f"{project_name}_{service_name}_1"
+
     def get_container_logs(self, project_name, service_name, lines=50):
         """Récupère les logs d'un conteneur"""
         try:
-            container_name = f"{project_name}_{service_name}_1"
+            container_name = self.container_for(project_name, service_name)
             result = subprocess.run([
                 'docker', 'logs', '--tail', str(lines), container_name
             ], capture_output=True, text=True)
@@ -747,7 +754,7 @@ class DockerService:
     def execute_command_in_container(self, project_name, service_name, command, timeout=30, input_data=None):
         """Exécute une commande dans un conteneur avec support pour input_data"""
         try:
-            container_name = f"{project_name}_{service_name}_1"
+            container_name = self.container_for(project_name, service_name)
             
             # Construire la commande docker exec
             docker_cmd = ['docker', 'exec']
@@ -1754,26 +1761,29 @@ class DockerService:
         try:
             wait_time = 0
             check_interval = 3
-            
+            # Résolu une seule fois : `db_target` fait un `docker inspect` et
+            # lit des fichiers, ce qui n'a rien à faire dans une boucle de
+            # polling qui tourne toutes les 3 s.
+            mysql_container = db_target(project_name).container
+
             # Phase 1: Attendre que le conteneur MySQL soit en "running"
             while wait_time < 60:
-                mysql_container = f"{project_name}_mysql_1"
                 status = self.get_individual_container_status(mysql_container)
-                
+
                 if status in ['active', 'running']:
                     break
-                    
+
                 time.sleep(check_interval)
                 wait_time += check_interval
             else:
                 return False
-            
+
             # Phase 2: Attendre que le healthcheck MySQL soit OK
             health_wait = 0
             while health_wait < 90:
                 success, stdout, stderr = self.execute_command([
-                    'docker', 'inspect', '--format={{.State.Health.Status}}', 
-                    f"{project_name}_mysql_1"
+                    'docker', 'inspect', '--format={{.State.Health.Status}}',
+                    mysql_container
                 ], timeout=10)
                 
                 if success and 'healthy' in stdout.lower():
@@ -1843,10 +1853,13 @@ class DockerService:
             print(f"🚀 [AUTO-INSTALL] Installation automatique WordPress pour {project_name}")
             print(f"📋 [AUTO-INSTALL] Méthode simplifiée - Délégation à l'entrypoint")
             
-            # Étape 1: Vérifier que les conteneurs sont démarrés
+            # Étape 1: Vérifier que les conteneurs sont démarrés.
+            # Conteneur résolu hors boucle : `db_target` fait un `docker
+            # inspect` et lit des fichiers.
+            mysql_container = db_target(project_name).container
             max_container_wait = 10
             for attempt in range(max_container_wait):
-                mysql_status = self.get_individual_container_status(f"{project_name}_mysql_1")
+                mysql_status = self.get_individual_container_status(mysql_container)
                 wordpress_status = self.get_individual_container_status(f"{project_name}_wordpress_1")
                 
                 if mysql_status in ['active', 'running'] and wordpress_status in ['active', 'running']:

@@ -8,7 +8,6 @@ from app.services.database_service import DatabaseService
 from app.services.config_service import ConfigService
 from app.services.fast_import_service import FastImportService
 from app.services.monitoring_service import MonitoringService
-from app.services.mysql_manager import MySQLManager
 from app.services.port_service import PortService
 from app.services.project_service import ProjectService
 
@@ -18,7 +17,6 @@ __all__ = [
     'ConfigService',
     'FastImportService',
     'MonitoringService',
-    'MySQLManager',
     'PortService',
     'ProjectService',
 ]

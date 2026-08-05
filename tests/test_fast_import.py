@@ -15,10 +15,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.fast_import_service import (
-    FastImportService,
-    _docker_inspect_env,
-)
+from app.services.fast_import_service import FastImportService
+from app.utils.db_target import inspect_env
 
 
 # ─── file preparation (gz / zip) ─────────────────────────────────────
@@ -235,21 +233,21 @@ def test_stream_adapt_prefix_leaves_unrelated_serialized_data_alone(tmp_path: Pa
 # ─── docker env / container info (stubbed subprocess) ───────────────
 
 
-def test_docker_inspect_env_parses_kv_pairs():
-    with patch("app.services.fast_import_service.subprocess.run") as mock_run:
+def test_inspect_env_parses_kv_pairs():
+    with patch("app.utils.db_target.subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(
             returncode=0,
             stdout="MYSQL_ROOT_PASSWORD=supersecret\nMYSQL_USER=bob\nPATH=/usr/bin\n",
         )
-        env = _docker_inspect_env("some_container")
+        env = inspect_env("some_container")
     assert env["MYSQL_ROOT_PASSWORD"] == "supersecret"
     assert env["MYSQL_USER"] == "bob"
 
 
-def test_docker_inspect_env_returns_empty_on_failure():
-    with patch("app.services.fast_import_service.subprocess.run") as mock_run:
+def test_inspect_env_returns_empty_on_failure():
+    with patch("app.utils.db_target.subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=1, stdout="")
-        assert _docker_inspect_env("missing") == {}
+        assert inspect_env("missing") == {}
 
 
 def test_get_container_mysql_info_prefers_docker_env_over_defaults(tmp_path: Path):
@@ -260,25 +258,25 @@ def test_get_container_mysql_info_prefers_docker_env_over_defaults(tmp_path: Pat
         "MYSQL_DATABASE": "custom_db",
         "MYSQL_PASSWORD": "custom_pass",
     }
-    with patch("app.services.fast_import_service._docker_inspect_env",
-               return_value=fake_env), \
+    with patch("app.utils.db_target.inspect_env", return_value=fake_env), \
          patch.object(svc, "_detect_project_type", return_value="wordpress"):
-        info = svc.get_container_mysql_info("acme")
+        info = svc.get_container_mysql_info("acme-does-not-exist")
     assert info.user == "custom_user"
     assert info.database == "custom_db"
     assert info.password == "custom_pass"
     assert info.root_password == "from-env"
+    assert info.shared is False
 
 
 def test_get_container_mysql_info_falls_back_to_defaults():
     svc = FastImportService()
-    with patch("app.services.fast_import_service._docker_inspect_env",
-               return_value={}), \
+    with patch("app.utils.db_target.inspect_env", return_value={}), \
          patch.object(svc, "_detect_project_type", return_value="wordpress"):
-        info = svc.get_container_mysql_info("acme")
+        info = svc.get_container_mysql_info("acme-does-not-exist")
     assert info.user == "wordpress"
     assert info.root_password == "rootpassword"
     assert info.project_type == "wordpress"
+    assert info.container == "acme-does-not-exist_mysql_1"
 
 
 # ─── maintenance mode ───────────────────────────────────────────────

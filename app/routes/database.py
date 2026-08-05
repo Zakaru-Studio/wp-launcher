@@ -130,43 +130,14 @@ def export_database(project_name):
     export_filename = f"{project_name}_export_{timestamp}.sql"
     export_path = os.path.join(current_app.config['UPLOAD_FOLDER'], export_filename)
 
-    mysql_container = f"{project_name}_mysql_1"
-
-    # Identifiants relus depuis le conteneur (ou son compose) : le mot de
-    # passe est propre au projet, seul le nom d'utilisateur/base suit encore
-    # la convention Next.js = nom du projet / WordPress = 'wordpress'.
-    from app.utils.project_credentials import get_mysql_credentials
-    _creds = get_mysql_credentials(project_name, container_name=mysql_container)
-
-    if os.path.exists(os.path.join(project_path, 'client')):
-        db_user = _creds['user'] if _creds['user'] != 'wordpress' else project_name
-        db_name = _creds['database'] if _creds['database'] != 'wordpress' else project_name
-    else:
-        db_user = _creds['user']
-        db_name = _creds['database']
-    db_password = _creds['password']
-
-    config_cmd = (
-        "printf '[mysqldump]\\nuser=%s\\npassword=%s\\n' "
-        f"{_sh_quote(db_user)} {_sh_quote(db_password)} "
-        "> /tmp/.mysqldump.cnf && chmod 600 /tmp/.mysqldump.cnf"
-    )
+    # Où vit la base, et avec quels identifiants : `db_target` résout le
+    # conteneur (dédié ou serveur partagé), la convention Next.js
+    # (base/utilisateur = nom du projet) et le mot de passe propre au projet.
+    from app.utils.db_target import db_target
+    target = db_target(project_name)
 
     try:
-        config_result = subprocess.run(
-            ['docker', 'exec', mysql_container, 'bash', '-c', config_cmd],
-            capture_output=True, text=True, timeout=10,
-        )
-        if config_result.returncode != 0:
-            return jsonify({
-                'success': False,
-                'message': f'Erreur création config: {config_result.stderr}',
-            }), 500
-
-        export_cmd = [
-            'docker', 'exec', mysql_container,
-            'mysqldump',
-            '--defaults-file=/tmp/.mysqldump.cnf',
+        export_cmd = target.mysqldump_cmd(
             '--quick',
             '--lock-tables=false',
             '--single-transaction',
@@ -177,8 +148,7 @@ def export_database(project_name):
             '--hex-blob',
             '--no-tablespaces',
             '--default-character-set=utf8mb4',
-            db_name,
-        ]
+        )
 
         with open(export_path, 'w', encoding='utf-8') as export_file:
             result = subprocess.run(
@@ -192,7 +162,13 @@ def export_database(project_name):
         if result.returncode != 0:
             if os.path.exists(export_path):
                 os.remove(export_path)
-            err_text = result.stderr or "Pas de message d'erreur"
+            # Le client émet toujours un "[Warning] Using a password on the
+            # command line" : le garder ferait passer l'avertissement pour la
+            # cause de l'échec.
+            err_text = '\n'.join(
+                line for line in (result.stderr or '').splitlines()
+                if '[Warning]' not in line
+            ).strip() or "Pas de message d'erreur"
             return jsonify({
                 'success': False,
                 'message': f'Erreur mysqldump (code {result.returncode}): {err_text}',
@@ -218,14 +194,6 @@ def export_database(project_name):
         if os.path.exists(export_path):
             os.remove(export_path)
         return jsonify({'success': False, 'message': f"Erreur lors de l'export: {exc}"}), 500
-    finally:
-        try:
-            subprocess.run(
-                ['docker', 'exec', mysql_container, 'rm', '-f', '/tmp/.mysqldump.cnf'],
-                capture_output=True, timeout=10,
-            )
-        except Exception:  # noqa: BLE001
-            log.warning("Export cleanup failed for %s", project_name)
 
 
 @database_bp.route('/api/database/stop-import/<project_name>', methods=['POST'])
@@ -271,11 +239,6 @@ def download_export(filename):
         download_name=secure_name,
         mimetype='application/sql',
     )
-
-
-# Silences only — internal helper for the export flow's bash heredoc.
-def _sh_quote(value: str) -> str:
-    return "'" + value.replace("'", "'\\''") + "'"
 
 
 # Keep a reference to CONTAINERS_FOLDER — pre-existing call sites expect

@@ -158,19 +158,21 @@ def generate_password(length: int = 24) -> str:
     return ''.join(secrets.choice(_PASSWORD_ALPHABET) for _ in range(length))
 
 
-def apply_project_credentials(content: str) -> str:
+def apply_project_credentials(content: str, overrides: dict | None = None) -> str:
     """Substitute the credential placeholders in a rendered compose file.
 
     Idempotent by construction: an already-rendered compose has no
     placeholders left, so calling this again on an existing project is a
     no-op rather than a password rotation that would lock the stack out of
     its own database.
+
+    ``overrides`` maps a placeholder to the value it must take — pass the
+    credentials already recorded in the project's ``.db.json`` when
+    *re-rendering* a compose for an existing project. Without it, a
+    re-render mints fresh random passwords, and the site is locked out of a
+    database whose password nobody changed.
     """
-    placeholders = {
-        '{mysql_root_password}': 'mysql_root',
-        '{mysql_password}': 'mysql',
-        '{mongo_password}': 'mongo',
-    }
+    placeholders = ('{mysql_root_password}', '{mysql_password}', '{mongo_password}')
 
     legacy = {
         '{mysql_root_password}': LEGACY_MYSQL_ROOT_PASSWORD,
@@ -178,12 +180,16 @@ def apply_project_credentials(content: str) -> str:
         '{mongo_password}': 'adminpassword',
     }
 
+    overrides = overrides or {}
     randomise = should_randomise_project_credentials()
 
     for token in placeholders:
         if token not in content:
             continue
-        value = generate_password() if randomise else legacy[token]
+        if token in overrides:
+            value = overrides[token]
+        else:
+            value = generate_password() if randomise else legacy[token]
         content = content.replace(token, value)
 
     return content

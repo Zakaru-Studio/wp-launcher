@@ -17,9 +17,6 @@ from app.utils.project_utils import (
     copy_docker_template_nextjs_mysql, create_default_wp_content, create_wordpress_base_files,
     create_nextjs_app_structure, project_exists, create_project_marker, update_project_wordpress_urls_in_files
 )
-from app.utils.database_utils import (
-    create_clean_wordpress_database, intelligent_mysql_wait
-)
 from app.utils import root_helpers
 from app.utils.logger import wp_logger
 from app.models.project import Project

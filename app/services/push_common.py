@@ -31,6 +31,12 @@ class PushError(RuntimeError):
 def container_name(project_name: str, service: str) -> str:
     if not PROJECT_RE.match(project_name or ""):
         raise PushError(f"Invalid project name: {project_name!r}")
+    # La base fait exception : un projet migré sur le serveur MySQL partagé
+    # n'a plus de conteneur mysql à lui, et `db_target` sait lequel porte
+    # réellement son schéma.
+    if service == "mysql":
+        from app.utils.db_target import db_target
+        return db_target(project_name).container
     return f"{project_name}_{service}_1"
 
 

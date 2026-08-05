@@ -45,7 +45,9 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from app.config.app_config import PROJECTS_FOLDER
+from app.utils.db_target import db_target
 from app.utils.logger import wp_logger
+from app.utils.security_config import LEGACY_MYSQL_PASSWORD
 
 log = logging.getLogger(__name__)
 
@@ -105,93 +107,7 @@ class ContainerInfo:
     password: str
     root_password: str
     project_type: str  # 'wordpress' or 'nextjs'
-
-
-@dataclass
-class _MemoryState:
-    """Snapshot of a container's memory limits so we can restore them
-    after a temporary bump. Stores the raw bytes Docker reports."""
-    memory: int
-    memory_swap: int
-
-
-# Mysql needs roughly 4-5× the single largest INSERT in RAM to parse,
-# index and commit it. For a 284 MB dump with Elementor blobs, that
-# can easily be 1-2 GB of working set. We bump to this floor for the
-# duration of the import.
-_IMPORT_MEMORY_BYTES = 2 * 1024 * 1024 * 1024           # 2 GiB
-_IMPORT_MEMORY_SWAP_BYTES = 3 * 1024 * 1024 * 1024      # 3 GiB
-
-
-def _docker_inspect_env(container: str) -> Dict[str, str]:
-    """Return the container's Config.Env as a dict.
-
-    Raises nothing — an unreachable container yields an empty dict so
-    callers fall back to defaults.
-    """
-    try:
-        result = subprocess.run(
-            ['docker', 'inspect', '--format', '{{range .Config.Env}}{{println .}}{{end}}', container],
-            capture_output=True, text=True, timeout=5,
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return {}
-    if result.returncode != 0:
-        return {}
-    env: Dict[str, str] = {}
-    for line in result.stdout.splitlines():
-        if '=' in line:
-            k, _, v = line.partition('=')
-            env[k.strip()] = v
-    return env
-
-
-def _docker_inspect_memory(container: str) -> Optional[_MemoryState]:
-    """Read the container's current memory + swap limits in bytes.
-
-    Returns None if docker is unavailable or the inspect fails. A limit
-    of ``0`` means "no limit", which is what Docker reports for
-    unconstrained containers.
-    """
-    try:
-        result = subprocess.run(
-            ['docker', 'inspect', '--format',
-             '{{.HostConfig.Memory}} {{.HostConfig.MemorySwap}}', container],
-            capture_output=True, text=True, timeout=5,
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return None
-    if result.returncode != 0:
-        return None
-    parts = result.stdout.strip().split()
-    try:
-        return _MemoryState(memory=int(parts[0]), memory_swap=int(parts[1]))
-    except (IndexError, ValueError):
-        return None
-
-
-def _docker_update_memory(container: str, memory: int, swap: int) -> bool:
-    """Apply new memory + memory_swap limits via ``docker update``.
-
-    Returns True on success. Docker supports live memory updates on
-    cgroups v1 and v2; the only common failure mode is insufficient
-    host memory (which the caller logs and proceeds without a bump).
-    """
-    try:
-        result = subprocess.run(
-            ['docker', 'update',
-             f'--memory={memory}',
-             f'--memory-swap={swap}',
-             container],
-            capture_output=True, text=True, timeout=10,
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return False
-    if result.returncode != 0:
-        log.warning("docker update memory failed for %s: %s",
-                    container, result.stderr.strip())
-        return False
-    return True
+    shared: bool = False  # True when the schema lives on the shared server
 
 
 def _docker_container_started_at(container: str) -> Optional[str]:
@@ -256,10 +172,6 @@ class FastImportService:
     def __init__(self, socketio=None, projects_folder: Optional[str] = None):
         self.socketio = socketio
         self.projects_folder = projects_folder or PROJECTS_FOLDER
-        self.mysql_container_prefix = "mysql"
-        self.db_name = "wordpress"
-        self.db_user = "wordpress"
-        self.db_password = "wordpress"
 
     # ─── SocketIO progress ────────────────────────────────────────────
 
@@ -292,47 +204,31 @@ class FastImportService:
     # ─── container / credentials detection ───────────────────────────
 
     def get_container_mysql_info(self, project_name: str) -> ContainerInfo:
-        """Auto-detect container name, DB credentials and root password.
+        """Where the project's schema lives, and how to authenticate to it.
 
-        Reads ``docker inspect`` env so a user who edited docker-compose
-        won't silently fall off the happy path. Defaults mirror the
-        shipped templates (``wordpress``/``wordpress``/``rootpassword``
-        for WP, ``<project>``/``projectpassword``/``rootpassword`` for
-        the Next.js+MySQL stack).
+        Delegates to :func:`app.utils.db_target.db_target`, which walks the
+        ``.db.json`` sidecar → ``docker inspect`` → docker-compose →
+        wp-config chain and knows whether the project owns a MySQL
+        container or shares one. The Next.js+MySQL convention (schema and
+        user named after the project) is resolved there too.
         """
-        container = f"{project_name}_{self.mysql_container_prefix}_1"
-        env = _docker_inspect_env(container)
+        target = db_target(project_name)
         project_type = self._detect_project_type(project_name)
 
-        # Repli sur le docker-compose quand le conteneur est arrêté ou
-        # renommé : `docker inspect` ne répond alors rien, et sur un projet
-        # postérieur à la randomisation des mots de passe on utiliserait
-        # sinon les valeurs héritées en silence.
-        if not (env.get('MYSQL_PASSWORD') and env.get('MYSQL_ROOT_PASSWORD')):
-            from app.utils.project_credentials import _compose_env
-            from app.config.docker_config import DockerConfig
-            compose = _compose_env(os.path.join(
-                DockerConfig.CONTAINERS_FOLDER, project_name, 'docker-compose.yml'
-            ))
-            for key, value in compose.items():
-                env.setdefault(key, value)
-
-        if project_type == 'nextjs':
-            default_user = project_name
-            default_db = project_name
-            default_pw = 'projectpassword'
-        else:
-            default_user = self.db_user
-            default_db = self.db_name
-            default_pw = self.db_password
+        # Le mot de passe applicatif de la stack Next.js n'apparaît nulle
+        # part quand le conteneur est arrêté : garder son historique.
+        password = target.password
+        if project_type == 'nextjs' and password == LEGACY_MYSQL_PASSWORD:
+            password = 'projectpassword'
 
         return ContainerInfo(
-            container=container,
-            database=env.get('MYSQL_DATABASE') or default_db,
-            user=env.get('MYSQL_USER') or default_user,
-            password=env.get('MYSQL_PASSWORD') or default_pw,
-            root_password=env.get('MYSQL_ROOT_PASSWORD') or 'rootpassword',
+            container=target.container,
+            database=target.database,
+            user=target.user,
+            password=password,
+            root_password=target.root_password,
             project_type=project_type,
+            shared=target.is_shared,
         )
 
     def _detect_project_type(self, project_name: str) -> str:
@@ -750,27 +646,33 @@ class FastImportService:
         expected password, even if the container was rebuilt or the
         user was dropped manually.
 
-        We also bump ``max_allowed_packet`` server-side — wp-migrate
-        dumps routinely ship single INSERTs > 64 MB (Elementor-laden
-        ``wp_postmeta``), and the default kills the connection at
-        byte 67108864 with the not-very-helpful behaviour of just
-        closing the socket.
+        The account is dropped and recreated rather than patched: a
+        ``CREATE IF NOT EXISTS`` + ``ALTER`` pair leaves whatever grants a
+        previous configuration handed out, which on the shared server can
+        mean the site keeps reaching a schema it no longer owns.
+
+        On a per-project server we also raise ``max_allowed_packet`` &c.
+        globally — wp-migrate dumps routinely ship single INSERTs > 64 MB
+        (Elementor-laden ``wp_postmeta``) and the default closes the socket
+        at byte 67108864 without explanation. On the *shared* server those
+        are deliberately skipped: one site's import must not reconfigure
+        the server every other site is using. The shared ``mysql.cnf``
+        carries the same values permanently instead.
         """
         esc_pwd = info.password.replace("'", "''")
-        sql = (
-            # Server-side tuning for the import session's lifetime —
-            # SET GLOBAL requires SUPER which root has. 1 GiB is
-            # overkill for typical WP dumps but cheap at rest.
+        tuning = "" if info.shared else (
             "SET GLOBAL max_allowed_packet = 1073741824;"
             "SET GLOBAL net_read_timeout = 3600;"
             "SET GLOBAL net_write_timeout = 3600;"
             "SET GLOBAL wait_timeout = 7200;"
+        )
+        sql = (
+            tuning +
             f"DROP DATABASE IF EXISTS `{info.database}`;"
             f"CREATE DATABASE `{info.database}` "
             f"CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-            f"CREATE USER IF NOT EXISTS '{info.user}'@'%' "
-            f"IDENTIFIED BY '{esc_pwd}';"
-            f"ALTER USER '{info.user}'@'%' IDENTIFIED BY '{esc_pwd}';"
+            f"DROP USER IF EXISTS '{info.user}'@'%';"
+            f"CREATE USER '{info.user}'@'%' IDENTIFIED BY '{esc_pwd}';"
             f"GRANT ALL PRIVILEGES ON `{info.database}`.* TO '{info.user}'@'%';"
             f"FLUSH PRIVILEGES;"
         )
@@ -826,67 +728,6 @@ class FastImportService:
             if 'password on the command line' not in l.lower()
         ).strip()
         return stderr or f"mysql auth check failed (exit {result.returncode})"
-
-    def _bump_memory_for_import(
-        self,
-        info: ContainerInfo,
-        project_name: str,
-    ) -> Optional[_MemoryState]:
-        """Temporarily raise the container's memory limit to ~2 GiB
-        so a large import doesn't get OOM-killed.
-
-        Returns the ORIGINAL limits so the caller can restore them
-        after the import. Returns None if the bump failed or wasn't
-        needed (e.g. already >= the threshold).
-        """
-        current = _docker_inspect_memory(info.container)
-        if current is None:
-            return None
-        # 0 == unlimited. Anything already above our floor, leave alone.
-        already_generous = (
-            current.memory == 0 or current.memory >= _IMPORT_MEMORY_BYTES
-        )
-        if already_generous:
-            return None
-        ok = _docker_update_memory(
-            info.container,
-            _IMPORT_MEMORY_BYTES,
-            _IMPORT_MEMORY_SWAP_BYTES,
-        )
-        if not ok:
-            self._emit_progress(
-                project_name, 0,
-                f"Impossible de bumper la RAM du container {info.container}. "
-                f"L'import peut être OOM-killé.",
-                'importing',
-            )
-            return None
-        mb = _IMPORT_MEMORY_BYTES // (1024 * 1024)
-        log.info("bumped %s memory from %d -> %d MB",
-                 info.container, current.memory // (1024 * 1024), mb)
-        self._emit_progress(
-            project_name, 33,
-            f"RAM du container augmentée temporairement à {mb} MB "
-            f"pour l'import (était {current.memory // (1024 * 1024)} MB).",
-            'importing',
-        )
-        return current
-
-    def _restore_memory(self, info: ContainerInfo, original: Optional[_MemoryState]) -> None:
-        """Reset the container to its pre-bump memory limits.
-
-        Non-fatal: if the restore fails (container was recreated mid-
-        import, etc.), we log and proceed — the limits will be
-        whatever the next compose-up sets.
-        """
-        if original is None:
-            return
-        ok = _docker_update_memory(info.container, original.memory, original.memory_swap)
-        if ok:
-            log.info("restored %s memory to %d bytes",
-                     info.container, original.memory)
-        else:
-            log.warning("could not restore memory on %s", info.container)
 
     def _import_sql_stream(
         self,
@@ -1405,7 +1246,6 @@ class FastImportService:
         prepared_sql: Optional[str] = None
         adapted_sql: Optional[str] = None
         backup_path: Optional[str] = None
-        original_memory: Optional[_MemoryState] = None
         info_for_finally: Optional[ContainerInfo] = None
 
         try:
@@ -1449,14 +1289,6 @@ class FastImportService:
                                     f"MySQL inaccessible: {ping.stderr.strip()}",
                                     'error')
                 return {'success': False, 'error': f'MySQL inaccessible: {ping.stderr.strip()}'}
-
-            # 4b. Bump the container's memory limit for the duration of
-            # the import. A 512 MB-limited mysql container routinely
-            # gets OOM-killed mid-import on WP dumps > 100 MB (Elementor
-            # blobs alone can push the buffer pool past the cap). We
-            # temporarily raise to 2 GiB and restore in the finally
-            # block.
-            original_memory = self._bump_memory_for_import(info, project_name)
 
             # 5. Backup the current DB before we drop it.
             self._emit_progress(project_name, 18, "Sauvegarde de la base actuelle…", 'processing')
@@ -1551,10 +1383,6 @@ class FastImportService:
                         os.remove(cleanup)
                     except OSError:
                         log.warning("cleanup: failed to remove %s", cleanup)
-            # Restore the container's original memory limits regardless
-            # of how we got here.
-            if info_for_finally is not None and original_memory is not None:
-                self._restore_memory(info_for_finally, original_memory)
             self.disable_maintenance_mode(maintenance_file or project_name)
 
     # ─── misc helpers kept for back-compat ───────────────────────────
