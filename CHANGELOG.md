@@ -5,9 +5,95 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.6.0] - 2026-08-05
+
+### Added
+- Running sites carry an "Open in VS Code" button that opens their editable
+  folder in the editor. The files live on the machine hosting WP Launcher, so
+  when the browser is somewhere else the button builds a Remote-SSH URI
+  (`vscode://vscode-remote/ssh-remote+host/path`) instead of a local one that
+  would point at a directory the client machine doesn't have. The server
+  decides which of the two applies from the requesting address, and the SSH
+  target is `WPL_VSCODE_SSH_HOST` (defaults to the current user @ `APP_HOST`).
+  `WPL_VSCODE_SCHEME` switches the URI scheme for VS Code forks.
+
+### Changed
+- Everything that reaches a database now asks where it lives instead of
+  assuming. Roughly thirty call sites built the container name as
+  `f"{project}_mysql_1"` and half of them authenticated with a literal
+  `-u wordpress -pwordpress`, which is why a project created after password
+  randomisation worked in some features and failed in others. A single
+  resolver (`app/utils/db_target.py`) now answers with the container, the
+  schema, the user and the password, walking a `.db.json` sidecar, then
+  `docker inspect`, then docker-compose, then `wp-config.php`, then the
+  historical defaults. `docker_service.container_for()` and
+  `push_common.container_name()` route the `mysql` service through it, so
+  their callers were fixed without being touched. Behaviour is unchanged —
+  every project still runs its own MySQL container — but the layout is no
+  longer hardcoded, which is what a shared database server needs.
+  `_compose_env` also reads `WORDPRESS_DB_*` and not only `MYSQL_*`: a stack
+  with no `mysql:` service would otherwise resolve to `wordpress`/`wordpress`
+  while stopped and bake that into a rewritten `wp-config.php`.
+- The database import no longer raises the MySQL container's memory limit for
+  the duration of the run. `docker update --memory` is a property of the
+  container, not of the import, so a crash left the limit raised, and on a
+  shared server it would resize the database every other site is using. The
+  import account is also dropped and recreated rather than patched with
+  `CREATE IF NOT EXISTS` + `ALTER`, which kept whatever grants a previous
+  configuration had handed out.
+- Site rows are down to four controls. The instance selector and the
+  deployment shortcut moved into the row menu, which became a three-dot button
+  and sits last, after Stop/Start — leaving VS Code, WP Admin and Stop/Start
+  as the only always-visible actions. The instance selector opens as a
+  submenu, the same floating pattern WP Debug and WP-CLI already use, since
+  Bootstrap 5 cannot nest dropdowns. A chip next to the status pill still
+  reports which instance a row points at, because switching instances changes
+  every port on that row and the old selector button carried that signal.
+- The notification panel no longer opens by itself. It used to pop open on
+  every task *and* every one-line message — including tasks started from
+  another session — covering the page the user was working on. Notifications
+  now split across two channels: short-lived messages go to a toaster
+  ([sonner](https://github.com/emilkowalski/sonner), vendored under
+  `static/vendor/sonner/` so the channel that reports failures doesn't depend
+  on a CDN), and the bell keeps the history, opening only when clicked. A
+  long-running task raises exactly one toast — its outcome — carrying a "Voir"
+  button back to the panel, instead of a toast per progress tick.
+  Messages worth keeping (backup, snapshot, deletion, import, account changes)
+  go to both via `showToast(..., { persist: true })`; validation errors and
+  "list refreshed" acknowledgements stay toast-only.
+- New sites are created on the latest supported PHP version (8.5 today)
+  instead of 8.4. The default is now derived from `SUPPORTED_PHP_VERSIONS`
+  rather than hardcoded, so adding a version to that list is enough for new
+  projects to pick it up. The compose template also stops pointing at the
+  `latest` image tag, which tracked whenever the images were last built and
+  drifted from the declared default; it now uses an explicit `php<version>`
+  tag, falling back to the newest version whose image actually exists on the
+  machine. Creation records the chosen version in `.php_version` so a later
+  rebuild keeps it.
+
+### Removed
+- `services/mysql_manager.py` (509 lines), `config/database_config.py` and
+  thirteen of the fifteen helpers in `utils/database_utils.py`. All of them
+  hardcoded the per-project container name and the legacy credentials, all of
+  them predated credential randomisation, and none was reachable: `MySQLManager`
+  was registered into `app.extensions` and never called, and the two
+  `database_utils` helpers still imported by `routes/project_lifecycle.py` were
+  imported but never invoked. `export_database_with_db_name` /
+  `import_database_with_db_name` went too — they authenticated with a password
+  spelled `root_password` that exists nowhere in the repository. Net −866 lines.
 
 ### Fixed
+- "Erreur lors du chargement des projets" on the monitoring, backups, servers
+  and logs pages, which list no projects at all. `project-management.js` ships
+  on every page and two separate entry points called `loadProjects()` at
+  startup; the fetch succeeded, then `updateStats()` threw writing to counter
+  elements that only exist on the home page, and the surrounding `catch`
+  reported that as a load failure. The load now returns early when there is no
+  project grid to fill — which also stops four pages from polling the API
+  every 30 seconds for data they never display.
+- `projects.js` bound a submit handler to `#update-db-form` without checking it
+  exists. On every page except the home page that threw, aborting the rest of
+  the script — including the import-modal setup that follows it.
 - Concurrent operations stole each other's working directory. Several Docker
   routines ran `os.chdir` into a project folder and restored it in a `finally`,
   but the working directory belongs to the *process*, and the app serves every
@@ -24,6 +110,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a project silently kept them), the container folder used when changing the
   WordPress type or the PHP limits, and the parent-project check when creating
   a dev instance.
+- The Update button stayed visible after a successful update. The check only
+  ever *showed* it, never hid it — harmless while the page reloaded afterwards,
+  but the sidebar version is now refreshed live over Socket.IO, so nothing made
+  the button go away. The check is symmetric, and it re-runs when the server
+  announces a different version, bypassing the one-hour cache that would
+  otherwise replay the pre-restart answer.
 
 ### Security
 - The application no longer needs `NOPASSWD: ALL`. It used to run 81 `sudo
@@ -52,25 +144,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   themselves; and `wpl-write-wp-config.sh` took a source *path*, which the
   caller could swap for a symlink after the check, so the content now arrives
   on stdin and lands via `rename` rather than `cp`.
-
-### Changed
-- New sites are created on the latest supported PHP version (8.5 today)
-  instead of 8.4. The default is now derived from `SUPPORTED_PHP_VERSIONS`
-  rather than hardcoded, so adding a version to that list is enough for new
-  projects to pick it up. The compose template also stops pointing at the
-  `latest` image tag, which tracked whenever the images were last built and
-  drifted from the declared default; it now uses an explicit `php<version>`
-  tag, falling back to the newest version whose image actually exists on the
-  machine. Creation records the chosen version in `.php_version` so a later
-  rebuild keeps it.
-
-### Fixed
-- The Update button stayed visible after a successful update. The check only
-  ever *showed* it, never hid it — harmless while the page reloaded afterwards,
-  but the sidebar version is now refreshed live over Socket.IO, so nothing made
-  the button go away. The check is symmetric, and it re-runs when the server
-  announces a different version, bypassing the one-hour cache that would
-  otherwise replay the pre-restart answer.
 
 ## [1.5.1] - 2026-08-04
 
