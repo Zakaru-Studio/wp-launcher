@@ -184,6 +184,9 @@ def list_projects_with_status():
         
         project_info = {
             'name': project_name,
+            # Chemin des fichiers éditables sur l'hôte (pas le dossier
+            # containers/), consommé par le bouton « Ouvrir dans VS Code ».
+            'path': project.editable_path,
             'port': project.port,
             'container_status': container_status,
             'has_nextjs': project.has_nextjs,

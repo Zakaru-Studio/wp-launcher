@@ -524,7 +524,7 @@ async function killProcess(pid, name) {
         const data = await response.json();
         
         if (data.success) {
-            showToast(`Processus ${pid} terminé avec succès`, 'success');
+            showToast(`Processus ${pid} terminé avec succès`, 'success', 5000, { persist: true });
             // Recharger la liste après 1 seconde
             setTimeout(loadProcesses, 1000);
         } else {

@@ -152,6 +152,9 @@
     </script>
 
     <!-- Scripts de l'application (ordre important) -->
+    <!-- Toaster sonner (module ES, donc différé) : toast-notifications.js met
+         les messages en file tant qu'il n'a pas signalé `sonner:ready`. -->
+    <script type="module" src="{{ url_for('static', filename='js/sonner-toaster.js') }}"></script>
     <script src="{{ url_for('static', filename='js/toast-notifications.js') }}"></script>
     <script src="{{ url_for('static', filename='js/app-config.js') }}"></script>
     <!-- Dropdown custom : améliore les <select> natifs (progressive enhancement) -->

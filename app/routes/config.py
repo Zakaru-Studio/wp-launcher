@@ -13,6 +13,21 @@ import json
 config_bp = Blueprint('config', __name__, url_prefix='/api/config')
 
 
+_LOOPBACK_ADDRS = ('127.0.0.1', '::1', 'localhost')
+
+
+def _client_is_on_this_machine():
+    """True quand le navigateur tourne sur l'hôte de WP Launcher.
+
+    Sert à choisir entre `vscode://file/...` et Remote-SSH pour le bouton
+    « Ouvrir dans VS Code ». `remote_addr` est fiable ici : ProxyFix est
+    installé quand WPL_TRUSTED_PROXIES est configuré, donc l'adresse vue
+    est bien celle du client et pas celle du reverse proxy.
+    """
+    addr = (request.remote_addr or '').strip()
+    return addr in _LOOPBACK_ADDRS or addr.startswith('127.')
+
+
 @config_bp.route('/app', methods=['GET'])
 @login_required
 def get_app_config():
@@ -23,7 +38,12 @@ def get_app_config():
         'app_port': DockerConfig.APP_PORT,
         'app_url': f"http://{DockerConfig.LOCAL_IP}:{DockerConfig.APP_PORT}",
         'wp_admin_user': DockerConfig.WP_ADMIN_USER,
-        'wp_admin_password': DockerConfig.WP_ADMIN_PASSWORD
+        'wp_admin_password': DockerConfig.WP_ADMIN_PASSWORD,
+        'vscode': {
+            'scheme': DockerConfig.VSCODE_SCHEME,
+            'ssh_host': DockerConfig.VSCODE_SSH_HOST,
+            'remote': not _client_is_on_this_machine(),
+        }
     })
 
 

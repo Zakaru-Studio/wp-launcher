@@ -983,6 +983,7 @@ span.app-version.badge.bg-secondary {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
     gap: 1rem;
+    padding-top:16px;
 }
 
 .service-card {
@@ -2808,6 +2809,28 @@ body.import-progress-visible {
     color: var(--al-primary);
 }
 
+/* Sous-menu des instances de développement — même traitement que le WP-CLI,
+   dont il partage la mécanique flottante. */
+#instances-floating-submenu {
+    position: fixed !important;
+    z-index: 99999 !important;
+    min-width: 240px;
+    border: none;
+    box-shadow: var(--shadow-strong);
+    border-radius: var(--border-radius-small);
+    background: var(--al-surface-container-lowest);
+    list-style: none;
+}
+
+#instances-floating-submenu .dropdown-item {
+    padding: 10px 15px;
+}
+
+#instances-floating-submenu .dropdown-item:hover {
+    background: var(--al-surface-container-high);
+    color: var(--al-primary);
+}
+
 .wpcli-submenu-trigger {
     display: flex;
     justify-content: space-between;
@@ -3620,9 +3643,12 @@ a:focus-visible {
     background: var(--al-surface-container);
 }
 
-[data-theme="dark"] .service-card {
-    background: var(--al-surface-container-lowest);
-}
+/* Pas de fond propre en sombre : `--al-surface-container-lowest` y vaut
+   #0b1326, soit exactement `--al-background`. La carte était donc peinte de
+   la couleur de la page — invisible au repos, et ne se détachant qu'au
+   survol. On laisse la règle de base s'appliquer (`-low`, #131b2e), ce qui
+   reproduit en sombre l'intention du thème clair : visible au repos, plus
+   claire au survol. */
 
 [data-theme="dark"] .service-card:hover {
     background: var(--al-surface-container);
@@ -4529,6 +4555,13 @@ background: #ffffff05;
 a.instance-icon-btn { text-decoration: none; flex-shrink: 0; }
 a.instance-icon-btn:hover { text-decoration: none; }
 
+/* Logo VS Code : couleur de marque plutôt que la teinte des icônes Font
+   Awesome voisines, pour rester reconnaissable au premier coup d'œil.
+   Le SVG suit `currentColor` afin que l'état hover reste cohérent. */
+.instance-vscode-btn { color: #0098ff; }
+.instance-vscode-btn:hover { color: #29b0ff; }
+.instance-vscode-btn .vscode-icon { fill: currentColor; display: block; }
+
 .instance-ghost-btn {
     display: inline-flex;
     align-items: center;
@@ -4553,6 +4586,23 @@ a.instance-icon-btn:hover { text-decoration: none; }
 /* Instance dev sélectionnée : accent vert lisible dans les deux thèmes
    (--notif-success: teal foncé en clair, vert signature en sombre).
    Remplace les anciens styles inline #4ffebd, illisibles sur fond clair. */
+/* Pastille « instance dev active » sur la ligne du site, dans la même
+   famille visuelle que le pill de statut voisin. */
+.instance-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--notif-success) 55%, transparent);
+    background: color-mix(in srgb, var(--notif-success) 9%, transparent);
+    color: var(--notif-success);
+}
+.instance-chip[hidden] { display: none; }
+
 .instance-ghost-btn.has-dev-instance {
     /* inset box-shadow plutôt que border : pas de décalage de layout
        (le bouton de base est border: none) */

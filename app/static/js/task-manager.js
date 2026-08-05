@@ -255,7 +255,9 @@ class TaskManager {
         };
 
         this.tasks.set(task_id, task);
-        this.openSidebar();
+        // Pas d'ouverture automatique : une tâche démarrée sur une autre
+        // session n'a aucune raison d'interrompre ce qu'on est en train de
+        // faire ici. Le badge suffit.
         this.renderSingleTask(task_id, true);
         this.updateBadgeVisibility();
         this.startAutoProgress(task_id);
@@ -393,9 +395,9 @@ class TaskManager {
         // Ajouter la tâche à la collection
         this.tasks.set(taskId, task);
 
-        // Ouvrir immédiatement la sidebar et afficher la tâche
-        //console.log(`🎨 CRÉATION TÂCHE: ${taskId} (${task.status})`);
-        this.openSidebar(); // Ouvrir la sidebar IMMÉDIATEMENT
+        // Le panneau ne s'ouvre PAS ici : il volait le focus et masquait la
+        // page à chaque notification. Le badge de la cloche (mis à jour plus
+        // bas) signale l'arrivée, et un toast annonce l'issue à la fin.
 
         if (task.isExclusive) {
             if (this.isProjectBusy(this.exclusiveKey(task))) {
@@ -654,6 +656,11 @@ class TaskManager {
         this.renderSingleTask(taskId);
         this.updateBadgeVisibility();
 
+        // Le panneau ne s'ouvrant plus tout seul, l'issue d'une tâche longue
+        // passerait inaperçue : c'est le toast qui porte l'information, la
+        // cloche n'en garde que la trace.
+        this.toastTaskOutcome(task, success);
+
         // Ajouter la classe de pulsation pour les tâches complétées avec succès
         if (success) {
             setTimeout(() => {
@@ -693,6 +700,27 @@ class TaskManager {
         // setTimeout(() => {
         //     this.removeTask(taskId);
         // }, 6000);
+    }
+
+    /**
+     * Toast d'issue d'une tâche : le seul moment du cycle de vie qui en
+     * mérite un. Les notifications simples sont exclues — elles ont déjà
+     * produit leur toast par showToast(), en émettre un second ferait doublon.
+     */
+    toastTaskOutcome(task, success) {
+        if (this.isNotificationType(task.type)) return;
+        if (typeof window.showToast !== 'function') return;
+
+        // Les messages finaux sont préfixés d'un ✅/❌ pour le panneau ;
+        // dans un toast, l'icône de sonner dit déjà la même chose.
+        const text = (task.message || '').replace(/^[✅❌⚠️]️?\s*/, '')
+            || (success ? 'Terminé' : 'Échec');
+        const context = [task.name, task.projectName].filter(Boolean).join(' · ');
+
+        window.showToast(text, success ? 'success' : 'error', success ? 5000 : 8000, {
+            description: context,
+            action: { label: 'Voir', onClick: () => this.openSidebar() },
+        });
     }
 
     /**

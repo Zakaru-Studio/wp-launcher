@@ -332,7 +332,7 @@ async function runBackup(type) {
         const data = await response.json();
 
         if (response.status === 202 && data.success) {
-            showToast(`Backup ${type} lancé en arrière-plan`, 'success');
+            showToast(`Backup ${type} lancé en arrière-plan`, 'success', 5000, { persist: true });
             pollBackupStatus(btn, originalText);
             return; // le bouton est réactivé en fin de polling
         } else if (response.status === 409) {
@@ -368,7 +368,7 @@ function pollBackupStatus(btn, originalText) {
 
     backupPollTimer = setInterval(async () => {
         if (Date.now() - startedAt > MAX_POLL_MS) {
-            showToast('Le backup met plus de temps que prévu — vérifiez les logs', 'warning');
+            showToast('Le backup met plus de temps que prévu — vérifiez les logs', 'warning', 8000, { persist: true });
             finish();
             return;
         }
@@ -378,9 +378,9 @@ function pollBackupStatus(btn, originalText) {
             const run = (data && data.run) || {};
             if (run.status === 'running') return;
             if (run.status === 'success') {
-                showToast('Backup terminé avec succès', 'success');
+                showToast('Backup terminé avec succès', 'success', 5000, { persist: true });
             } else if (run.status === 'failed') {
-                showToast(`Backup échoué: ${run.error || 'voir les logs'}`, 'error');
+                showToast(`Backup échoué: ${run.error || 'voir les logs'}`, 'error', 8000, { persist: true });
             }
             finish();
         } catch (e) {
@@ -406,7 +406,7 @@ async function deleteBackup(type, project, filename) {
         const data = await response.json();
 
         if (data.success) {
-            showToast('Backup supprimé avec succès', 'success');
+            showToast('Backup supprimé avec succès', 'success', 5000, { persist: true });
             refreshBackupList(true);
         } else {
             showToast(`Erreur: ${data.error}`, 'error');

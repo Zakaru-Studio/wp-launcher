@@ -90,22 +90,14 @@ window.updateProjectCardForInstance = function(projectName, instance, status) {
     // 5. Mettre à jour toutes les commandes pour utiliser le nom de l'instance
     window.updateCommandsMenu(projectCard, instance.name, true);
     
-    // 6. Mettre à jour le label du bouton instance avec le style personnalisé
-    const instanceBtn = projectCard.querySelector('.instance-dropdown-btn');
-    if (instanceBtn) {
-        const label = instanceBtn.querySelector('.instance-label');
-        if (label) {
-            const isOwnInstance = instance.owner_username === window.instancesUIManager.currentUser;
-            const newLabel = isOwnInstance ? 'Mon instance dev' : `Instance de ${instance.owner_username}`;
-            console.log(`Updating instance label to: ${newLabel}`);
-            label.textContent = newLabel;
-        }
-        
-        // Le style "instance sélectionnée" vit en CSS
-        // (.instance-ghost-btn.has-dev-instance) : il s'adapte au thème
-        // clair/sombre, contrairement aux anciens styles inline #4ffebd
-        // illisibles sur fond clair.
-        instanceBtn.classList.add('has-dev-instance');
+    // 6. Signaler l'instance active sur la ligne du site.
+    // Le sélecteur est passé dans le menu « … » ; sans cette pastille, plus
+    // rien n'indiquerait que les ports affichés sont ceux d'une instance dev.
+    const chip = projectCard.querySelector('.instance-chip');
+    if (chip) {
+        const isOwnInstance = instance.owner_username === window.instancesUIManager.currentUser;
+        chip.textContent = isOwnInstance ? 'Mon instance dev' : `Instance de ${instance.owner_username}`;
+        chip.hidden = false;
     }
 }
 
@@ -180,22 +172,13 @@ window.restoreMainInstanceCard = function(projectName) {
     // Restaurer les commandes pour utiliser le nom du projet
     updateCommandsMenu(projectCard, projectName, false);
     
-    // Restaurer le label et le style du bouton instance
-    const instanceBtn = projectCard.querySelector('.instance-dropdown-btn');
-    if (instanceBtn) {
-        const label = instanceBtn.querySelector('.instance-label');
-        if (label) {
-            label.textContent = 'Instance principale';
-        }
-        
-        // Retirer la classe suffit : plus aucun style inline n'est posé.
-        // Les resets restent pour nettoyer d'éventuels styles inline
-        // posés par une version précédente encore en cache.
-        instanceBtn.classList.remove('has-dev-instance');
-        instanceBtn.style.backgroundColor = '';
-        instanceBtn.style.border = '';
-        instanceBtn.style.color = '';
-        instanceBtn.style.boxShadow = '';
+    // Retour à l'instance principale : la pastille n'a plus lieu d'être.
+    // (Pas de libellé « Instance principale » : c'est le cas nominal, et une
+    // pastille permanente sur chaque ligne serait du bruit.)
+    const chip = projectCard.querySelector('.instance-chip');
+    if (chip) {
+        chip.hidden = true;
+        chip.textContent = '';
     }
     
     // Restaurer le port dans les services

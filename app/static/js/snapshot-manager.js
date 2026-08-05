@@ -500,7 +500,7 @@ async function createSnapshot() {
         const result = await response.json();
         
         if (result.success) {
-            showToast(`Snapshot créé avec succès! ID: ${result.snapshot_id} - Taille: ${result.metadata.archive_size_mb} MB`, 'success');
+            showToast(`Snapshot créé avec succès! ID: ${result.snapshot_id} - Taille: ${result.metadata.archive_size_mb} MB`, 'success', 5000, { persist: true });
             hideCreateSnapshotForm();
             loadSnapshotsList();
         } else {
@@ -548,7 +548,7 @@ async function rollbackSnapshot(snapshotId) {
         const result = await response.json();
         
         if (result.success) {
-            showSuccess(`Snapshot restauré avec succès! ${result.files_restored.length} fichiers restaurés`, 6000);
+            showSuccess(`Snapshot restauré avec succès! ${result.files_restored.length} fichiers restaurés`, 6000, { persist: true });
             loadSnapshotsList();
         } else {
             showError(`Erreur: ${result.message}`);
@@ -581,7 +581,7 @@ async function deleteSnapshot(snapshotId) {
         const result = await response.json();
         
         if (result.success) {
-            showToast('Snapshot supprimé avec succès', 'success');
+            showToast('Snapshot supprimé avec succès', 'success', 5000, { persist: true });
             loadSnapshotsList();
         } else {
             showToast(`Erreur: ${result.message}`, 'error');

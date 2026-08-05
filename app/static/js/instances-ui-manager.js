@@ -100,50 +100,21 @@ class InstancesUIManager {
         }
         
         dropdownElement.innerHTML = html;
-        
-        // Mettre à jour le label du bouton
-        this.updateInstanceButtonLabel(projectName, hasUserInstance);
-    }
-    
-    // Mettre à jour le label du bouton
-    updateInstanceButtonLabel(projectName, hasUserInstance) {
-        const button = document.querySelector(`#instances-dropdown-${projectName}`);
-        if (button) {
-            const label = button.querySelector('.instance-label');
-            if (label) {
-                if (hasUserInstance) {
-                    label.textContent = 'Mon instance dev';
-                    button.classList.add('has-dev-instance');
-                } else {
-                    label.textContent = 'Instance principale';
-                    button.classList.remove('has-dev-instance');
-                }
-            }
-        }
+
+        // Plus de libellé de bouton à mettre à jour : le sélecteur est passé
+        // dans le menu « … » de la ligne. L'instance active est signalée par
+        // `.instance-chip`, renseignée par instance-card-updater.js — et sur
+        // la sélection réelle, pas sur la simple existence d'une instance.
     }
 }
 
 // Instance globale
 window.instancesUIManager = new InstancesUIManager();
 
-// Event delegation pour charger les instances au clic sur le dropdown
+// Le chargement de la liste est déclenché par openInstancesSubmenu()
+// (project-management.js), à l'ouverture du sous-menu « Instances ». Le
+// dropdown Bootstrap du bandeau qu'écoutait ce module n'existe plus.
 document.addEventListener('DOMContentLoaded', function() {
-    // Utiliser l'événement show.bs.dropdown sur le document
-    document.addEventListener('show.bs.dropdown', function(event) {
-        // Vérifier si c'est un dropdown d'instances
-        const button = event.target;
-        if (button.classList.contains('instance-dropdown-btn')) {
-            const dropdownMenu = button.nextElementSibling;
-            if (dropdownMenu && dropdownMenu.classList.contains('instances-dropdown')) {
-                const projectName = dropdownMenu.dataset.project;
-                if (projectName && window.instancesUIManager) {
-                    console.log('Chargement des instances pour:', projectName);
-                    window.instancesUIManager.loadProjectInstances(projectName, dropdownMenu);
-                }
-            }
-        }
-    });
-    
     console.log('✅ Instances UI Manager initialisé');
 });
 

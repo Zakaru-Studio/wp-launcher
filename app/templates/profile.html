@@ -157,7 +157,7 @@ async function updateSSHKey() {
         });
         const data = await response.json();
         if (data.success) {
-            if (window.showSuccess) showSuccess('{{ _("SSH key updated successfully") }}');
+            if (window.showSuccess) showSuccess('{{ _("SSH key updated successfully") }}', { persist: true });
             else alert('{{ _("SSH key updated successfully") }}');
         } else {
             if (window.showError) showError(data.error);

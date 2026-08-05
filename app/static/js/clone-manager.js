@@ -216,7 +216,7 @@ async function submitCloneForm(event) {
                 }
             }, 1000);
         } else {
-            showToast(`Erreur lors du clonage: ${result.message}`, 'error');
+            showToast(`Erreur lors du clonage: ${result.message}`, 'error', 8000, { persist: true });
         }
         
     } catch (error) {

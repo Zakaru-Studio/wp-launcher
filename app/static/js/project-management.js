@@ -410,6 +410,16 @@ function showCreateProjectModal() {
  * au lieu d'afficher "Erreur" à chaque poll.
  */
 async function loadProjects({ silent = false } = {}) {
+    // Rien à charger là où il n'y a pas de liste de sites à remplir. Le
+    // script est servi sur toutes les pages et deux points d'entrée
+    // distincts appellent cette fonction au démarrage (ici et main.js) :
+    // sur monitoring, sauvegardes, serveurs ou logs, le rendu échouait
+    // faute de conteneur et le catch annonçait « Erreur lors du chargement
+    // des projets » sur une page qui n'en affiche aucun.
+    if (!document.getElementById('projects-grid')) {
+        return;
+    }
+
     try {
         const response = await fetch('/projects_with_status', {
             // Explicit: keep session cookie so expired sessions produce
@@ -574,11 +584,20 @@ function updateStats() {
     // Compter les projets Next.js purs ET les projets WordPress avec Next.js ajouté
     const nextjsProjects = projects.filter(p => p.type === 'nextjs' || p.type === 'wordpress_nextjs' || p.nextjs_enabled || p.has_nextjs).length;
 
-    document.getElementById('total-projects').textContent = totalProjects;
-    document.getElementById('active-projects').textContent = activeProjects;
-    document.getElementById('inactive-projects').textContent = inactiveProjects;
-    document.getElementById('wordpress-projects').textContent = wordpressProjects;
-    document.getElementById('nextjs-projects').textContent = nextjsProjects;
+    // Les compteurs n'existent que sur l'accueil. Écrire à l'aveugle levait
+    // une TypeError que le try/catch de loadProjects présentait comme une
+    // erreur de chargement — un diagnostic faux, sur une page sans sites.
+    const counters = {
+        'total-projects': totalProjects,
+        'active-projects': activeProjects,
+        'inactive-projects': inactiveProjects,
+        'wordpress-projects': wordpressProjects,
+        'nextjs-projects': nextjsProjects,
+    };
+    for (const [id, value] of Object.entries(counters)) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+    }
 }
 
 /**
@@ -586,6 +605,7 @@ function updateStats() {
  */
 function renderProjects() {
     const container = document.getElementById('projects-grid');
+    if (!container) return;
 
     if (projects.length === 0) {
         container.innerHTML = `
@@ -652,6 +672,49 @@ function onSiteFaviconError(img) {
     img.replaceWith(i);
 }
 window.onSiteFaviconError = onSiteFaviconError;
+
+/** Logo officiel Visual Studio Code (tracé mono-chemin de la marque).
+ *  `fill-rule="evenodd"` est indispensable : l'encoche en V est un sous-tracé
+ *  du même chemin, que la règle nonzero par défaut remplit au lieu de l'évider. */
+const VSCODE_ICON_SVG = `
+    <svg class="vscode-icon" viewBox="0 0 100 100" width="17" height="17" aria-hidden="true" focusable="false">
+        <path fill-rule="evenodd" d="M70.912 99.317a6.223 6.223 0 0 0 4.96-.19l20.589-9.907A6.25 6.25 0 0 0 100 83.587V16.413a6.25 6.25 0 0 0-3.54-5.632L75.874.874a6.226 6.226 0 0 0-7.104 1.21L29.355 38.04 12.187 25.01a4.162 4.162 0 0 0-5.318.236l-5.506 5.009a4.168 4.168 0 0 0-.004 6.162L16.247 50 1.36 63.583a4.168 4.168 0 0 0 .004 6.162l5.506 5.01a4.162 4.162 0 0 0 5.318.236l17.168-13.032 39.415 35.958a6.24 6.24 0 0 0 2.141 1.4ZM75.015 27.3 45.11 50l29.906 22.701V27.3Z"/>
+    </svg>`;
+
+/**
+ * Ouvre le dossier d'un site dans VS Code.
+ *
+ * L'URI est construite au clic (et non au rendu de la carte) : la config
+ * serveur — dont on sait si le navigateur est distant — arrive en asynchrone
+ * et peut ne pas être encore chargée quand les cartes s'affichent.
+ */
+function openProjectInVSCode(projectName) {
+    const card = document.querySelector(`[data-project="${projectName}"]`);
+    const path = card ? card.dataset.projectPath : '';
+    const uri = getVscodeUri(path);
+
+    if (!uri) {
+        const cfg = (window.APP_CONFIG && window.APP_CONFIG.vscode) || {};
+        showError(
+            cfg.remote && !cfg.ssh_host
+                ? "Hôte SSH non configuré : renseignez WPL_VSCODE_SSH_HOST dans le .env pour ouvrir les sites à distance."
+                : "Chemin du projet introuvable."
+        );
+        return;
+    }
+
+    // Le handler de protocole est déclenché depuis une iframe cachée et non
+    // par `window.location`. Une navigation de premier niveau déclencherait
+    // le `beforeunload` de main.js — soit la boîte « Une opération est en
+    // cours, êtes-vous sûr de vouloir quitter ? » alors qu'on ne quitte
+    // rien : VS Code s'ouvre à côté et la page reste en place.
+    const frame = document.createElement('iframe');
+    frame.style.display = 'none';
+    frame.src = uri;
+    document.body.appendChild(frame);
+    setTimeout(() => frame.remove(), 2000);
+}
+window.openProjectInVSCode = openProjectInVSCode;
 
 function createProjectHTML(project) {
     // Services disponibles
@@ -989,7 +1052,8 @@ function createProjectHTML(project) {
              data-project-name="${project.name}"
              data-port-wordpress="${project.port || ''}"
              data-port-phpmyadmin="${project.pma_port || ''}"
-             data-port-mailpit="${project.mailpit_port || ''}">
+             data-port-mailpit="${project.mailpit_port || ''}"
+             data-project-path="${_escAttr(project.path || '')}">
 
             <div class="instance-strip-main" ${project.status === 'active' ? `onclick="toggleProject('${project.name}')" style="cursor: pointer;"` : 'style="cursor: default;"'}>
                 <div class="${iconBoxClass}">
@@ -1003,6 +1067,13 @@ function createProjectHTML(project) {
                             <span class="status-dot ${statusDotAnim}"></span>
                             ${statusLabel}
                         </span>
+                        ${isWordPress && project.status === 'active' ? `
+                        <!-- Le sélecteur d'instance vit désormais dans le menu « … »,
+                             mais l'instance active change les ports de toute la ligne :
+                             cette pastille garde l'information visible sans ouvrir le menu.
+                             Renseignée par instance-card-updater.js. -->
+                        <span class="instance-chip" hidden></span>
+                        ` : ''}
                         ${project.status === 'active' ? `
                             <button class="project-toggle-btn instance-toggle" onclick="event.stopPropagation(); toggleProject('${project.name}')" title="Masquer/Afficher les détails">
                                 <i class="fas fa-chevron-down"></i>
@@ -1017,35 +1088,42 @@ function createProjectHTML(project) {
                 </div>
 
                 <div class="instance-actions project-header-right" onclick="event.stopPropagation();">
-                    ${isWordPress && project.status === 'active' ? `
-                    <div class="btn-group">
-                        <button class="instance-ghost-btn instance-dropdown-btn" type="button"
-                                data-bs-toggle="dropdown"
-                                data-bs-auto-close="true"
-                                aria-expanded="false"
-                                title="Instances de développement"
-                                id="instances-dropdown-${project.name}">
-                            <i class="fas fa-server"></i>
-                            <span class="instance-label">Instance</span>
-                            <i class="fas fa-chevron-down"></i>
+                    ${project.status === 'active' && project.path ? `
+                        <button class="instance-icon-btn instance-vscode-btn" type="button"
+                                onclick="event.stopPropagation(); openProjectInVSCode('${project.name}');"
+                                title="Ouvrir dans VS Code">
+                            ${VSCODE_ICON_SVG}
                         </button>
-                        <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end instances-dropdown"
-                            data-project="${project.name}">
-                            <li class="dropdown-header"><small>Chargement...</small></li>
-                        </ul>
-                    </div>
                     ` : ''}
 
-                    <a class="instance-icon-btn" href="/deployments?project=${encodeURIComponent(project.name)}"
-                       title="Déploiement de ${_escAttr(project.name)}">
-                        <i class="fas fa-rocket"></i>
-                    </a>
+                    ${project.status === 'active' && mainUrl ? `
+                        <a href="${mainUrl}/wp-admin/" target="_blank" class="instance-link-btn" onclick="event.stopPropagation();">
+                            WP Admin
+                        </a>
+                    ` : ''}
+
+                    ${project.status === 'active' ? `
+                        <button class="instance-pill-btn pill-danger btn-modern btn-running" onclick="stopProject('${project.name}')" title="Arrêter le projet">
+                            <span class="material-symbols-outlined">stop</span>
+                            <span>Stop</span>
+                        </button>
+                    ` : `
+                        <button class="instance-pill-btn pill-success btn-modern btn-start" onclick="startProject('${project.name}')" title="Démarrer le projet">
+                            <span class="material-symbols-outlined">play_arrow</span>
+                            <span>Start</span>
+                        </button>
+                    `}
 
                     <div class="btn-group">
-                        <button class="instance-icon-btn" type="button" data-bs-toggle="dropdown" data-bs-auto-close="true" aria-expanded="false" title="Commandes du projet">
-                            <i class="fas fa-cog"></i>
+                        <button class="instance-icon-btn instance-menu-btn" type="button" data-bs-toggle="dropdown" data-bs-auto-close="true" aria-expanded="false" title="Actions du site">
+                            <i class="fas fa-ellipsis-vertical"></i>
                         </button>
                         <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end project-commands-dropdown">
+                            ${isWordPress && project.status === 'active' ? `
+                            <li><a class="dropdown-item instances-submenu-btn" href="#" data-project="${project.name}"><i class="fas fa-server me-2"></i>Instances<span class="float-end">›</span></a></li>
+                            ` : ''}
+                            <li><a class="dropdown-item" href="/deployments?project=${encodeURIComponent(project.name)}"><i class="fas fa-rocket me-2"></i>Déploiement</a></li>
+                            <li><hr class="dropdown-divider"></li>
                             ${project.status === 'active' ? `
                             <li><a class="dropdown-item" href="#" onclick="restartProject('${project.name}'); return false;"><i class="fas fa-redo me-2"></i>Redémarrer</a></li>
                             ` : ''}
@@ -1067,24 +1145,6 @@ function createProjectHTML(project) {
                             <li><a class="dropdown-item text-danger" href="#" onclick="deleteProject('${project.name}'); return false;"><i class="fas fa-trash me-2"></i>Supprimer le site</a></li>
                         </ul>
                     </div>
-
-                    ${project.status === 'active' && mainUrl ? `
-                        <a href="${mainUrl}/wp-admin/" target="_blank" class="instance-link-btn" onclick="event.stopPropagation();">
-                            WP Admin
-                        </a>
-                    ` : ''}
-
-                    ${project.status === 'active' ? `
-                        <button class="instance-pill-btn pill-danger btn-modern btn-running" onclick="stopProject('${project.name}')" title="Arrêter le projet">
-                            <span class="material-symbols-outlined">stop</span>
-                            <span>Stop</span>
-                        </button>
-                    ` : `
-                        <button class="instance-pill-btn pill-success btn-modern btn-start" onclick="startProject('${project.name}')" title="Démarrer le projet">
-                            <span class="material-symbols-outlined">play_arrow</span>
-                            <span>Start</span>
-                        </button>
-                    `}
                 </div>
             </div>
 
@@ -2168,7 +2228,7 @@ async function deleteProject(projectName) {
                 } else {
                     // Fallback: utiliser showSuccess si disponible
                     if (typeof showSuccess === 'function') {
-                        showSuccess(data.message);
+                        showSuccess(data.message, { persist: true });
                     }
                 }
 
@@ -2191,7 +2251,7 @@ async function deleteProject(projectName) {
             } else {
                 // Fallback: utiliser showError si disponible
                 if (typeof showError === 'function') {
-                    showError(data.message);
+                    showError(data.message, { persist: true });
                 }
             }
 
@@ -2207,7 +2267,7 @@ async function deleteProject(projectName) {
         } else {
             // Fallback: utiliser showError si disponible
             if (typeof showError === 'function') {
-                showError('Erreur lors de la suppression du projet');
+                showError('Erreur lors de la suppression du projet', { persist: true });
             }
         }
     }
@@ -2728,27 +2788,36 @@ async function stopImport() {
 
 // Initialisation principale
 document.addEventListener('DOMContentLoaded', function () {
-    
+
     initProgressTracking();
-    loadProjects();
+
+    // Ce script est chargé sur toutes les pages, mais la liste des sites
+    // n'existe que sur l'accueil. Ailleurs (monitoring, sauvegardes,
+    // serveurs, logs) le chargement partait quand même, échouait faute de
+    // conteneur où écrire, et annonçait « Erreur lors du chargement des
+    // projets » pour une page qui n'en affiche aucun — en sondant l'API
+    // toutes les 30 s par-dessus le marché.
+    if (document.getElementById('projects-grid')) {
+        loadProjects();
+
+        // Rafraîchir automatiquement toutes les 30 secondes. Background
+        // polls run with silent=true so a transient error doesn't stack
+        // toast entries in the bell. _stopProjectsPoll() is called from
+        // the session-expiry guard so a dead session doesn't keep 302-ing.
+        _projectsPollTimer = setInterval(() => loadProjects({ silent: true }), 30000);
+
+        // Vérifier le statut des boutons npm run dev toutes les 10 secondes
+        setInterval(checkNextjsDevStatus, 10000);
+    }
 
     // Initialiser la gestion des fichiers
     initFileUpload();
 
     // Initialiser la gestion du formulaire
     initCreateProjectForm();
-    
+
     // Initialiser les gestionnaires WP-CLI
     initWPCLIHandlers();
-
-    // Rafraîchir automatiquement toutes les 30 secondes. Background
-    // polls run with silent=true so a transient error doesn't stack
-    // toast entries in the bell. _stopProjectsPoll() is called from
-    // the session-expiry guard so a dead session doesn't keep 302-ing.
-    _projectsPollTimer = setInterval(() => loadProjects({ silent: true }), 30000);
-
-    // Vérifier le statut des boutons npm run dev toutes les 10 secondes
-    setInterval(checkNextjsDevStatus, 10000);
 });
 
 // Exposer les fonctions globalement pour qu'elles soient accessibles depuis d'autres scripts
@@ -2803,6 +2872,75 @@ function runWPCLICommand(projectName, command) {
 // Variable globale pour le projet du sous-menu
 let wpcliSubmenuProject = null;
 let wpcliSubmenuElement = null;
+
+// Sous-menu des instances de développement, déplacé du bandeau du site vers
+// le menu « … ». Même mécanique flottante que WP-CLI / WP Debug : Bootstrap 5
+// ne sait pas imbriquer un dropdown dans un dropdown.
+let instancesSubmenuElement = null;
+
+/**
+ * Crée le conteneur du sous-menu des instances.
+ *
+ * C'est un <ul> et non un <div> : instancesUIManager y injecte des <li>,
+ * exactement le balisage qu'il produisait pour l'ancien dropdown du bandeau.
+ */
+function createInstancesSubmenu() {
+    if (instancesSubmenuElement) return instancesSubmenuElement;
+
+    const submenu = document.createElement('ul');
+    submenu.id = 'instances-floating-submenu';
+    submenu.className = 'dropdown-menu dropdown-menu-dark';
+    submenu.style.cssText = 'position: fixed; z-index: 99999; min-width: 240px; display: none;';
+    document.body.appendChild(submenu);
+
+    instancesSubmenuElement = submenu;
+    return submenu;
+}
+
+/**
+ * Ouvre le sous-menu des instances à côté de l'entrée de menu cliquée.
+ */
+function openInstancesSubmenu(event, projectName) {
+    if (!projectName) {
+        console.error('[Instances Submenu] Missing project name');
+        return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    // Un seul sous-menu flottant à la fois.
+    if (wpcliSubmenuElement) wpcliSubmenuElement.style.display = 'none';
+    if (window.wpDebugSubmenuElement) window.wpDebugSubmenuElement.style.display = 'none';
+
+    const submenu = createInstancesSubmenu();
+    submenu.dataset.project = projectName;
+    submenu.innerHTML = '<li class="dropdown-header"><small>Chargement...</small></li>';
+
+    const trigger = event.target.closest('a') || event.target;
+    const rect = trigger.getBoundingClientRect();
+
+    let left = rect.right + 10;
+    if (window.innerWidth - rect.right < 260) {
+        left = Math.max(8, rect.left - 250);
+    }
+    let top = rect.top;
+    if (top + 240 > window.innerHeight) {
+        top = Math.max(8, window.innerHeight - 250);
+    }
+
+    submenu.style.left = `${left}px`;
+    submenu.style.top = `${top}px`;
+    submenu.style.display = 'block';
+
+    // Le rendu de la liste reste la responsabilité d'instances-ui-manager.js.
+    if (window.instancesUIManager) {
+        window.instancesUIManager.loadProjectInstances(projectName, submenu);
+    } else {
+        submenu.innerHTML = '<li class="dropdown-item text-danger"><small>Gestionnaire d\'instances indisponible</small></li>';
+    }
+}
+window.openInstancesSubmenu = openInstancesSubmenu;
 
 /**
  * Crée le sous-menu WP-CLI s'il n'existe pas
@@ -2983,6 +3121,21 @@ function initWPCLIHandlers() {
             return;
         }
         
+        // Gérer les clics sur .instances-submenu-btn
+        const instancesBtn = e.target.closest('.instances-submenu-btn');
+        if (instancesBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const projectName = instancesBtn.dataset.project;
+            if (projectName) {
+                openInstancesSubmenu(e, projectName);
+            } else {
+                console.error('[Instances Submenu] ❌ No project name found');
+            }
+            return;
+        }
+
         // Gérer les clics sur .wpdebug-submenu-btn
         const wpDebugBtn = e.target.closest('.wpdebug-submenu-btn');
         if (wpDebugBtn) {
@@ -3009,7 +3162,18 @@ function initWPCLIHandlers() {
         // Fermer les sous-menus quand on clique ailleurs
         const clickedInsideWPDebug = e.target.closest('#wpdebug-floating-submenu') || e.target.closest('.wpdebug-submenu-btn');
         const clickedInsideWPCLI = e.target.closest('#wpcli-floating-submenu') || e.target.closest('.wpcli-submenu-btn');
+        const clickedInsideInstances = e.target.closest('#instances-floating-submenu') || e.target.closest('.instances-submenu-btn');
         const clickedInsideDropdown = e.target.closest('.dropdown-menu');
+
+        // Le sous-menu des instances se referme sur un clic extérieur, et sur
+        // le choix d'une instance (le basculement est déclenché par le
+        // onclick de l'item, qui s'exécute avant ce handler délégué).
+        if (instancesSubmenuElement && instancesSubmenuElement.style.display === 'block') {
+            const pickedAnInstance = e.target.closest('#instances-floating-submenu .dropdown-item');
+            if (pickedAnInstance || (!clickedInsideInstances && !clickedInsideDropdown)) {
+                instancesSubmenuElement.style.display = 'none';
+            }
+        }
         
         
         // Fermer le sous-menu WP Debug si on clique ailleurs (mais pas dans le dropdown principal)
@@ -3032,20 +3196,24 @@ function initWPCLIHandlers() {
     
     // Empêcher la fermeture du dropdown si un sous-menu est ouvert
     document.addEventListener('hide.bs.dropdown', function(e) {
-        // Vérifier si un sous-menu WP Debug ou WP-CLI est ouvert
+        // Vérifier si un sous-menu WP Debug, WP-CLI ou Instances est ouvert
         const wpDebugOpen = window.wpDebugSubmenuElement && window.wpDebugSubmenuElement.style.display === 'block';
         const wpCliOpen = wpcliSubmenuElement && wpcliSubmenuElement.style.display === 'block';
-        
+        const instancesOpen = instancesSubmenuElement && instancesSubmenuElement.style.display === 'block';
+
         // Si un sous-menu est ouvert, empêcher la fermeture du dropdown principal
-        if (wpDebugOpen || wpCliOpen) {
+        if (wpDebugOpen || wpCliOpen || instancesOpen) {
             e.preventDefault();
             console.log('[Dropdown] Fermeture empêchée (sous-menu ouvert)');
             return false;
         }
-        
+
         // Sinon, fermer normalement et nettoyer les sous-menus
         if (wpcliSubmenuElement) {
             wpcliSubmenuElement.style.display = 'none';
+        }
+        if (instancesSubmenuElement) {
+            instancesSubmenuElement.style.display = 'none';
         }
         if (window.wpDebugSubmenuElement) {
             window.wpDebugSubmenuElement.style.display = 'none';

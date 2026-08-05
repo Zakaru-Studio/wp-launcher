@@ -341,7 +341,7 @@ async function performAppRestart() {
         }
     } catch (error) {
         console.error('Erreur redémarrage:', error);
-        showToast('Erreur lors du redémarrage', 'error');
+        showToast('Erreur lors du redémarrage', 'error', 8000, { persist: true });
         resetRestartButtons();
     }
 }

@@ -36,11 +36,14 @@ BLOCKED='(^|/)(acme\.json|\.env(\.[a-z0-9_-]+)?|id_(rsa|dsa|ecdsa|ed25519)|crede
 # Paths that legitimately match but carry no secret.
 ALLOWED='(^\.env\.example$|^app/utils/docker-template/wordpress/)'
 
-offenders=$(echo "$staged" | grep -nE "$BLOCKED" | grep -vE "$ALLOWED" || true)
+# Pas de `grep -n` ici : il préfixe chaque ligne par « N: », ce qui décale le
+# chemin et fait échouer les ancres `^` d'ALLOWED — l'exemption ne s'appliquait
+# donc jamais, et .env.example était refusé alors qu'il y figure.
+offenders=$(echo "$staged" | grep -E "$BLOCKED" | grep -vE "$ALLOWED" || true)
 
 if [ -n "$offenders" ]; then
     echo "${RED}✖ Commit refusé — fichiers susceptibles de contenir des secrets :${NC}"
-    echo "$offenders" | sed 's/^[0-9]*://' | sed 's/^/    /'
+    echo "$offenders" | sed 's/^/    /'
     echo ""
     echo "  Ces chemins ne doivent pas être versionnés. Si le fichier est un"
     echo "  exemple sans secret, ajoutez-le à ALLOWED dans .githooks/pre-commit."

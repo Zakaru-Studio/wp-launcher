@@ -52,6 +52,18 @@ class DockerConfig:
     LOCAL_IP = os.getenv('APP_HOST', _detect_local_ip())
     APP_PORT = os.getenv('APP_PORT', '5000')
 
+    # --- Bouton « Ouvrir dans VS Code » -----------------------------------
+    # Les fichiers d'un site vivent sur la machine qui héberge WP Launcher.
+    # Quand le navigateur tourne ailleurs (cas classique : l'app sur un VPS
+    # ou un serveur de dev du LAN), une URI `vscode://file/...` ferait ouvrir
+    # un chemin inexistant en local — il faut passer par Remote-SSH.
+    #
+    # VSCODE_SSH_HOST est ce qui suit `ssh ` : un alias ~/.ssh/config ou
+    # user@hote. Défaut = utilisateur courant @ IP locale, ce qui marche tel
+    # quel si les clés SSH sont en place côté poste client.
+    VSCODE_SCHEME = os.getenv('WPL_VSCODE_SCHEME') or 'vscode'
+    VSCODE_SSH_HOST = os.getenv('WPL_VSCODE_SSH_HOST') or f'{_current_user}@{LOCAL_IP}'
+
     # WordPress admin defaults.
     # `or default` et non `getenv(k, default)` : une variable définie mais
     # vide (cas classique d'un .env copié tel quel) renverrait '' et

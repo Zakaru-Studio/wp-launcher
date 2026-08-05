@@ -20,7 +20,7 @@ async function addNextjs(projectName) {
         
         if (response.success) {
             if (typeof showSuccess === 'function') {
-                showSuccess(`Next.js ajouté au projet ${projectName} sur le port ${response.nextjs_port}`);
+                showSuccess(`Next.js ajouté au projet ${projectName} sur le port ${response.nextjs_port}`, { persist: true });
             }
             if (typeof loadProjects === 'function') {
                 loadProjects(); // Recharger la liste
@@ -51,7 +51,7 @@ async function removeNextjs(projectName) {
         
         if (response.success) {
             if (typeof showSuccess === 'function') {
-                showSuccess(`Next.js supprimé du projet ${projectName}`);
+                showSuccess(`Next.js supprimé du projet ${projectName}`, { persist: true });
             }
             if (typeof loadProjects === 'function') {
                 loadProjects(); // Recharger la liste
@@ -91,7 +91,7 @@ async function importLocalSql(projectName) {
         
         if (result.success) {
             if (typeof showSuccess === 'function') {
-                showSuccess(`Fichier SQL local importé avec succès: ${result.file_imported}`);
+                showSuccess(`Fichier SQL local importé avec succès: ${result.file_imported}`, { persist: true });
             }
             // Rafraîchir la liste des projets
             if (typeof loadProjects === 'function') {
@@ -305,8 +305,11 @@ async function exportDatabase(projectName) {
     }
 }
 
-// Gestionnaire du formulaire d'import
-document.getElementById('update-db-form').addEventListener('submit', function(e) {
+// Gestionnaire du formulaire d'import.
+// Le formulaire n'existe que sur l'accueil : sans cette garde, l'accès direct
+// lève une TypeError qui interrompt l'évaluation du script, et tout ce qui
+// suit (dont le DOMContentLoaded du modal d'import) n'est jamais enregistré.
+document.getElementById('update-db-form')?.addEventListener('submit', function(e) {
     e.preventDefault();
     
     const projectName = this.dataset.projectName;

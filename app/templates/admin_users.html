@@ -177,7 +177,7 @@ async function deleteUser(username) {
     if (!confirm(`{{ _("Delete user") }} ${username} ?`)) return;
     const response = await fetch(`/admin/api/users/${username}`, {method: 'DELETE'});
     if (response.ok) {
-        if (window.showSuccess) showSuccess('{{ _("User deleted") }}');
+        if (window.showSuccess) showSuccess('{{ _("User deleted") }}', { persist: true });
         location.reload();
     } else {
         if (window.showError) showError('{{ _("Deletion failed") }}');
@@ -215,7 +215,7 @@ async function updateUserRole(selectEl) {
         selectEl.classList.remove(`role-${previous}`);
         selectEl.classList.add(`role-${newRole}`);
         selectEl.dataset.currentRole = newRole;
-        if (window.showSuccess) showSuccess(`{{ _("Role updated for") }} ${username}`);
+        if (window.showSuccess) showSuccess(`{{ _("Role updated for") }} ${username}`, { persist: true });
     } catch (error) {
         selectEl.value = previous;
         if (window.showError) showError(error.message);
