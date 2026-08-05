@@ -219,12 +219,28 @@ def test_get_used_ports_catches_ipv6_and_specific_ip_bindings(monkeypatch):
 # ─── create / delete guards ───
 
 
-def test_create_fails_fast_when_parent_project_missing(svc):
+@pytest.fixture
+def root_helpers_present(monkeypatch):
+    """Faire comme si /opt/wp-launcher-root était déployé.
+
+    `create_dev_instance` vérifie d'abord la présence des helpers racine. Sur
+    une machine de développement ils sont installés, donc l'assertion suivante
+    est atteinte ; sur un runner CI ils ne le sont pas et la création échoue
+    sur ce premier garde-fou. Sans ce stub les deux tests ci-dessous passent
+    en local et échouent en CI, en testant autre chose que ce qu'ils annoncent.
+    """
+    import app.services.dev_instance_service as mod
+    monkeypatch.setattr(mod.root_helpers, "available", lambda: True)
+
+
+def test_create_fails_fast_when_parent_project_missing(svc, root_helpers_present):
     with pytest.raises(Exception, match="introuvable"):
         svc.create_dev_instance("nope", "alice")
 
 
-def test_create_fails_fast_when_parent_mysql_stopped(svc, tmp_path, monkeypatch):
+def test_create_fails_fast_when_parent_mysql_stopped(
+    svc, tmp_path, monkeypatch, root_helpers_present
+):
     (tmp_path / "projets" / "myproj").mkdir(parents=True)
     monkeypatch.setattr(svc, "_parent_mysql_container", lambda parent: None)
     with pytest.raises(Exception, match="démarré"):
