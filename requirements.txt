@@ -28,6 +28,10 @@ requests==2.33.1  # GitHub OAuth service, HTTP calls
 
 # Deployments: SSH client + at-rest encryption for stored private keys
 # paramiko 4.x drops DSA (DSSKey) support — handled in app/services/ssh_service.py
+# paramiko 5.x drops SHA-1 (ssh-rsa signing, DH group1/group14-sha1 kex) : un
+# serveur trop ancien pour rsa-sha2 / curve25519 deviendrait injoignable.
+# Vérifié le 2026-09-04 : les 5 serveurs configurés négocient tous
+# curve25519-sha256 + ssh-ed25519.
 paramiko==5.0.0
 cryptography==50.0.0
 
