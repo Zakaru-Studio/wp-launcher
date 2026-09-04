@@ -121,8 +121,9 @@ def _copy_file_robust(src, dst, project_name=None, ports=None, resource_limits=N
 
     # Remplacer les placeholders de ressources si fournis
     if resource_limits:
-        content = content.replace('{wordpress_memory}', resource_limits.get('wordpress_memory', '384m'))
-        content = content.replace('{mysql_memory}', resource_limits.get('mysql_memory', '384m'))
+        content = content.replace('{wordpress_memory}', resource_limits.get('wordpress_memory', '512m'))
+        # Plancher mysql : voir WordPressTypeService.get_memory_limits.
+        content = content.replace('{mysql_memory}', resource_limits.get('mysql_memory', '1g'))
         content = content.replace('{wordpress_cpu}', resource_limits.get('wordpress_cpu', '0.75'))
         content = content.replace('{mysql_cpu}', resource_limits.get('mysql_cpu', '0.75'))
         print(f"🔄 Limites ressources remplacées: {resource_limits}")

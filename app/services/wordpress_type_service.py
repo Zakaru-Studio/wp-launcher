@@ -116,17 +116,22 @@ class WordPressTypeService:
         Returns:
             Dictionnaire avec les limites de mémoire et CPU
         """
+        # mysql_memory ne dépend PAS du type : le mysql.cnf du template
+        # est le même pour tous les projets et réclame à lui seul
+        # ~700 Mo (512M de buffer pool + 32M de log buffer + ~100M
+        # d'overhead serveur). En dessous de 1g le cgroup OOM-kill
+        # mysqld dès qu'un import ou une restore charge le buffer pool.
         if wp_type == self.TYPE_WOOCOMMERCE:
             return {
-                'wordpress_memory': '512m',
-                'mysql_memory': '512m',
+                'wordpress_memory': '1g',
+                'mysql_memory': '1g',
                 'wordpress_cpu': '2.0',
                 'mysql_cpu': '2.0'
             }
         else:  # showcase par défaut
             return {
-                'wordpress_memory': '256m',
-                'mysql_memory': '256m',
+                'wordpress_memory': '512m',
+                'mysql_memory': '1g',
                 'wordpress_cpu': '1.0',
                 'mysql_cpu': '1.0'
             }
