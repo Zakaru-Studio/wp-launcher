@@ -369,3 +369,100 @@ def test_fast_import_route_rejects_missing_file(client, app):
         rv = client.post("/fast_import_database/nonexistent", data={})
     # Whatever the auth/CSRF layer decides, it must not 500.
     assert rv.status_code != 500
+
+
+# ─── stalled stdin (mysql OOM-killed mid-stream) ────────────────────
+
+
+class _DeadReaderProc:
+    """A ``docker exec`` whose reader stopped draining our stdin.
+
+    Reproduces the 2026-09-04 aratice incident: mysqld was OOM-killed
+    mid-import, so nothing ever drained the pipe again while its 64 KB
+    buffer stayed full. The read end is held open and never read, which
+    is what makes the write stall rather than fail with EPIPE.
+    """
+
+    def __init__(self):
+        self._r, w = os.pipe()
+        self.stdin = os.fdopen(w, "wb", buffering=0)
+        self.stdout = None
+        self.stderr = None
+        self.killed = False
+
+    def poll(self):
+        return None
+
+    def kill(self):
+        self.killed = True
+
+    def wait(self, timeout=None):
+        return -9
+
+    def close_reader(self):
+        os.close(self._r)
+
+
+@pytest.fixture()
+def _stalling_import(tmp_path: Path, monkeypatch):
+    """Wire _import_sql_stream up to a pipe nobody reads."""
+    from app.services import fast_import_service as fis
+
+    monkeypatch.setattr(fis, "_WRITE_STALL_SECONDS", 1)
+    # Bigger than one pipe buffer, so the very first chunk stalls.
+    dump = tmp_path / "dump.sql"
+    dump.write_bytes(b"-- x\n" * 200_000)
+
+    proc = _DeadReaderProc()
+    monkeypatch.setattr(fis.subprocess, "Popen", lambda *a, **k: proc)
+    monkeypatch.setattr(
+        FastImportService, "_verify_mysql_auth", lambda self, info: None
+    )
+    try:
+        yield fis, proc, dump
+    finally:
+        try:
+            proc.stdin.close()
+        except OSError:
+            pass
+        proc.close_reader()
+
+
+def test_import_stream_gives_up_on_stalled_pipe(_stalling_import, monkeypatch):
+    """A pipe nobody drains must fail fast, not hang forever.
+
+    Before the fix the blocking write parked here indefinitely: stdin was
+    never closed, proc.poll() never ran, and every post-stream watchdog
+    was unreachable.
+    """
+    fis, proc, dump = _stalling_import
+    monkeypatch.setattr(
+        fis, "_docker_container_started_at", lambda c: "2026-09-04T13:36:00Z"
+    )
+
+    svc = FastImportService()
+    result = svc._import_sql_stream(
+        "aratice", str(dump), _info(), dump.stat().st_size
+    )
+
+    assert result["success"] is False
+    assert "pipe mort" in result["error"]
+    assert proc.killed
+
+
+def test_import_stream_names_the_container_restart(_stalling_import, monkeypatch):
+    """A StartedAt that moved means an OOM-kill — say so."""
+    fis, proc, dump = _stalling_import
+    stamps = iter(["2026-09-04T13:36:00Z", "2026-09-04T13:43:27Z"])
+    monkeypatch.setattr(
+        fis, "_docker_container_started_at", lambda c: next(stamps)
+    )
+
+    svc = FastImportService()
+    result = svc._import_sql_stream(
+        "aratice", str(dump), _info(), dump.stat().st_size
+    )
+
+    assert result["success"] is False
+    assert "redémarré" in result["error"]
+    assert "mem_limit" in result["error"]

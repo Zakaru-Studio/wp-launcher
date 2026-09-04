@@ -34,6 +34,7 @@ import gzip
 import logging
 import os
 import re
+import select
 import shutil
 import subprocess
 import tempfile
@@ -62,6 +63,11 @@ _PIPE_CHUNK = 1024 * 1024
 _ANALYZE_MAX_BYTES = 32 * 1024 * 1024  # 32 MB
 # Wall-clock import limit. Tuned for very large dumps on slow disks.
 _IMPORT_TIMEOUT_SECONDS = 3600  # 1 hour
+# How long the stdin pipe may refuse a single byte before we call it
+# dead. A healthy mysql drains the pipe continuously; a pipe that has
+# accepted nothing for this long means the reader is gone (mysql
+# OOM-killed, container restarted) and no further write will ever land.
+_WRITE_STALL_SECONDS = 120
 
 _CREATE_TABLE_RE = re.compile(
     r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?`?([A-Za-z0-9_]+)`?",
@@ -127,6 +133,15 @@ def _docker_container_started_at(container: str) -> Optional[str]:
     if result.returncode != 0:
         return None
     return result.stdout.strip() or None
+
+
+def _restarted_message(container: str) -> str:
+    """Message unique pour un container redémarré sous nos pieds."""
+    return (
+        f"Le container {container} a été redémarré pendant l'import "
+        "(très probablement OOM-kill). Augmente sa mem_limit dans "
+        "docker-compose ou libère de la RAM sur l'hôte."
+    )
 
 
 def _mysql_user_has_active_connection(
@@ -821,17 +836,78 @@ class FastImportService:
         last_pct = 0
         size_mb = max(file_size, 1) / (1024 * 1024)
         pipe_broken = False
+        stall_error: Optional[str] = None
+
+        # Non-blocking stdin so a write can never park us forever; see
+        # the docstring in _safe_write below for why that matters.
+        try:
+            stdin_fd = proc.stdin.fileno()
+            os.set_blocking(stdin_fd, False)
+        except (OSError, ValueError):
+            stdin_fd = -1
+
+        def _stall_reason() -> str:
+            """Explain a dead pipe, naming the OOM-restart when we see it."""
+            current = _docker_container_started_at(info.container)
+            if (started_at_before and current and current != started_at_before):
+                return _restarted_message(info.container)
+            return (
+                f"MySQL n'accepte plus aucune donnée depuis "
+                f"{_WRITE_STALL_SECONDS}s (pipe mort) — import interrompu."
+            )
 
         def _safe_write(buf: bytes) -> bool:
-            nonlocal pipe_broken
+            """Write every byte of *buf*, never blocking indefinitely.
+
+            This used to be a plain ``proc.stdin.write()``. If mysql dies
+            mid-stream (OOM-kill -> container restart) its end of the pipe
+            disappears while the buffer is still full, and under eventlet
+            that write parks the greenlet for good: stdin is never closed,
+            ``proc.poll()`` is never called, and the whole post-stream
+            watchdog block below — restart canary, idle probe, 1h timeout —
+            is never reached. The import then hangs forever with no error,
+            no log line and a progress bar frozen mid-file.
+
+            So: non-blocking writes plus a bounded ``select``. A pipe that
+            refuses bytes for _WRITE_STALL_SECONDS is declared dead and the
+            caller surfaces a real error instead of hanging.
+            """
+            nonlocal pipe_broken, stall_error
             if pipe_broken:
                 return False
-            try:
-                proc.stdin.write(buf)
-                return True
-            except self._PIPE_EXCS:
-                pipe_broken = True
-                return False
+            if stdin_fd < 0:  # no usable fd — best effort, old behaviour
+                try:
+                    proc.stdin.write(buf)
+                    return True
+                except self._PIPE_EXCS:
+                    pipe_broken = True
+                    return False
+            view = memoryview(buf)
+            stalled_since: Optional[float] = None
+            while view:
+                try:
+                    view = view[os.write(stdin_fd, view):]
+                    stalled_since = None
+                    continue
+                except BlockingIOError:
+                    pass
+                except self._PIPE_EXCS:
+                    pipe_broken = True
+                    return False
+                now = time.monotonic()
+                if stalled_since is None:
+                    stalled_since = now
+                elif now - stalled_since >= _WRITE_STALL_SECONDS:
+                    pipe_broken = True
+                    stall_error = _stall_reason()
+                    log.error("import stalled on stdin: %s", stall_error)
+                    return False
+                try:
+                    select.select([], [stdin_fd], [], 1.0)
+                except (OSError, ValueError):
+                    pipe_broken = True
+                    return False
+            return True
 
         # Blanket try/finally so any exception (pipe, local read, etc.)
         # leaves the subprocess in a known state and we always reach
@@ -870,6 +946,18 @@ class FastImportService:
                 proc.stdin.close()
             except Exception:  # noqa: BLE001
                 pass
+
+        # A stalled pipe means mysql is gone: there is nothing left to
+        # finalise, so skip the wait loop and report it now rather than
+        # letting the outer timeout burn an hour on a dead exec.
+        if stall_error:
+            try:
+                proc.kill()
+                proc.wait(timeout=10)
+            except (subprocess.TimeoutExpired, OSError):
+                pass
+            self._emit_progress(project_name, 0, stall_error, 'error')
+            return {'success': False, 'error': stall_error, 'bytes_sent': sent}
 
         # Post-stream: mysql can spend *minutes* rebuilding indexes and
         # committing InnoDB state after seeing stdin EOF. We drain
@@ -939,12 +1027,7 @@ class FastImportService:
                     reader.join(timeout=5)
                     return {
                         'success': False,
-                        'error': (
-                            f"Le container {info.container} a été redémarré "
-                            "pendant l'import (très probablement OOM-kill). "
-                            "Augmente sa mem_limit dans docker-compose ou "
-                            "libère de la RAM sur l'hôte."
-                        ),
+                        'error': _restarted_message(info.container),
                         'bytes_sent': sent,
                     }
                 last_restart_check = now
