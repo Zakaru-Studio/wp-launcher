@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 import os
 import stat
+import time
 from typing import Callable, Dict, List, Tuple
 
 from app.services.push_common import (
@@ -33,6 +34,17 @@ log = logging.getLogger(__name__)
 
 LIST_TIMEOUT = 600
 UPLOAD_TIMEOUT = 7200
+
+# Progress cadence: a line every REPORT_STEP of the total bytes, or every
+# REPORT_EVERY seconds — whichever comes first. A 3 GB library at
+# 1.5 MB/s would otherwise stay silent for 6 minutes between two 20 %
+# marks, which reads as a hang.
+REPORT_STEP = 0.05
+REPORT_EVERY = 10.0
+# No ETA before this much elapsed: extrapolating a multi-GB transfer from
+# one 28-byte thumbnail announces "~4 s left" and destroys any trust in
+# the number that follows.
+ETA_AFTER = 5.0
 
 # Generated artefacts that must NOT travel: they embed absolute URLs of
 # the environment that produced them, and every one of them is rebuilt
@@ -258,6 +270,17 @@ def push(
     failures: List[str] = []
     made_dirs = {""}
     next_report = 0
+    started = time.monotonic()
+    last_report = started
+
+    def report(extra: int = 0) -> None:
+        """Emit one progress line; ``extra`` counts the in-flight file."""
+        nonlocal last_report, next_report
+        now = time.monotonic()
+        done = sent_bytes + extra
+        emit("   " + _progress_line(done, total, sent_files, len(todo), now - started))
+        next_report = done + max(int(total * REPORT_STEP), 1)
+        last_report = now
 
     sftp = None
     try:
@@ -273,7 +296,15 @@ def push(
             local_path = os.path.join(local_root, rel.replace("/", os.sep))
             remote_path = f"{remote_uploads}/{rel}"
             try:
-                sftp.put(local_path, remote_path, confirm=True)
+                # Intra-file ticks: a single 500 MB video is minutes of
+                # silence otherwise, which is exactly what reads as a hang.
+                # No cancel_check here — raising inside the callback would
+                # be caught below and filed as an upload failure.
+                def on_progress(done_bytes: int, _file_total: int) -> None:
+                    if time.monotonic() - last_report >= REPORT_EVERY:
+                        report(done_bytes)
+
+                sftp.put(local_path, remote_path, confirm=True, callback=on_progress)
                 # Carry the mtime across so the next run's diff skips it.
                 st = os.stat(local_path)
                 sftp.utime(remote_path, (st.st_atime, st.st_mtime))
@@ -293,10 +324,9 @@ def push(
                     ) from exc
                 continue
 
-            if total and sent_bytes >= next_report:
-                pct = int(sent_bytes * 100 / total)
-                emit(f"   {pct}% — {sent_files}/{len(todo)} files ({human_size(sent_bytes)})")
-                next_report = sent_bytes + max(total // 5, 1)
+            if total and (sent_bytes >= next_report
+                          or time.monotonic() - last_report >= REPORT_EVERY):
+                report()
     finally:
         if sftp is not None:
             try:
@@ -326,6 +356,21 @@ def push(
         "skipped": str(len(failures)),
         "kept_remote": str(max(only_remote, 0)),
     }
+
+
+def _progress_line(sent: int, total: int, files: int, nfiles: int, elapsed: float) -> str:
+    """``42% — 1234/9952 files (1.2 GB) — 1.5 MB/s, ~18 min left``."""
+    pct = int(sent * 100 / total) if total else 100
+    line = f"{pct}% — {files}/{nfiles} files ({human_size(sent)})"
+    if elapsed >= ETA_AFTER and sent > 0:
+        rate = sent / elapsed
+        left = (total - sent) / rate if rate > 0 else 0
+        if left >= 90:
+            eta = f"~{int(round(left / 60))} min left"
+        else:
+            eta = f"~{int(left)} s left"
+        line += f" — {human_size(int(rate))}/s, {eta}"
+    return line
 
 
 def _ensure_remote_dir(sftp, path: str, made: set) -> None:

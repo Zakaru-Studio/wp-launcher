@@ -19,6 +19,10 @@ const DEPLOY_STATE = {
     view: 'grid',        // 'grid' (sites) | 'detail' (one project)
     currentProject: null,
     currentDeploymentId: null,
+    buffer: null,        // live lines held back during a replay's snapshot fetch
+    bufferedStatus: null,
+    reconcileFor: null,  // deployment whose pane may still be re-read from disk
+    globalEvents: false, // 'deployments_changed' listener already bound?
     currentRoom: null,
     socket: null,
     logListener: null,
@@ -528,17 +532,42 @@ function _ensureSocket() {
     if (!DEPLOY_STATE.socket && typeof window.getSocketIO === 'function') {
         DEPLOY_STATE.socket = window.getSocketIO();
     }
+    // getSocketIO() returns null until socket.io itself has loaded, so this
+    // cannot be done once at DOMContentLoaded: bind on the first call that
+    // actually gets a socket, and only ever once.
+    if (DEPLOY_STATE.socket && !DEPLOY_STATE.globalEvents) {
+        DEPLOY_STATE.globalEvents = true;
+        DEPLOY_STATE.socket.on('deployments_changed', onDeploymentsChanged);
+    }
     return DEPLOY_STATE.socket;
+}
+
+/** A deployment finished somewhere — refresh the lists that show it. */
+function onDeploymentsChanged(data) {
+    // The open modal's own room listener already refreshes everything for
+    // the deployment it watches; running both would double every request.
+    if (safeInt(data && data.id) === DEPLOY_STATE.currentDeploymentId) return;
+    loadDeployments();
+    // loadTargets() rebuilds the cards and clears targetHistory by design,
+    // which collapses an open history drawer. Do not yank it shut under
+    // someone who is reading it because an unrelated deployment ended.
+    const reading = Object.values(DEPLOY_STATE.targetHistory || {})
+        .some(entry => entry && entry.expanded);
+    if (!reading) loadTargets();
 }
 
 /** Subscribe to the socket room for a specific deployment. Always
  *  tears down any previous room/listeners first so we don't leak
  *  handlers or receive stale events. */
-function subscribeToDeployment(deploymentId) {
+function subscribeToDeployment(deploymentId, opts) {
     teardownDeploymentSubscription();
     const id = safeInt(deploymentId);
     if (id === null) return;
     DEPLOY_STATE.currentDeploymentId = id;
+    // Buffered mode (replay of a running deployment): events are held
+    // back until the log snapshot is on screen, then merged after it.
+    DEPLOY_STATE.buffer = (opts && opts.buffer) ? [] : null;
+    DEPLOY_STATE.bufferedStatus = null;
     const socket = _ensureSocket();
     if (!socket) return;
 
@@ -548,11 +577,22 @@ function subscribeToDeployment(deploymentId) {
 
     DEPLOY_STATE.logListener = (data) => {
         if (safeInt(data.id) !== DEPLOY_STATE.currentDeploymentId) return;
-        appendDeployLogLine(data.line, data.stream || 'stdout');
+        const stream = data.stream || 'stdout';
+        if (DEPLOY_STATE.buffer) { DEPLOY_STATE.buffer.push({ line: data.line, stream }); return; }
+        appendDeployLogLine(data.line, stream);
     };
     DEPLOY_STATE.completeListener = (data) => {
         if (safeInt(data.id) !== DEPLOY_STATE.currentDeploymentId) return;
-        setDeployStatus(safeStatus(data.status || 'success'));
+        const status = safeStatus(data.status || 'success');
+        if (DEPLOY_STATE.buffer) {
+            DEPLOY_STATE.bufferedStatus = status;
+        } else {
+            setDeployStatus(status);
+            // The log file is complete now: re-read it so the pane shows
+            // exactly what was recorded, whatever the live merge did.
+            DEPLOY_STATE.reconcileFor = id;
+            reconcileDeployLog(id);
+        }
         loadDeployments();
         loadProjects();
         loadTargets();
@@ -580,6 +620,52 @@ function teardownDeploymentSubscription() {
     DEPLOY_STATE.currentRoom = null;
     DEPLOY_STATE.logListener = null;
     DEPLOY_STATE.completeListener = null;
+    DEPLOY_STATE.buffer = null;
+    DEPLOY_STATE.bufferedStatus = null;
+    DEPLOY_STATE.reconcileFor = null;
+}
+
+/** Split a stored log file (`[stdout] line` / `[stderr] line`) into the
+ *  same {line, stream} records the socket delivers live. */
+function parseDeployLogFile(text) {
+    const out = [];
+    for (const raw of String(text || '').split('\n')) {
+        if (raw === '') continue;
+        const m = /^\[(stdout|stderr)\] ?(.*)$/.exec(raw);
+        out.push(m ? { line: m[2], stream: m[1] } : { line: raw, stream: 'stdout' });
+    }
+    return out;
+}
+
+/** Render a log snapshot, then append the live lines that arrived while
+ *  it was being fetched. The socket room is joined BEFORE the fetch so
+ *  nothing is lost; the price is a possible overlap, removed here by
+ *  matching the buffered head against the snapshot tail. */
+function renderDeployLogSnapshot(text) {
+    // Disarm the buffer FIRST and on every path: while it is an array the
+    // log listener diverts live lines into it instead of the pane, so an
+    // early return here would silently swallow the rest of the deployment.
+    const buffered = DEPLOY_STATE.buffer || [];
+    DEPLOY_STATE.buffer = null;
+    const pane = document.getElementById('deploy-log-pane');
+    if (!pane) return;
+    pane.textContent = '';
+    const snapshot = parseDeployLogFile(text);
+    if (!snapshot.length && !buffered.length) {
+        pane.textContent = t('no_log_output', '(no log output)');
+        return;
+    }
+    for (const rec of snapshot) appendDeployLogLine(rec.line, rec.stream);
+    const same = (a, b) => a.line === b.line && a.stream === b.stream;
+    let overlap = 0;
+    for (let k = Math.min(buffered.length, snapshot.length); k > 0; k--) {
+        let ok = true;
+        for (let i = 0; i < k; i++) {
+            if (!same(buffered[i], snapshot[snapshot.length - k + i])) { ok = false; break; }
+        }
+        if (ok) { overlap = k; break; }
+    }
+    for (const rec of buffered.slice(overlap)) appendDeployLogLine(rec.line, rec.stream);
 }
 
 function appendDeployLogLine(line, stream) {
@@ -694,14 +780,20 @@ function showDeployLogView(deploymentId, title) {
 async function replayDeployment(deploymentId) {
     const id = safeInt(deploymentId);
     if (id === null) return;
+    // Join the room first, buffering: if the deployment turns out to be
+    // still running, the view goes live right after the snapshot instead
+    // of freezing on "running" with a stale log (see the 20 %-forever bug).
+    subscribeToDeployment(id, { buffer: true });
     try {
         const res = await fetch(`/api/deployments/${id}/log`);
         const data = await res.json();
+        // The user may have opened another deployment (or closed the modal)
+        // while this was in flight. Landing here anyway would retitle their
+        // view, wipe the pane and steal the buffer of the deployment they
+        // actually asked for.
+        if (id !== DEPLOY_STATE.currentDeploymentId) return;
         const modalEl = document.getElementById('deployModal');
         const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
-        // A replay is read-only: no socket subscription, no currentId
-        // leak that would catch log events from a different live deploy.
-        teardownDeploymentSubscription();
         modal.show();
         // Set the steps AFTER show() so the show.bs.modal reset handler
         // (which reveals the configure step) can't clobber us — otherwise
@@ -710,10 +802,52 @@ async function replayDeployment(deploymentId) {
         document.getElementById('deploy-step-log').hidden = false;
         hideDeployButton();
         document.getElementById('deploy-log-title').textContent = `Deploy #${id} — logs`;
-        document.getElementById('deploy-log-pane').textContent = data.log || t('no_log_output', '(no log output)');
-        setDeployStatus(safeStatus(data.status || 'success'));
+        renderDeployLogSnapshot(data.log || '');
+        // A completion that landed during the fetch wins over the status
+        // the file was read with.
+        const endedMidFetch = DEPLOY_STATE.bufferedStatus;
+        const status = DEPLOY_STATE.bufferedStatus || safeStatus(data.status || 'success');
+        DEPLOY_STATE.bufferedStatus = null;
+        setDeployStatus(status);
+        if (endedMidFetch) {
+            // It finished mid-fetch: the merge was a guess, the file is not.
+            DEPLOY_STATE.reconcileFor = id;
+            reconcileDeployLog(id);
+        }
+        // Finished: back to a read-only replay — no currentId leak that
+        // would catch log events from a different live deploy.
+        if (status !== 'running') teardownDeploymentSubscription();
     } catch (e) {
+        if (id === DEPLOY_STATE.currentDeploymentId) teardownDeploymentSubscription();
         deployToast('error', e.message);
+    }
+}
+
+/** Replace the pane with the stored log file, which is authoritative.
+ *
+ *  Joining the room before fetching the snapshot leaves a small window in
+ *  which a line reaches neither (the join and the GET are handled
+ *  independently), and the content-based overlap match is a heuristic. Both
+ *  are provisional: once the deployment is over its log file is complete
+ *  and final, so re-reading it settles the view exactly. */
+async function reconcileDeployLog(deploymentId) {
+    const id = safeInt(deploymentId);
+    if (id === null) return;
+    try {
+        const res = await fetch(`/api/deployments/${id}/log`);
+        const data = await res.json();
+        const pane = document.getElementById('deploy-log-pane');
+        // Only touch the pane if it still shows this deployment.
+        if (!pane || id !== DEPLOY_STATE.reconcileFor) return;
+        pane.textContent = '';
+        const lines = parseDeployLogFile(data.log || '');
+        if (!lines.length) {
+            pane.textContent = t('no_log_output', '(no log output)');
+            return;
+        }
+        for (const rec of lines) appendDeployLogLine(rec.line, rec.stream);
+    } catch (_) {
+        // The live view already holds the lines; leave it as it is.
     }
 }
 
@@ -2009,6 +2143,10 @@ function bindDeployModalLifecycle() {
 document.addEventListener('DOMContentLoaded', () => {
     loadServers();
     loadDeployments();
+    // Prime the socket so the 'deployments_changed' broadcast refreshes the
+    // history even when no log modal is open. Binding happens inside
+    // _ensureSocket(), which is retried on every subscribe.
+    _ensureSocket();
     // Load deployable projects first (needed by the create-project select
     // + folder env badges), then projects and connections.
     // Projects and connections must both be in before we can honour a

@@ -1014,3 +1014,320 @@ def test_push_modules_have_no_undefined_names():
         if "undefined name" in line or "may be undefined" in line
     ]
     assert not problems, "\n".join(problems)
+
+
+# ─── DB push: table prefix rewrite ───────────────────────────────────
+
+
+def test_prefix_rewrite_touches_statement_heads_only():
+    """The dump lands under the remote prefix: every table-naming
+    statement is rewritten, the data itself never is — a post quoting
+    `wp_posts` in a code block must survive untouched."""
+    from app.services.db_push import _rewrite_prefix_stream
+
+    dump = (
+        b"-- Table structure for table `wp_posts`\n"
+        b"DROP TABLE IF EXISTS `wp_posts`;\n"
+        b"CREATE TABLE `wp_posts` (\n"
+        b"  `ID` bigint(20) unsigned NOT NULL,\n"
+        b"  CONSTRAINT `fk` FOREIGN KEY (`ID`) REFERENCES `wp_users` (`ID`)\n"
+        b") ENGINE=InnoDB;\n"
+        b"LOCK TABLES `wp_posts` WRITE;\n"
+        b"/*!40000 ALTER TABLE `wp_posts` DISABLE KEYS */;\n"
+        b"INSERT INTO `wp_posts` VALUES (1,'see `wp_posts` and wp_users here');\n"
+        b"UNLOCK TABLES;\n"
+    )
+    out = b"".join(_rewrite_prefix_stream([dump], "wp_", "h7U7YTGk_"))
+    assert out == (
+        b"-- Table structure for table `h7U7YTGk_posts`\n"
+        b"DROP TABLE IF EXISTS `h7U7YTGk_posts`;\n"
+        b"CREATE TABLE `h7U7YTGk_posts` (\n"
+        b"  `ID` bigint(20) unsigned NOT NULL,\n"
+        b"  CONSTRAINT `fk` FOREIGN KEY (`ID`) REFERENCES `h7U7YTGk_users` (`ID`)\n"
+        b") ENGINE=InnoDB;\n"
+        b"LOCK TABLES `h7U7YTGk_posts` WRITE;\n"
+        b"/*!40000 ALTER TABLE `h7U7YTGk_posts` DISABLE KEYS */;\n"
+        b"INSERT INTO `h7U7YTGk_posts` VALUES (1,'see `wp_posts` and wp_users here');\n"
+        b"UNLOCK TABLES;\n"
+    )
+
+
+def test_prefix_rewrite_survives_chunk_boundaries():
+    """`docker exec cat` hands the dump over in arbitrary chunks; a
+    statement head split across two of them must still be rewritten,
+    and the bytes must come out identical apart from the prefix."""
+    from app.services.db_push import _rewrite_prefix_stream
+
+    dump = b"INSERT INTO `wp_options` VALUES (1);\nINSERT INTO `wp_users` VALUES (2);"
+    for cut in range(1, len(dump)):
+        chunks = [dump[:cut], dump[cut:]]
+        out = b"".join(_rewrite_prefix_stream(chunks, "wp_", "abc_"))
+        assert out == b"INSERT INTO `abc_options` VALUES (1);\nINSERT INTO `abc_users` VALUES (2);", cut
+
+
+def test_prefix_rewrite_is_a_passthrough_when_prefixes_match():
+    from app.services.db_push import _rewrite_prefix_stream
+
+    chunks = [b"INSERT INTO `wp_a` VALUES (1);\n", b"partial"]
+    assert list(_rewrite_prefix_stream(chunks, "wp_", "wp_")) == chunks
+
+
+def test_prefix_rewrite_does_not_confuse_a_longer_prefix():
+    """dev `wp_` vs remote `wp_abc_`: rewriting must not loop or double
+    the prefix, and the reverse direction must work too."""
+    from app.services.db_push import _rewrite_prefix_stream
+
+    line = b"CREATE TABLE `wp_posts` (`a` int) ENGINE=InnoDB;\n"
+    assert b"".join(_rewrite_prefix_stream([line], "wp_", "wp_abc_")) == (
+        b"CREATE TABLE `wp_abc_posts` (`a` int) ENGINE=InnoDB;\n"
+    )
+    back = b"CREATE TABLE `wp_abc_posts` (`a` int) ENGINE=InnoDB;\n"
+    assert b"".join(_rewrite_prefix_stream([back], "wp_abc_", "wp_")) == line
+
+
+def test_import_script_renames_prefixed_keys_after_import():
+    """Tables under the new prefix are not enough: the roles option and
+    the capabilities usermeta are keyed by prefix and must follow, or
+    every user loses their role on the remote site."""
+    from app.services.db_push import _SCRIPT_IMPORT, _like_escape
+
+    assert 'OLD_PREFIX="${10:-}"' in _SCRIPT_IMPORT
+    assert "option_name = '${OLD_PREFIX}user_roles'" in _SCRIPT_IMPORT
+    assert "'${OLD_PREFIX}capabilities'" in _SCRIPT_IMPORT
+    # The renaming happens after a successful import, never before.
+    assert _SCRIPT_IMPORT.index("-- import finished") < _SCRIPT_IMPORT.index("renaming the prefixed keys")
+    assert _like_escape("wp_") == "wp\\_"
+
+
+def test_key_rename_targets_named_keys_not_a_prefix_sweep():
+    """`LIKE 'wp\\_%'` also matches rows that merely start with those
+    letters — core's `wp_page_for_privacy_policy` option, a plugin's
+    `wp_rocket_*` usermeta. Renaming those corrupts them."""
+    from app.services.db_push import _SCRIPT_IMPORT
+
+    assert "OLD_PREFIX_LIKE" not in _SCRIPT_IMPORT
+    assert "meta_key IN (" in _SCRIPT_IMPORT
+    for key in ("capabilities", "user_level", "user-settings", "persisted_preferences"):
+        assert f"'${{OLD_PREFIX}}{key}'" in _SCRIPT_IMPORT
+
+
+def test_a_failed_key_rename_rolls_the_remote_back():
+    """The rename runs after the import, so its failure leaves a site that
+    looks imported but locks every user out of it."""
+    from app.services.db_push import _SCRIPT_IMPORT
+
+    assert "rollback_now()" in _SCRIPT_IMPORT
+    rename = _SCRIPT_IMPORT.index("KEY RENAME FAILED")
+    # The rollback is invoked from the rename failure, not just the import.
+    assert _SCRIPT_IMPORT.count("rollback_now") >= 3
+    assert _SCRIPT_IMPORT.index("rollback_now", rename) < _SCRIPT_IMPORT.index(
+        "could not rename the prefixed", rename
+    )
+
+
+def test_media_progress_line_reports_rate_and_eta():
+    from app.services.media_push import _progress_line
+
+    line = _progress_line(500, 1000, 5, 10, 10.0)
+    assert line.startswith("50% — 5/10 files (500 B) — 50 B/s, ")
+    assert line.endswith(" s left")
+    assert "~" in line
+
+
+def test_media_progress_holds_the_eta_until_it_means_something():
+    """One 28-byte thumbnail sent in 0.2 s extrapolates to "~4 s left" for
+    a 3 GB library. An obviously wrong number is worse than none."""
+    from app.services.media_push import _progress_line
+
+    early = _progress_line(28, 3_000_000_000, 1, 9952, 0.2)
+    assert early == "0% — 1/9952 files (28 B)"
+    assert "left" not in early
+    # Nothing transferred yet: no rate to divide by either.
+    assert _progress_line(0, 1000, 0, 10, 30.0) == "0% — 0/10 files (0 B)"
+
+
+def test_export_failure_detail_names_the_oom_kill():
+    """Exit 137 is the cgroup OOM killer, not wp-cli: say so instead of
+    parroting the last "uninitialized class" warning that happened to be
+    printed before the kill."""
+    from app.services.db_push import _export_failure_detail
+
+    noise = 'Warning: Skipping an uninitialized class "FS_Plugin", replacements might not be complete.'
+    detail = _export_failure_detail(137, noise, "")
+    assert "killed" in detail and "memory" in detail
+    assert "FS_Plugin" not in detail
+    # A real error hidden under the noise must still surface.
+    assert _export_failure_detail(1, noise + "\nError: Access denied for user", "") == "Error: Access denied for user"
+    assert _export_failure_detail(1, noise, "") == "exit code 1"
+
+
+def test_export_output_filter_collapses_uninitialized_class_warnings():
+    from app.services.db_push import _filter_export_output
+
+    out = (
+        'Warning: Skipping an uninitialized class "Elementor\\Core\\Logger\\Items\\Base", replacements might not be complete.\n'
+        'Warning: Skipping an uninitialized class "FS_Plugin", replacements might not be complete.\n'
+        "Success: Made 1234 replacements.\n"
+    )
+    shown, skipped = _filter_export_output(out)
+    assert shown == ["Success: Made 1234 replacements."]
+    assert skipped == 2
+
+
+def test_parse_docker_size_notation():
+    from app.services.db_push import _parse_size
+
+    assert _parse_size("1g") == 1024 ** 3
+    assert _parse_size("256m") == 256 * 1024 ** 2
+    assert _parse_size("268435456") == 268435456
+
+
+# ─── DB push: statement size vs the remote max_allowed_packet ────────
+
+
+def _split(chunks, budget, hard_limit=0):
+    """Run the splitter, returning (bytes, oversized)."""
+    from app.services.db_push import _split_large_inserts, _drain
+
+    out = []
+    over = _drain(_split_large_inserts(iter(chunks), budget, hard_limit), out.append)
+    return b"".join(out), over
+
+
+def test_oversized_insert_is_split_at_row_boundaries():
+    """`wp search-replace --export` batches 50 rows per INSERT, so a table
+    with a few multi-MB rows (Elementor inline SVGs) yields statements far
+    past any max_allowed_packet — the server then drops the connection
+    mid-import ("server has gone away")."""
+    src = b"INSERT INTO `wp_postmeta` (`a`) VALUES \n('x'),\n('y'),\n('z');\n"
+    # 39-byte head + one 5-byte row fits in 50; a second row does not.
+    out, over = _split([src], 50)
+    assert over == []
+    assert out.count(b"INSERT INTO") == 3      # one row each
+    assert out == (
+        b"INSERT INTO `wp_postmeta` (`a`) VALUES ('x');\n"
+        b"INSERT INTO `wp_postmeta` (`a`) VALUES ('y');\n"
+        b"INSERT INTO `wp_postmeta` (`a`) VALUES ('z');\n"
+    )
+
+
+def test_split_never_cuts_inside_a_string_literal():
+    """A comma, a semicolon or a parenthesis inside post content is not a
+    row boundary — splitting on one would produce invalid SQL."""
+    src = b"INSERT INTO `t` (`a`) VALUES \n('a),(b;c'),\n('d');\n"
+    out, _ = _split([src], 10_000_000)
+    assert out == b"INSERT INTO `t` (`a`) VALUES ('a),(b;c'),\n('d');\n"
+    # Escaped and doubled quotes keep the scanner in the string too.
+    tricky = b"INSERT INTO `t` VALUES ('it\\'s, ok'),('a''b, c');\n"
+    out, _ = _split([tricky], 10_000_000)
+    assert b"'it\\'s, ok'" in out and b"'a''b, c'" in out
+    assert out.count(b"INSERT INTO") == 1
+
+
+def test_split_is_independent_of_chunk_boundaries():
+    """The dump arrives in arbitrary 256 KB reads; a statement head or a
+    row split across two of them must produce the same bytes."""
+    full = (
+        b"CREATE TABLE `t` (\n  `a` int\n) ENGINE=InnoDB;\n"
+        b"INSERT INTO `t` (`a`) VALUES \n('x'),\n('y');\n"
+        b"/*!40000 ALTER TABLE `t` ENABLE KEYS */;\n"
+    )
+    ref, _ = _split([full], 1000)
+    for cut in range(1, len(full)):
+        assert _split([full[:cut], full[cut:]], 1000)[0] == ref, cut
+
+
+def test_non_insert_statements_pass_through_untouched():
+    src = (
+        b"-- Table structure for table `t`\n"
+        b"DROP TABLE IF EXISTS `t`;\n"
+        b"CREATE TABLE `t` (\n  `a` int,\n  KEY `k` (`a`)\n) ENGINE=InnoDB;\n"
+        b"LOCK TABLES `t` WRITE;\nUNLOCK TABLES;\n"
+    )
+    out, over = _split([src], 20)
+    assert out == src and over == []
+
+
+def test_unsplittable_row_is_reported_and_isolated():
+    """A single row bigger than what the SERVER accepts cannot be split.
+    It must be reported so the push aborts *before* the remote tables are
+    dropped — and meanwhile kept out of its neighbours' statement."""
+    big = b"('" + b"x" * 5000 + b"')"
+    src = b"INSERT INTO `wp_postmeta` (`a`) VALUES \n('ok'),\n" + big + b",\n('fine');\n"
+    out, over = _split([src], 1000, hard_limit=2000)
+    assert over == [("wp_postmeta", len(big))]
+    # The huge row sits alone; the small ones are still batched normally.
+    assert out.count(b"INSERT INTO") == 3
+    assert b"VALUES ('ok');" in out and b"VALUES ('fine');" in out
+
+
+def test_row_over_the_batch_target_but_under_the_server_limit_is_not_refused():
+    """The batching target (16 MB) is ours; only the server's own limit
+    makes a row unsendable. Reporting against the target refused pushes
+    that would have worked — and told the user to raise a setting that
+    was already high enough."""
+    big = b"('" + b"x" * 5000 + b"')"
+    src = b"INSERT INTO `wp_postmeta` (`a`) VALUES \n('ok'),\n" + big + b";\n"
+    out, over = _split([src], 1000, hard_limit=100_000)
+    assert over == []                       # the server would take it
+    assert out.count(b"INSERT INTO") == 2   # still given its own statement
+    # An unknown server limit (0) must never declare a row unsendable.
+    assert _split([src], 1000, hard_limit=0)[1] == []
+
+
+def test_mysqldump_single_line_extended_insert_is_split_too():
+    """`wp db export` (used when dev and remote URLs match) writes every
+    row of a table on one line."""
+    src = b"INSERT INTO `t` VALUES (1,'a'),(2,'b'),(3,'c');\n"
+    out, _ = _split([src], 30)
+    assert out.count(b"INSERT INTO") == 3
+    assert b"(1,'a')" in out and b"(3,'c')" in out
+
+
+def test_unknown_packet_size_is_reported_as_unknown():
+    """Inventing a value here is not harmless: it is handed to the mysql
+    client as --max-allowed-packet, which would cap the client BELOW its
+    own 16 MB default — including on the rollback that replays the
+    server's own dump."""
+    from app.services.db_push import _max_packet
+
+    assert _max_packet("67108864") == 67108864
+    assert _max_packet("") is None
+    assert _max_packet("not a number") is None
+    assert _max_packet("0") is None
+
+
+def test_truncated_dump_is_refused_before_the_remote_is_touched():
+    """A dump cut off mid-statement used to be silently terminated with a
+    ';' — syntactically valid, semantically wrong SQL, shipped to a remote
+    whose tables get dropped before the import runs."""
+    import pytest
+    from app.services.db_push import DbPushError
+
+    with pytest.raises(DbPushError, match="truncated"):
+        _split([b"INSERT INTO `wp_posts` VALUES (1,'abc"], 1000)
+    # An unterminated row outside a string is just as truncated.
+    with pytest.raises(DbPushError, match="truncated"):
+        _split([b"INSERT INTO `wp_posts` VALUES (1,'a')"], 1000)
+    # A properly terminated dump is fine.
+    assert _split([b"INSERT INTO `wp_posts` VALUES (1,'a');\n"], 1000)[1] == []
+
+
+def test_insert_without_a_values_marker_is_streamed_not_hoarded():
+    """`INSERT ... SELECT` has no VALUES: nothing to split, and buffering
+    it whole while waiting for a marker that never comes is unbounded."""
+    src = b"INSERT INTO `t` SELECT * FROM `u`;\n"
+    out, over = _split([src], 20)
+    assert out == src and over == []
+
+
+def test_inspection_reports_the_remote_packet_limit():
+    from app.services.db_push import _SCRIPT_INSPECT, _SCRIPT_IMPORT
+
+    assert "SELECT @@max_allowed_packet" in _SCRIPT_INSPECT
+    assert "printf 'MAXPACKET=%s" in _SCRIPT_INSPECT
+    # The client caps statements at its own 16M default whatever the
+    # server allows, so it must be raised explicitly on import…
+    assert 'PKT_OPT="--max-allowed-packet=$PKT"' in _SCRIPT_IMPORT
+    # …and on the rollback path, which replays the pre-import backup.
+    assert _SCRIPT_IMPORT.count("$PKT_OPT") >= 2

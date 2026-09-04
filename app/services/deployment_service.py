@@ -1186,6 +1186,13 @@ class DeploymentService:
                     {"id": deployment_id, "status": status, "commit_sha": commit_sha, "finished_at": finished},
                     room=f"deploy_{deployment_id}",
                 )
+                # Broadcast too: the history list on any open page must
+                # drop its "running" pill even when nobody watches the
+                # log room (the room event only reaches the modal).
+                self.socketio.emit(
+                    "deployments_changed",
+                    {"id": deployment_id, "status": status, "finished_at": finished},
+                )
             except Exception:  # noqa: BLE001
                 pass
 

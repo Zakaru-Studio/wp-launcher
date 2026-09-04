@@ -15,9 +15,13 @@ The pipeline, in order:
      the dev URL is rewritten to the remote URL *in the dump* — the dev
      database itself is never modified and PHP-serialized payloads
      (Elementor, widgets, options) keep valid string lengths;
-  4. upload the gzipped dump over SFTP;
+  4. upload the gzipped dump over SFTP — when the two sites use
+     different table prefixes, the dump is rewritten on the fly so it
+     lands under the *remote* prefix (the remote ``wp-config.php`` is
+     never touched);
   5. remotely: back up the target database, drop the prefixed tables,
-     import the dump;
+     import the dump, then rename the prefix-dependent option/usermeta
+     keys (``<prefix>user_roles``, ``<prefix>capabilities``…);
   6. best-effort second pass with the remote wp-cli (if present) for
      leftover scheme-less occurrences of the dev host, then a cache
      flush.
@@ -280,6 +284,13 @@ HOMEURL=$("$MYSQL" --defaults-file="$CNF" $MYSQL_OPT -N -B -e \
   "SELECT option_value FROM \`${PREFIX}options\` WHERE option_name='home' LIMIT 1" \
   "$DB_NAME" < /dev/null) || HOMEURL=""
 
+# The largest statement this server will accept. A dump built without
+# looking at it can carry a single multi-megabyte INSERT that the server
+# refuses by closing the connection — reported as the famously unhelpful
+# "MySQL server has gone away".
+MAXPACKET=$("$MYSQL" --defaults-file="$CNF" $MYSQL_OPT -N -B -e \
+  "SELECT @@max_allowed_packet" "$DB_NAME" < /dev/null) || MAXPACKET=""
+
 printf 'WPROOT=%s\n' "$WPROOT"
 printf 'CFG=%s\n' "$CFG"
 printf 'CNF=%s\n' "$CNF"
@@ -294,6 +305,7 @@ printf 'WPCLI=%s\n' "$WPCLI"
 printf 'WPCLI_VIA_PHP=%s\n' "$WPCLI_VIA_PHP"
 printf 'PHPBIN=%s\n' "$PHPBIN"
 printf 'MYSQL_OPT=%s\n' "$MYSQL_OPT"
+printf 'MAXPACKET=%s\n' "$MAXPACKET"
 printf 'HOME=%s\n' "${HOME:-}"
 """.replace(
     "__PHP_PARSER__", _PHP_PARSER.rstrip("\n")
@@ -313,8 +325,31 @@ CHARSET="$8"
 # May be empty; deliberately left unquoted at the call sites so an empty
 # value expands to no argument at all.
 MYSQL_OPT="${9:-}"
+# Set only when the dump was rewritten from the dev prefix to the remote
+# one: the tables already carry NEW_PREFIX, but the prefix-dependent
+# rows inside them still carry OLD_PREFIX and must follow.
+OLD_PREFIX="${10:-}"
+NEW_PREFIX="${11:-}"
+# The mysql client caps outgoing statements at its own max_allowed_packet
+# (16M by default), regardless of what the server allows. Raise it to the
+# server's value so only the server's limit ever applies. Empty when the
+# server did not report one: the client then keeps its own default.
+PKT="${12:-}"
+PKT_OPT=""
+[ -n "$PKT" ] && PKT_OPT="--max-allowed-packet=$PKT"
 
 fail() { printf 'ERROR: %s\n' "$1" >&2; exit "${2:-1}"; }
+
+# Used by every failure that happens once the target tables are gone.
+rollback_now() {
+  printf -- '-- rolling back to the pre-import backup\n'
+  if gunzip -c "$BAK" | "$MYSQL" --defaults-file="$CNF" $MYSQL_OPT $PKT_OPT "$DB"; then
+    printf -- '-- rollback done: the remote database is back to its previous state\n'
+  else
+    printf -- '-- ROLLBACK FAILED — restore manually with:\n'
+    printf -- '--   gunzip -c %s | mysql %s\n' "$BAK" "$DB"
+  fi
+}
 
 umask 077
 BAKDIR=$(dirname "$BAK")
@@ -358,20 +393,53 @@ if ! {
   printf 'SET UNIQUE_CHECKS=0;\n'
   printf 'SET NAMES %s;\n' "$CHARSET"
   gunzip -c "$GZ"
-} | "$MYSQL" --defaults-file="$CNF" $MYSQL_OPT --default-character-set="$CHARSET" "$DB"; then
+} | "$MYSQL" --defaults-file="$CNF" $MYSQL_OPT $PKT_OPT --default-character-set="$CHARSET" "$DB"; then
   # The tables were already dropped, so a half-finished import leaves the
   # site down. Roll straight back to the snapshot taken minutes ago
   # rather than leaving someone to do it by hand under pressure.
-  printf -- '-- IMPORT FAILED — rolling back to the pre-import backup\n'
-  if gunzip -c "$BAK" | "$MYSQL" --defaults-file="$CNF" $MYSQL_OPT "$DB"; then
-    printf -- '-- rollback done: the remote database is back to its previous state\n'
-  else
-    printf -- '-- ROLLBACK FAILED — restore manually with:\n'
-    printf -- '--   gunzip -c %s | mysql %s\n' "$BAK" "$DB"
-  fi
+  printf -- '-- IMPORT FAILED\n'
+  rollback_now
   fail "import failed" 13
 fi
 printf -- '-- import finished\n'
+
+if [ -n "$OLD_PREFIX" ] && [ -n "$NEW_PREFIX" ] && [ "$OLD_PREFIX" != "$NEW_PREFIX" ]; then
+  # WordPress keys a handful of rows by table prefix: the roles
+  # definition in options, and the capabilities / user level / screen
+  # settings in usermeta. Left under the dev prefix they would be
+  # invisible to the remote site — every user would lose their role.
+  #
+  # Both lists are EXPLICIT rather than a `LIKE '<prefix>%'` sweep. With a
+  # dev prefix of `wp_` that sweep also caught rows that merely start with
+  # those letters — core's own `wp_page_for_privacy_policy` option, or a
+  # plugin's `wp_rocket_*` usermeta — and renaming those corrupts them.
+  printf -- '-- renaming the prefixed keys (%s -> %s)\n' "$OLD_PREFIX" "$NEW_PREFIX"
+  START=$(( ${#OLD_PREFIX} + 1 ))
+  "$MYSQL" --defaults-file="$CNF" $MYSQL_OPT -e \
+    "UPDATE \`${NEW_PREFIX}options\` \
+       SET option_name = CONCAT('${NEW_PREFIX}', SUBSTRING(option_name, ${START})) \
+       WHERE option_name = '${OLD_PREFIX}user_roles'; \
+     UPDATE \`${NEW_PREFIX}usermeta\` \
+       SET meta_key = CONCAT('${NEW_PREFIX}', SUBSTRING(meta_key, ${START})) \
+       WHERE meta_key IN ('${OLD_PREFIX}capabilities', \
+                          '${OLD_PREFIX}user_level', \
+                          '${OLD_PREFIX}user-settings', \
+                          '${OLD_PREFIX}user-settings-time', \
+                          '${OLD_PREFIX}dashboard_quick_press_last_post_id', \
+                          '${OLD_PREFIX}media_library_mode', \
+                          '${OLD_PREFIX}persisted_preferences');" \
+    "$DB" < /dev/null || {
+      # Every user would be locked out of a site that otherwise looks
+      # imported. Put the previous database back rather than leave that.
+      printf -- '-- KEY RENAME FAILED\n'
+      rollback_now
+      fail "could not rename the prefixed option/usermeta keys" 14
+    }
+  ROLES=$("$MYSQL" --defaults-file="$CNF" $MYSQL_OPT -N -B -e \
+    "SELECT COUNT(*) FROM \`${NEW_PREFIX}usermeta\` WHERE meta_key = '${NEW_PREFIX}capabilities'" \
+    "$DB" < /dev/null) || ROLES="?"
+  printf -- '-- %s user(s) now carry %scapabilities\n' "$ROLES" "$NEW_PREFIX"
+fi
 
 COUNT=$("$MYSQL" --defaults-file="$CNF" $MYSQL_OPT -N -B -e \
   "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() \
@@ -541,6 +609,13 @@ def push(
         php_bin = info.get("PHPBIN", "")
         mysql_opt = info.get("MYSQL_OPT", "")
         remote_home = info.get("HOME", "")
+        max_packet = _max_packet(info.get("MAXPACKET", ""))
+        # Two different numbers: what we batch to, and what the server
+        # actually refuses. Conflating them aborted pushes that would have
+        # gone through — a 20 MB row is fine against a 64 MB server even
+        # though we never build a statement that large.
+        stmt_budget = min(max_packet or _DEFAULT_PACKET, _MAX_STATEMENT) - _PACKET_MARGIN
+        hard_limit = max_packet - _PACKET_MARGIN if max_packet else 0
 
         if not (remote_cnf and _PATH_RE.match(remote_cnf)):
             raise DbPushError("The remote host did not return a usable credentials file path.")
@@ -560,11 +635,26 @@ def push(
         emit(f"   remote siteurl: {remote_url}")
         if remote_home_url and remote_home_url != remote_url:
             emit(f"   remote home   : {remote_home_url}")
+        if max_packet:
+            emit(
+                f"   max_allowed_packet: {_human_size(max_packet)}"
+                f" (statements capped at {_human_size(stmt_budget)})"
+            )
+        else:
+            emit(
+                "   max_allowed_packet: not reported by the server — statements "
+                f"capped at {_human_size(stmt_budget)}"
+            )
 
-        if remote_prefix != dev_prefix:
-            raise DbPushError(
-                f"Table prefix mismatch: dev uses '{dev_prefix}', the remote site uses "
-                f"'{remote_prefix}'. Align them before pushing the database."
+        prefix_rewrite = remote_prefix != dev_prefix
+        if prefix_rewrite:
+            # Plesk's WP Toolkit (among others) installs with a random
+            # prefix. Rather than asking the user to align the two
+            # sites by hand, the dump is rewritten to the remote prefix
+            # so the imported tables match the remote wp-config.php.
+            emit(
+                f"   prefix rewrite: dev tables '{dev_prefix}' will be imported as "
+                f"'{remote_prefix}' (the remote wp-config.php is kept as is)"
             )
 
         # ── 3. export with URL rewriting ─────────────────────────────
@@ -591,6 +681,45 @@ def push(
             ]
 
         code, out, err = _run_local(export_cmd, timeout=EXPORT_TIMEOUT)
+        if code == _EXIT_KILLED:
+            # The cgroup OOM killer, not wp-cli: `wp search-replace
+            # --export` unserializes every row in PHP and easily needs
+            # 200 MB, while the container's mem_limit (256m by default)
+            # is largely taken by Apache already. Raise the cap once and
+            # retry — the limit is the launcher's own choice, so this is
+            # ours to fix rather than the user's.
+            current = _container_memory(wp_container)
+            if not current:
+                # docker reports 0 for a container with no cap of its own,
+                # so there is nothing of ours to raise: the kill came from
+                # the host running out of memory, or from outside.
+                raise DbPushError(
+                    "wp-cli export was killed (exit 137) but the WordPress container "
+                    "has no memory limit of its own — the host ran out of memory, or "
+                    "the process was killed from outside. Re-run the push once the "
+                    "machine is free."
+                )
+            if current >= _parse_size(EXPORT_MEMORY):
+                raise DbPushError(
+                    f"wp-cli export killed (out of memory) although the container already "
+                    f"has {_human_size(current)} — raise mem_limit in the project's docker-compose.yml"
+                )
+            emit(
+                f"   the export was killed by the container memory limit "
+                f"({_human_size(current)}) — raising it to {EXPORT_MEMORY} and retrying",
+                "stderr",
+            )
+            if not _raise_container_memory(wp_container, EXPORT_MEMORY):
+                raise DbPushError(
+                    f"wp-cli export killed by the container memory limit and `docker update` "
+                    f"failed — set wordpress mem_limit to {EXPORT_MEMORY} in the project's "
+                    f"docker-compose.yml and recreate the container"
+                )
+            emit(
+                f"   note: `docker update` does not touch docker-compose.yml — set "
+                f"mem_limit to {EXPORT_MEMORY} there too, or the cap returns on recreate"
+            )
+            code, out, err = _run_local(export_cmd, timeout=EXPORT_TIMEOUT)
         if code != 0 and "tablespaces" in (err + out).lower():
             # `--no-tablespaces` is a MySQL 8 option that MariaDB's
             # mysqldump rejects outright; on MySQL 8 it is what lets a
@@ -600,20 +729,40 @@ def push(
             export_cmd = [a for a in export_cmd
                           if a not in ("--no-tablespaces", "--single-transaction")]
             code, out, err = _run_local(export_cmd, timeout=EXPORT_TIMEOUT)
-        for line in (out or "").splitlines()[-15:]:
-            if line.strip():
-                emit("   " + line.rstrip())
+        shown, skipped = _filter_export_output(out)
+        for line in shown[-15:]:
+            emit("   " + line)
+        if skipped:
+            # Serialized objects of classes not loaded under --skip-plugins
+            # (Freemius `FS_Plugin`, Elementor's log items): wp-cli leaves
+            # them as is. They are plugin bookkeeping, never site content,
+            # so one summary line beats a thousand identical warnings.
+            emit(f"   {skipped} serialized plugin object(s) left untouched (uninitialized classes)")
         if code != 0:
-            detail = (err or out).strip().splitlines()
-            raise DbPushError(
-                "wp-cli export failed: " + (detail[-1] if detail else f"exit code {code}")
-            )
+            raise DbPushError("wp-cli export failed: " + _export_failure_detail(code, out, err))
 
         emit("   compressing the dump")
-        raw_bytes, gz_bytes = _copy_and_gzip(wp_container, container_sql, local_gz)
+        raw_bytes, gz_bytes, oversized = _copy_and_gzip(
+            wp_container, container_sql, local_gz, dev_prefix, remote_prefix,
+            stmt_budget, hard_limit,
+        )
         if raw_bytes == 0:
             raise DbPushError("The exported dump is empty — aborting before touching the remote site.")
         emit(f"   dump: {_human_size(raw_bytes)} -> {_human_size(gz_bytes)} gzipped")
+        if prefix_rewrite:
+            emit(f"   table prefix rewritten in the dump: {dev_prefix} -> {remote_prefix}")
+        if oversized:
+            # Nothing remote has been touched yet: fail here rather than
+            # after dropping the target's tables, which would only get
+            # rolled back a few minutes later.
+            biggest = max(oversized, key=lambda o: o[1])
+            raise DbPushError(
+                f"{len(oversized)} row(s) are individually larger than the remote "
+                f"max_allowed_packet ({_human_size(max_packet)}) — the biggest is "
+                f"{_human_size(biggest[1])} in {biggest[0]}. The import would be cut off "
+                f"mid-way ('MySQL server has gone away'). Raise max_allowed_packet on the "
+                f"remote MySQL server (Plesk: Databases > server settings), then push again."
+            )
 
         # ── 4. upload ────────────────────────────────────────────────
         cancel_check()
@@ -637,11 +786,19 @@ def push(
             else "/tmp"
         )
         backup_path = f"{backup_dir}/{db_name}-{stamp}.sql.gz"
-        prefix_like = remote_prefix.replace("\\", "\\\\").replace("_", r"\_")
+        prefix_like = _like_escape(remote_prefix)
         code = run_streaming(
             _SCRIPT_IMPORT,
             [remote_cnf, db_name, prefix_like, remote_gz, backup_path,
-             mysql_bin, mysqldump_bin, dev_charset, mysql_opt],
+             mysql_bin, mysqldump_bin, dev_charset, mysql_opt,
+             # Empty when the prefixes match: the script then skips the
+             # key renaming entirely.
+             dev_prefix if prefix_rewrite else "",
+             remote_prefix if prefix_rewrite else "",
+             # Empty when unknown: the client then keeps its own default
+             # rather than being talked DOWN to our guess, which would
+             # also cap the rollback replaying the server's own dump.
+             str(max_packet) if max_packet else ""],
             timeout=IMPORT_TIMEOUT,
         )
         if code != 0:
@@ -767,13 +924,398 @@ def _upload_wp_cli(client, wp_container: str, token: str, work_dir: str, emit) -
             pass
 
 
-def _copy_and_gzip(container: str, container_path: str, local_gz: str) -> Tuple[int, int]:
+# Exit status of a process killed by SIGKILL — for `docker exec`, that is
+# the cgroup OOM killer in practice.
+_EXIT_KILLED = 137
+# What the WordPress container is raised to when the export gets killed.
+EXPORT_MEMORY = "1g"
+_UNINIT_WARNING = "Skipping an uninitialized class"
+
+
+def _filter_export_output(out: str) -> Tuple[list, int]:
+    """Drop wp-cli's per-object "uninitialized class" warnings, count them."""
+    shown = []
+    skipped = 0
+    for line in (out or "").splitlines():
+        if not line.strip():
+            continue
+        if _UNINIT_WARNING in line:
+            skipped += 1
+            continue
+        shown.append(line.rstrip())
+    return shown, skipped
+
+
+def _export_failure_detail(code: int, out: str, err: str) -> str:
+    """The line worth showing for a failed export — never a noise warning."""
+    if code == _EXIT_KILLED:
+        return (
+            "the process was killed (exit 137) — out of memory in the WordPress "
+            "container; raise its mem_limit"
+        )
+    for text in (err, out):
+        lines = [l.strip() for l in (text or "").splitlines()
+                 if l.strip() and _UNINIT_WARNING not in l]
+        if lines:
+            return lines[-1]
+    return f"exit code {code}"
+
+
+_SIZE_UNITS = {"b": 1, "k": 1024, "m": 1024 ** 2, "g": 1024 ** 3}
+
+
+def _parse_size(value: str) -> int:
+    """``1g`` / ``512m`` / ``268435456`` → bytes (docker's own notation)."""
+    v = value.strip().lower()
+    if v and v[-1] in _SIZE_UNITS:
+        return int(float(v[:-1]) * _SIZE_UNITS[v[-1]])
+    return int(v)
+
+
+def _container_memory(container: str) -> int:
+    """Current memory cap of a container in bytes (0 = unlimited/unknown)."""
+    code, out, _ = _run_local(
+        ["docker", "inspect", "--format", "{{.HostConfig.Memory}}", container], timeout=30
+    )
+    try:
+        return int(out.strip()) if code == 0 else 0
+    except ValueError:
+        return 0
+
+
+def _raise_container_memory(container: str, size: str) -> bool:
+    """``docker update`` the cap live — no restart, takes effect at once.
+
+    Swap is set to twice the cap, mirroring what compose derives from a
+    bare ``mem_limit``; docker refuses a memory raise that would leave
+    swap below memory otherwise.
+    """
+    swap = str(_parse_size(size) * 2)
+    code, _, _ = _run_local(
+        ["docker", "update", "--memory", size, "--memory-swap", swap, container], timeout=60
+    )
+    return code == 0
+
+
+def _like_escape(value: str) -> str:
+    """Escape ``_`` and ``\\`` so a prefix is matched literally by LIKE."""
+    return value.replace("\\", "\\\\").replace("_", r"\_")
+
+
+# Statements whose head names a table. The prefix is rewritten there
+# only — never in the data, where a post quoting `wp_posts` in a code
+# block would otherwise be corrupted.
+_TABLE_STMT_RE = re.compile(
+    rb"^(INSERT INTO|REPLACE INTO|CREATE TABLE IF NOT EXISTS|CREATE TABLE|"
+    rb"DROP TABLE IF EXISTS|DROP TABLE|LOCK TABLES|ALTER TABLE|TRUNCATE TABLE|"
+    rb"/\*!40000 ALTER TABLE) `"
+)
+
+
+def _rewrite_prefix_line(
+    line: bytes, old: bytes, new: bytes, in_create: bool
+) -> Tuple[bytes, bool]:
+    """Rewrite one dump line; ``in_create`` tracks a multi-line CREATE TABLE."""
+    m = _TABLE_STMT_RE.match(line)
+    if m:
+        head = m.end()
+        if line.startswith(old, head):
+            line = line[:head] + new + line[head + len(old):]
+        # A CREATE TABLE spans several lines (one per column); a foreign
+        # key inside it names another prefixed table.
+        in_create = m.group(1).startswith(b"CREATE TABLE") and not line.rstrip().endswith(b";")
+        return line, in_create
+    if in_create:
+        if line.startswith(b")"):
+            in_create = False  # `) ENGINE=InnoDB …;`
+        else:
+            line = line.replace(b"REFERENCES `" + old, b"REFERENCES `" + new)
+        return line, in_create
+    if line.startswith(b"-- ") and b"table `" + old in line:
+        # mysqldump's "Table structure for table `x`" banners: cosmetic,
+        # but a log reader grepping the dump expects the real names.
+        line = line.replace(b"table `" + old, b"table `" + new, 1)
+    return line, in_create
+
+
+def _rewrite_prefix_stream(chunks, old_prefix: str, new_prefix: str):
+    """Yield ``chunks`` with every table name moved from one prefix to the other.
+
+    Line-based: an INSERT split across two chunks is reassembled before
+    being looked at. A no-op when the prefixes match.
+
+    The partial line is appended to, never rebuilt: `wp db export` (used
+    when both sides share a URL) is plain mysqldump, whose extended
+    inserts put a whole table on ONE line — concatenating `pending +
+    chunk` per 256 KB read made that quadratic (a 250 MB line measured
+    ~100 s of pure copying). Past _LINE_CAP the head has long been seen,
+    so the tail is streamed out raw: it is row data, never a table name.
+    """
+    if old_prefix == new_prefix:
+        yield from chunks
+        return
+    old = old_prefix.encode("utf-8")
+    new = new_prefix.encode("utf-8")
+    pending = bytearray()
+    in_create = False
+    overflow = False        # this line is past the cap: pass it through
+    for chunk in chunks:
+        start = 0
+        while True:
+            nl = chunk.find(b"\n", start)
+            if nl == -1:
+                if overflow:
+                    yield chunk[start:]
+                else:
+                    pending += chunk[start:]
+                    if len(pending) >= _LINE_CAP:
+                        line, in_create = _rewrite_prefix_line(
+                            bytes(pending), old, new, in_create
+                        )
+                        yield line
+                        pending = bytearray()
+                        overflow = True
+                break
+            if overflow:
+                yield chunk[start:nl + 1]
+                overflow = False
+            else:
+                pending += chunk[start:nl + 1]
+                line, in_create = _rewrite_prefix_line(
+                    bytes(pending), old, new, in_create
+                )
+                pending = bytearray()
+                yield line
+            start = nl + 1
+    if pending:
+        line, _ = _rewrite_prefix_line(bytes(pending), old, new, in_create)
+        yield line
+
+
+# Ceiling on a generated statement, whatever the server allows: a value
+# every MySQL/MariaDB build accepts, and small enough that one statement
+# never dominates the import's memory. Margin covers the per-statement
+# protocol overhead.
+_MAX_STATEMENT = 16 * 1024 ** 2
+_PACKET_MARGIN = 64 * 1024
+# How small a statement we batch to when the server will not say what it
+# accepts — MySQL's own historical default, safe everywhere. Used ONLY as
+# a batching target: with no known limit we must not declare a row
+# unsendable, nor tell the client to cap itself.
+_DEFAULT_PACKET = 4 * 1024 ** 2
+# Beyond this, a single line is streamed out instead of being buffered.
+_LINE_CAP = 8 * 1024 ** 2
+
+
+def _max_packet(value: str) -> Optional[int]:
+    """The remote's ``max_allowed_packet``, or None when it did not say."""
+    try:
+        parsed = int((value or "").strip())
+    except ValueError:
+        return None
+    return parsed if parsed > 0 else None
+
+
+_INSERT_MARK = b"INSERT INTO "
+_VALUES_MARK = b" VALUES "
+# A statement head longer than this is not a head at all.
+_HEAD_SCAN = 8192
+
+
+def _split_large_inserts(chunks, max_bytes: int, hard_limit: int = 0):
+    """Re-emit INSERT statements that exceed ``max_bytes`` as several.
+
+    ``wp search-replace --export`` batches 50 rows per INSERT, so a table
+    holding a few multi-megabyte rows (Elementor's inlined SVGs, base64
+    images) produces statements far past any ``max_allowed_packet``. The
+    server answers by closing the connection — ``ERROR 2006 … server has
+    gone away`` — halfway through the import.
+
+    Splitting happens at row boundaries, tracked with a real scanner
+    (string literals, backslash escapes, nesting) rather than a regex, so
+    a comma inside post content is never mistaken for a row separator.
+    ``max_bytes`` is the batching target; ``hard_limit`` (0 = unknown) is
+    what the server will actually refuse. A row over the target is simply
+    given a statement of its own — only one over the *hard limit* is
+    unsendable, and those are reported so the caller can abort before
+    touching the remote.
+
+    Yields byte chunks, and finally a list of ``(table, size)`` for the
+    rows that could not be made to fit.
+    """
+    oversized = []
+    if not max_bytes or max_bytes <= 0:
+        yield from chunks
+        return oversized
+
+    line = bytearray()      # COPY mode: current line, until we can classify it
+    passthrough = False     # this line is not a statement head: stream it out
+    header = None           # set while inside an INSERT's row list
+    table = b""
+    row = bytearray()
+    depth = 0
+    in_string = False
+    escaped = False
+    has_row = False
+    stmt_len = 0
+    eat_newline = False     # the source newline that followed a ';'
+
+    for chunk in chunks:
+        data = chunk
+        pos = 0
+        end = len(data)
+        while pos < end:
+            if header is None:
+                # ── outside an INSERT: copy through, watching for a head
+                nl = data.find(b"\n", pos)
+                stop = end if nl == -1 else nl + 1
+                if passthrough:
+                    yield data[pos:stop]
+                    if nl != -1:
+                        passthrough = False
+                    pos = stop
+                    continue
+                line += data[pos:stop]
+                pos = stop
+                if line.startswith(_INSERT_MARK):
+                    at = line[:_HEAD_SCAN].find(_VALUES_MARK)
+                    if at != -1:
+                        cut = at + len(_VALUES_MARK)
+                        header = bytes(line[:cut])
+                        table = header[len(_INSERT_MARK):].split(b" ", 1)[0]
+                        rest = bytes(line[cut:])
+                        line = bytearray()
+                        yield header
+                        stmt_len = len(header)
+                        has_row = False
+                        # The rest of the head's line is already row data.
+                        data = rest + data[pos:]
+                        pos, end = 0, len(data)
+                        continue
+                    if len(line) < _HEAD_SCAN and nl == -1:
+                        continue  # need more bytes to decide
+                    # Starts like an INSERT but has no VALUES in its first
+                    # 8 KB (INSERT ... SELECT, say). Nothing to split, and
+                    # nothing to gain from buffering it whole.
+                    yield bytes(line)
+                    passthrough = nl == -1
+                    line = bytearray()
+                    continue
+                elif len(line) >= len(_INSERT_MARK) and not _INSERT_MARK.startswith(bytes(line)):
+                    # Definitely not a head — stop buffering this line.
+                    yield bytes(line)
+                    passthrough = nl == -1
+                    line = bytearray()
+                    continue
+                if nl != -1:
+                    if not (eat_newline and bytes(line) in (b"\n", b"\r\n")):
+                        yield bytes(line)
+                    eat_newline = False
+                    line = bytearray()
+                continue
+
+            # ── inside an INSERT's row list ─────────────────────────
+            c = data[pos]
+            pos += 1
+            if in_string:
+                row.append(c)
+                if escaped:
+                    escaped = False
+                elif c == 0x5C:      # backslash
+                    escaped = True
+                elif c == 0x27:      # closing quote ('' is handled by re-opening)
+                    in_string = False
+                continue
+            if c == 0x27:
+                in_string = True
+                row.append(c)
+                continue
+            if c == 0x28:            # (
+                depth += 1
+                row.append(c)
+                continue
+            if c == 0x29:            # )
+                depth -= 1
+                row.append(c)
+                continue
+            if depth == 0 and c in (0x2C, 0x3B):   # , or ; between rows
+                piece = bytes(row).strip()
+                row = bytearray()
+                if piece:
+                    needed = len(header) + len(piece) + 2
+                    # Too big to share a statement — give it its own,
+                    # rather than let it drag 49 neighbours over with it.
+                    alone = needed > max_bytes
+                    if hard_limit and needed > hard_limit:
+                        # Genuinely unsendable: no split can help.
+                        oversized.append(
+                            (table.decode("utf-8", "replace").strip("`"), len(piece))
+                        )
+                    if has_row and (alone or stmt_len + 2 + len(piece) + 2 > max_bytes):
+                        yield b";\n"
+                        yield header
+                        stmt_len = len(header)
+                        has_row = False
+                    if has_row:
+                        yield b",\n"
+                        stmt_len += 2
+                    yield piece
+                    stmt_len += len(piece)
+                    has_row = True
+                if c == 0x3B:        # end of statement
+                    yield b";\n"
+                    header = None
+                    has_row = False
+                    eat_newline = True
+                continue
+            row.append(c)            # whitespace / newlines between rows
+
+    # A dump that stops inside a statement is truncated — `docker exec
+    # cat` was killed, the disk filled up. Terminating it here would ship
+    # syntactically valid but WRONG SQL, and the remote tables are dropped
+    # before the import runs. Fail while nothing has been touched.
+    if header is not None:
+        raise DbPushError(
+            "The exported dump is truncated (it ends in the middle of an "
+            f"INSERT into {table.decode('utf-8', 'replace').strip('`') or '?'}) "
+            "— aborting before touching the remote site."
+        )
+    if line:
+        yield bytes(line)
+    return oversized
+
+
+def _drain(gen, sink) -> list:
+    """Write a generator's chunks to ``sink``, returning its final value."""
+    while True:
+        try:
+            sink(next(gen))
+        except StopIteration as stop:
+            return stop.value or []
+
+
+def _copy_and_gzip(
+    container: str,
+    container_path: str,
+    local_gz: str,
+    old_prefix: str = "",
+    new_prefix: str = "",
+    max_statement: int = 0,
+    hard_limit: int = 0,
+) -> Tuple[int, int, list]:
     """Stream ``docker exec cat`` into a local gzip file.
 
     Streaming (rather than ``docker cp`` + compress) keeps a multi-GB
-    dump off the launcher's disk in uncompressed form.
+    dump off the launcher's disk in uncompressed form. When
+    ``old_prefix`` and ``new_prefix`` differ the table prefix is
+    rewritten on the way through (see :func:`_rewrite_prefix_stream`),
+    and ``max_statement`` caps the size of a single INSERT (see
+    :func:`_split_large_inserts`).
+
+    Returns ``(raw_bytes, gzipped_bytes, oversized_rows)``.
     """
     raw = 0
+    oversized: list = []
     # stderr dans un fichier plutôt qu'un tube : on ne lit que stdout dans la
     # boucle, et un tube stderr saturé (>64 Ko) bloquerait `docker exec`
     # indéfiniment. Le fichier se lit après coup, sans risque d'interblocage.
@@ -784,14 +1326,26 @@ def _copy_and_gzip(container: str, container_path: str, local_gz: str) -> Tuple[
             stderr=err_file,
         )
         try:
-            with gzip.open(local_gz, "wb", compresslevel=6) as out:
-                assert proc.stdout is not None
+            assert proc.stdout is not None
+
+            def _chunks():
+                nonlocal raw
                 while True:
                     chunk = proc.stdout.read(1024 * 256)
                     if not chunk:
                         break
                     raw += len(chunk)
-                    out.write(chunk)
+                    yield chunk
+
+            with gzip.open(local_gz, "wb", compresslevel=6) as out:
+                stream = _rewrite_prefix_stream(_chunks(), old_prefix, new_prefix)
+                if max_statement > 0:
+                    oversized = _drain(
+                        _split_large_inserts(stream, max_statement, hard_limit), out.write
+                    )
+                else:
+                    for piece in stream:
+                        out.write(piece)
             code = proc.wait(timeout=EXPORT_TIMEOUT)
         finally:
             if proc.poll() is None:
@@ -808,7 +1362,7 @@ def _copy_and_gzip(container: str, container_path: str, local_gz: str) -> Tuple[
                 f"Could not read the dump out of the container: {err or code}"
             )
 
-    return raw, os.path.getsize(local_gz)
+    return raw, os.path.getsize(local_gz), oversized
 
 
 def _sftp_upload(client, local_path: str, remote_path: str, total: int, emit) -> None:
