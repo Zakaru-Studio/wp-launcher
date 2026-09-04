@@ -135,6 +135,25 @@ def _docker_container_started_at(container: str) -> Optional[str]:
     return result.stdout.strip() or None
 
 
+def _raw_write():
+    """The real ``os.write``, even under eventlet.
+
+    gunicorn runs us with ``--worker-class eventlet``, and monkey_patch()
+    replaces ``os.write`` with a green version that parks the greenlet
+    until the pipe drains: it ignores O_NONBLOCK and never raises
+    BlockingIOError. That is precisely the hang we guard against, so the
+    stream loop needs the original syscall. The *green* ``select`` is
+    kept as-is — waiting must stay cooperative or the whole hub stalls.
+    """
+    try:
+        from eventlet import patcher  # noqa: PLC0415 — optional at runtime
+        if patcher.is_monkey_patched('os'):
+            return patcher.original('os').write
+    except Exception:  # noqa: BLE001 — eventlet absent or API moved
+        pass
+    return os.write
+
+
 def _restarted_message(container: str) -> str:
     """Message unique pour un container redémarré sous nos pieds."""
     return (
@@ -840,6 +859,7 @@ class FastImportService:
 
         # Non-blocking stdin so a write can never park us forever; see
         # the docstring in _safe_write below for why that matters.
+        os_write = _raw_write()
         try:
             stdin_fd = proc.stdin.fileno()
             os.set_blocking(stdin_fd, False)
@@ -868,9 +888,10 @@ class FastImportService:
             is never reached. The import then hangs forever with no error,
             no log line and a progress bar frozen mid-file.
 
-            So: non-blocking writes plus a bounded ``select``. A pipe that
-            refuses bytes for _WRITE_STALL_SECONDS is declared dead and the
-            caller surfaces a real error instead of hanging.
+            So: the original (un-greened) ``os.write`` on a non-blocking
+            fd, plus a bounded green ``select``. A pipe that refuses bytes
+            for _WRITE_STALL_SECONDS is declared dead and the caller
+            surfaces a real error instead of hanging.
             """
             nonlocal pipe_broken, stall_error
             if pipe_broken:
@@ -886,7 +907,7 @@ class FastImportService:
             stalled_since: Optional[float] = None
             while view:
                 try:
-                    view = view[os.write(stdin_fd, view):]
+                    view = view[os_write(stdin_fd, view):]
                     stalled_since = None
                     continue
                 except BlockingIOError:

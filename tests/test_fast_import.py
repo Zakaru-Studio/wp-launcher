@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import gzip
 import os
+import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -466,3 +468,82 @@ def test_import_stream_names_the_container_restart(_stalling_import, monkeypatch
     assert result["success"] is False
     assert "redémarré" in result["error"]
     assert "mem_limit" in result["error"]
+
+
+# ─── the same stall, but under the eventlet hub the app really runs on ──
+
+# Plain pytest exercises un-patched CPython, where os.write honours
+# O_NONBLOCK. gunicorn runs this code with --worker-class eventlet, whose
+# monkey_patch() swaps in a green os.write that parks the greenlet on a
+# full pipe instead — so the guard above passed its unit tests while the
+# real worker still hung. This runs the scenario in a subprocess (a
+# global monkey_patch would poison the rest of the suite) and asserts
+# both that we give up *and* that the hub keeps scheduling meanwhile.
+
+_EVENTLET_SCENARIO = r"""
+import eventlet
+eventlet.monkey_patch()
+import os, sys, time
+sys.path.insert(0, {repo!r})
+from app.services import fast_import_service as fis
+from app.services.fast_import_service import FastImportService, ContainerInfo
+
+fis._WRITE_STALL_SECONDS = 3
+
+class DeadReader:
+    def __init__(self):
+        self._r, w = os.pipe()
+        self.stdin = os.fdopen(w, "wb", buffering=0)
+        self.stdout = self.stderr = None
+    def poll(self): return None
+    def kill(self): pass
+    def wait(self, timeout=None): return -9
+
+proc = DeadReader()
+fis.subprocess.Popen = lambda *a, **k: proc
+FastImportService._verify_mysql_auth = lambda self, info: None
+fis._docker_container_started_at = lambda c: "stamp"
+
+dump = os.path.join({tmp!r}, "dump.sql")
+with open(dump, "wb") as f:
+    f.write(b"-- x\n" * 200_000)
+
+ticks = []
+def heartbeat():
+    while True:
+        ticks.append(1); eventlet.sleep(0.5)
+eventlet.spawn(heartbeat)
+
+info = ContainerInfo(container="c", database="wordpress", user="wordpress",
+                     password="p", root_password="r", project_type="wordpress")
+t0 = time.monotonic()
+res = FastImportService()._import_sql_stream("p", dump, info,
+                                             os.path.getsize(dump))
+print("ELAPSED", round(time.monotonic() - t0, 1))
+print("SUCCESS", res["success"])
+print("TICKS", len(ticks))
+"""
+
+
+def test_import_stream_gives_up_under_eventlet(tmp_path: Path):
+    """The guard must hold under monkey_patch, not just in plain CPython."""
+    pytest.importorskip("eventlet")
+    repo = str(Path(__file__).resolve().parent.parent)
+    script = tmp_path / "scenario.py"
+    script.write_text(_EVENTLET_SCENARIO.format(repo=repo, tmp=str(tmp_path)))
+
+    proc = subprocess.run(
+        [sys.executable, "-u", str(script)],
+        capture_output=True, text=True, timeout=60,
+    )
+
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    out = dict(
+        line.split(maxsplit=1) for line in proc.stdout.splitlines()
+        if line.startswith(("ELAPSED", "SUCCESS", "TICKS"))
+    )
+    assert out["SUCCESS"] == "False"
+    # Gave up near the 3s threshold instead of parking forever.
+    assert float(out["ELAPSED"]) < 20
+    # And the hub kept running, so other requests were still served.
+    assert int(out["TICKS"]) > 3
