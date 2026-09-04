@@ -10,6 +10,8 @@ from app.models.project import Project
 from app.config.docker_config import DockerConfig
 from app.utils.logger import wp_logger
 from app.middleware.auth_middleware import login_required, admin_required
+from app.utils.wp_config_writer import (read_wp_config, write_wp_config,
+                                        WpConfigWriteError)
 
 project_wpdebug_bp = Blueprint('project_wpdebug', __name__)
 
@@ -149,9 +151,11 @@ def get_wp_debug_config(project_name):
                 'message': 'Fichier wp-config.php non trouvé'
             })
         
-        # Lire le fichier
-        with open(wp_config_path, 'r', encoding='utf-8') as f:
-            content = f.read()
+        # Lire le fichier. Pas un `open()` nu : un wp-config.php repassé en
+        # 600 www-data (profil wp-config-lock, ou un chmod qui a rabattu le
+        # masque ACL) n'est même plus LISIBLE par l'application, et l'écran
+        # tombait en erreur avant d'afficher les cases à cocher.
+        content = read_wp_config(wp_config_path)
         
         # Parser les constantes
         config = {
@@ -169,6 +173,13 @@ def get_wp_debug_config(project_name):
             'config': config
         })
         
+    except WpConfigWriteError as e:
+        print(f"❌ [WP_DEBUG] Lecture impossible: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Impossible de lire wp-config.php : {e}'
+        })
+
     except Exception as e:
         print(f"❌ [WP_DEBUG] Erreur get: {e}")
         import traceback
@@ -221,16 +232,21 @@ def set_wp_debug_config(project_name):
                 'message': 'Fichier wp-config.php non trouvé'
             })
         
-        # Lire le fichier
-        with open(wp_config_path, 'r', encoding='utf-8') as f:
-            content = f.read()
+        # Lire le fichier (reprise des droits si besoin, cf. read_wp_config)
+        content = read_wp_config(wp_config_path)
         
         # Modifier la constante
         new_content = set_wp_config_constant(content, constant, value)
         
-        # Sauvegarder le fichier
-        with open(wp_config_path, 'w', encoding='utf-8') as f:
-            f.write(new_content)
+        # Sauvegarder le fichier.
+        #
+        # Jamais `open(..., 'w')` ici : wp-config.php appartient à www-data et
+        # son masque ACL retombe à r-- dès qu'un chmod 644 passe dessus, donc
+        # l'écriture directe échouait en PermissionError. Et le fichier est
+        # bind-monté à l'inode dans le conteneur, donc un remplacement par
+        # rename laisserait WordPress sur l'ancien contenu. write_wp_config
+        # règle les deux.
+        write_wp_config(wp_config_path, new_content)
         
         print(f"✅ [WP_DEBUG] {constant} = {value} pour {project_name}")
         
@@ -251,6 +267,14 @@ def set_wp_debug_config(project_name):
             'config': config
         })
         
+    except WpConfigWriteError as e:
+        print(f"❌ [WP_DEBUG] Écriture impossible: {e}")
+        wp_logger.logger.error(f"Erreur écriture wp-config.php ({project_name}): {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Impossible d\'écrire wp-config.php : {e}'
+        })
+
     except Exception as e:
         print(f"❌ [WP_DEBUG] Erreur set: {e}")
         import traceback

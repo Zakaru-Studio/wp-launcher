@@ -186,11 +186,17 @@ def _update_wp_config(projects_folder: str, project_name: str,
         new_content,
     )
     if new_content != content:
+        # Not `open(..., 'w')`: wp-config.php is owned by www-data and its ACL
+        # mask drops to r-- as soon as a chmod 644 runs over it, so a direct
+        # write raises PermissionError and the port rewrite was silently
+        # skipped -- leaving WP_CONTENT_URL on the old port (admin assets 404).
+        # It is also bind-mounted by inode into the container, so replacing the
+        # file would leave WordPress on the old content.
+        from app.utils.wp_config_writer import write_wp_config, WpConfigWriteError
         try:
-            with open(wp_config, 'w') as fh:
-                fh.write(new_content)
+            write_wp_config(wp_config, new_content)
             return True
-        except OSError as e:
+        except (WpConfigWriteError, OSError) as e:
             log.warning("Failed to write wp-config.php: %s", e)
     return False
 
@@ -244,11 +250,13 @@ def _replace_port_in_compose(compose_text: str, old_port: int, new_port: int) ->
     compose_text = _PORT_LINE_RE.sub(repl_binding, compose_text)
 
     # URL-bearing env vars (WP_HOME, PMA_ABSOLUTE_URI).
+    # Le guillemet ouvrant est conservé tel quel : le motif s'arrête au port,
+    # donc en réécrire un ici laisserait la chaîne sans fermeture.
     url_re = re.compile(
-        r'(WP_HOME|PMA_ABSOLUTE_URI)\s*:\s*"?(http://[^:"\s]+):' + str(old_port)
+        r'(WP_HOME|PMA_ABSOLUTE_URI)(\s*:\s*"?)(http://[^:"\s]+):' + str(old_port)
     )
     compose_text = url_re.sub(
-        lambda m: f"{m.group(1)}: \"{m.group(2)}:{new_port}",
+        lambda m: f"{m.group(1)}{m.group(2)}{m.group(3)}:{new_port}",
         compose_text,
     )
 

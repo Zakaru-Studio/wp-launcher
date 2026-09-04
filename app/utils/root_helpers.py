@@ -130,6 +130,14 @@ def copy_wp_content(parent_project: str, slug: str, subdir: str,
 def write_wp_config(project_name: str, content: str, timeout: int = 60) -> str:
     """Écrit wp-config.php quand l'app n'a pas les droits.
 
+    ATTENTION — ce helper REMPLACE le fichier (rename), il ne l'écrit pas en
+    place. wp-config.php étant bind-monté à l'inode dans le conteneur, le
+    conteneur reste sur l'ancien contenu jusqu'à un redémarrage. Le rename est
+    voulu ici : il empêche un wp-config.php transformé en lien symbolique de
+    détourner une écriture root. Pour une modification d'un site en marche,
+    utiliser app.utils.wp_config_writer, qui reprend les droits via le profil
+    wp-config-dev puis écrit en place.
+
     Le contenu transite par l'entrée standard : passer un chemin de fichier
     laissait à l'appelant la possibilité de le remplacer par un lien
     symbolique après la vérification du helper et de faire ainsi recopier un

@@ -10,7 +10,7 @@ from typing import Dict, Any, Optional
 from app.config.docker_config import DockerConfig
 from app.config.php_versions import DEFAULT_PHP_VERSION, SUPPORTED_PHP_VERSIONS, is_supported
 from app.utils.logger import wp_logger
-from app.utils import root_helpers
+from app.utils import root_helpers, wp_config_writer
 
 class ConfigService:
     """Service pour la gestion des configurations PHP et MySQL par projet"""
@@ -635,32 +635,15 @@ collation-server = utf8mb4_unicode_ci
                         last_match = matches[-1]
                         content = content[:last_match.end()] + f"define('WP_DEBUG_DISPLAY', {value});\n" + content[last_match.end():]
             
-            # Écrire le fichier mis à jour
-            # Utiliser un fichier temporaire car wp-config.php peut appartenir à www-data
-            import tempfile
-            import subprocess
-            import shutil
-            
-            try:
-                # Créer un fichier temporaire
-                with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.php') as tmp_file:
-                    tmp_file.write(content)
-                    tmp_path = tmp_file.name
-                
-                # Copier le fichier avec les bonnes permissions
-                shutil.copy2(tmp_path, wp_config_file)
-                os.remove(tmp_path)
-                
-            except PermissionError:
-                # wp-config.php appartient à www-data : passer par le helper.
-                # Le contenu lui est transmis sur stdin plutôt que par un
-                # chemin — un temporaire remplacé par un lien symbolique entre
-                # la vérification du helper et sa lecture aurait fait recopier
-                # n'importe quel fichier de root.
-                wp_logger.log_system_info(f"Écriture privilégiée de {wp_config_file}")
-                root_helpers.write_wp_config(project_name, content)
-                os.remove(tmp_path)
-            
+            # Écrire le fichier mis à jour.
+            #
+            # Passait par un temporaire + shutil.copy2 : copy2 recopie AUSSI le
+            # mode du temporaire (0600 pour tempfile), ce qui verrouillait
+            # wp-config.php à chaque enregistrement. Et le repli helper faisait
+            # un rename, qui casse le bind mount fichier du conteneur.
+            # write_wp_config écrit en place et reprend les droits si besoin.
+            wp_config_writer.write_wp_config(wp_config_file, content)
+
             wp_logger.log_system_info(f"Configuration WordPress mise à jour pour {project_name}")
             return True
             

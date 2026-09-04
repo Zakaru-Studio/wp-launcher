@@ -11,7 +11,7 @@ from app.models.project import Project
 from app.config.docker_config import DockerConfig
 from app.utils.project_utils import secure_project_name
 from app.utils.port_utils import find_free_port_for_project
-from app.utils import root_helpers
+from app.utils import root_helpers, wp_config_writer
 
 
 class CloneService:
@@ -615,9 +615,12 @@ class CloneService:
             )
             print(f"✅ [CLONE] Bloc WP-CLI aligné sur le port {wp_port}")
 
-            # Écrire le fichier modifié
-            with open(wp_config_path, 'w') as f:
-                f.write(content)
+            # Écrire le fichier modifié.
+            # En place et avec reprise des droits : le wp-config.php copié
+            # depuis le projet source appartient à www-data, l'écriture
+            # directe échouait en PermissionError et le clone repartait avec
+            # les URLs et le port du projet d'origine.
+            wp_config_writer.write_wp_config(wp_config_path, content)
             
             print(f"✅ [CLONE] wp-config.php complètement mis à jour")
             

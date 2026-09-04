@@ -59,9 +59,18 @@ fi
 # ===== PERMISSIONS RACINE WORDPRESS (légères, à chaque démarrage) =====
 echo "🔧 Configuration des permissions WordPress racine (/var/www/html)..."
 
-# Permissions: 755 pour le dossier racine, 644 pour les fichiers de premier niveau
+# Permissions: 755 pour le dossier racine, 644 pour les fichiers de premier niveau.
+#
+# wp-config.php et .htaccess sont EXCLUS de ce balayage. Ils ont leur propre
+# traitement plus bas, et surtout : un chmod 644 sur un fichier porteur d'ACL
+# rabat le masque à r--, ce qui retire silencieusement le droit d'écriture au
+# groupe www-data — donc à l'utilisateur hôte, qui en fait partie. C'est ce qui
+# cassait le gestionnaire WP Debug côté launcher avec un « Permission denied »
+# sur un fichier pourtant listé group:rwx.
 find /var/www/html -maxdepth 0 -exec chmod 755 {} + 2>/dev/null || true
-find /var/www/html -maxdepth 1 -type f -exec chmod 644 {} + 2>/dev/null || true
+find /var/www/html -maxdepth 1 -type f \
+    ! -name wp-config.php ! -name .htaccess \
+    -exec chmod 644 {} + 2>/dev/null || true
 chown $WWW_DATA_UID:$WWW_DATA_GID /var/www/html 2>/dev/null || true
 
 if [ "$DEEP" = "1" ]; then
@@ -97,13 +106,15 @@ if [ -d "/var/www/html/wp-content" ]; then
     mkdir -p /var/www/html/wp-content/themes 2>/dev/null || true
     mkdir -p /var/www/html/wp-content/uploads 2>/dev/null || true
     mkdir -p /var/www/html/wp-content/upgrade 2>/dev/null || true
+    mkdir -p /var/www/html/wp-content/upgrade-temp-backup 2>/dev/null || true
+    mkdir -p /var/www/html/wp-content/languages 2>/dev/null || true
 
     # Permissions LÉGÈRES (à chaque démarrage) : sur les dossiers de premier niveau
     # uniquement, sans descendre dans uploads. www-data propriétaire du dossier
     # wp-content lui-même.
     chown $WWW_DATA_UID:$WWW_DATA_GID /var/www/html/wp-content 2>/dev/null || true
     chmod 777 /var/www/html/wp-content 2>/dev/null || true
-    for dir in plugins themes uploads upgrade; do
+    for dir in plugins themes uploads upgrade upgrade-temp-backup languages; do
         if [ -d "/var/www/html/wp-content/$dir" ]; then
             chmod 777 "/var/www/html/wp-content/$dir" 2>/dev/null || true
         fi
@@ -112,12 +123,12 @@ if [ -d "/var/www/html/wp-content" ]; then
     # Héritage ACL par défaut (non récursif, donc rapide) : tout nouveau fichier
     # créé sous wp-content sera éditable par dev-server ET www-data.
     if command -v setfacl >/dev/null 2>&1; then
-        setfacl -m u:$DEV_USER_UID:rwx -m u:$WWW_DATA_UID:rwx /var/www/html/wp-content 2>/dev/null || true
-        setfacl -d -m u:$DEV_USER_UID:rwx -d -m u:$WWW_DATA_UID:rwx /var/www/html/wp-content 2>/dev/null || true
-        for dir in plugins themes uploads upgrade; do
+        setfacl -m m::rwx -m u:$DEV_USER_UID:rwx -m u:$WWW_DATA_UID:rwx /var/www/html/wp-content 2>/dev/null || true
+        setfacl -d -m m::rwx -d -m u:$DEV_USER_UID:rwx -d -m u:$WWW_DATA_UID:rwx /var/www/html/wp-content 2>/dev/null || true
+        for dir in plugins themes uploads upgrade upgrade-temp-backup languages; do
             if [ -d "/var/www/html/wp-content/$dir" ]; then
-                setfacl -m u:$DEV_USER_UID:rwx -m u:$WWW_DATA_UID:rwx "/var/www/html/wp-content/$dir" 2>/dev/null || true
-                setfacl -d -m u:$DEV_USER_UID:rwx -d -m u:$WWW_DATA_UID:rwx "/var/www/html/wp-content/$dir" 2>/dev/null || true
+                setfacl -m m::rwx -m u:$DEV_USER_UID:rwx -m u:$WWW_DATA_UID:rwx "/var/www/html/wp-content/$dir" 2>/dev/null || true
+                setfacl -d -m m::rwx -d -m u:$DEV_USER_UID:rwx -d -m u:$WWW_DATA_UID:rwx "/var/www/html/wp-content/$dir" 2>/dev/null || true
             fi
         done
     fi
@@ -138,8 +149,8 @@ if [ -d "/var/www/html/wp-content" ]; then
         # ACL récursives complètes (une seule fois)
         if command -v setfacl >/dev/null 2>&1; then
             echo "🔒 Configuration des ACL récursives..."
-            setfacl -R -m u:$DEV_USER_UID:rwx -m u:$WWW_DATA_UID:rwx /var/www/html/wp-content 2>/dev/null || true
-            setfacl -R -d -m u:$DEV_USER_UID:rwx -d -m u:$WWW_DATA_UID:rwx /var/www/html/wp-content 2>/dev/null || true
+            setfacl -R -m m::rwx -m u:$DEV_USER_UID:rwx -m u:$WWW_DATA_UID:rwx /var/www/html/wp-content 2>/dev/null || true
+            setfacl -R -d -m m::rwx -d -m u:$DEV_USER_UID:rwx -d -m u:$WWW_DATA_UID:rwx /var/www/html/wp-content 2>/dev/null || true
         fi
 
         # Marquer comme initialisé pour éviter de refaire ce balayage à chaque boot
@@ -151,16 +162,28 @@ if [ -d "/var/www/html/wp-content" ]; then
     echo "✅ wp-content configuré"
 fi
 
-# Permissions fichiers de base (toujours, rapide)
-if [ -f "/var/www/html/.htaccess" ]; then
-    chown $WWW_DATA_UID:$WWW_DATA_GID /var/www/html/.htaccess 2>/dev/null || true
-    chmod 666 /var/www/html/.htaccess 2>/dev/null || true
-fi
-
-if [ -f "/var/www/html/wp-config.php" ]; then
-    chown $WWW_DATA_UID:$WWW_DATA_GID /var/www/html/wp-config.php 2>/dev/null || true
-    chmod 666 /var/www/html/wp-config.php 2>/dev/null || true
-fi
+# Fichiers de la racine partagés hôte <-> conteneur (toujours, rapide).
+#
+# 664 et non 666 : wp-config.php porte les identifiants de la base, il n'a pas
+# à être inscriptible par tout le monde. Le groupe www-data suffit — l'hôte y
+# est ajouté par install.sh.
+#
+# L'ACL est REPOSÉE derrière le chmod, et le masque explicitement : c'est le
+# masque qui décide, et tout chmod le réécrit. Sans cette ligne, l'entrée
+# u:<dev>:rw existe mais reste « #effective:r-- », et l'application se prend un
+# PermissionError sur un fichier qui semble accessible.
+#
+# Ces deux fichiers sont bind-montés à l'inode : le chmod/setfacl fait ici est
+# visible depuis l'hôte, c'est bien le même fichier.
+for shared_file in /var/www/html/wp-config.php /var/www/html/.htaccess; do
+    [ -f "$shared_file" ] || continue
+    chown $WWW_DATA_UID:$WWW_DATA_GID "$shared_file" 2>/dev/null || true
+    chmod 664 "$shared_file" 2>/dev/null || true
+    if command -v setfacl >/dev/null 2>&1; then
+        setfacl -m m::rw -m u:$DEV_USER_UID:rw -m u:$WWW_DATA_UID:rw \
+            "$shared_file" 2>/dev/null || true
+    fi
+done
 
 # Test d'écriture pour vérifier que www-data peut vraiment écrire
 echo "🧪 Test d'écriture pour www-data..."
