@@ -88,6 +88,19 @@ apply() {
     fi
 }
 
+# Rend à wp-config.php et .htaccess le régime qui leur convient : possédés par
+# le développeur, groupe www-data, 664. L'hôte les édite en propriétaire, le
+# conteneur les écrit via le groupe. Silencieux s'ils n'existent pas — tous les
+# projets n'ont pas de .htaccess.
+keep_shared_files() {
+    local dir="$1" f
+    for f in wp-config.php .htaccess; do
+        [ -f "$dir/$f" ] || continue
+        chown "$DEV_USER:$WWW_USER" "$dir/$f"
+        chmod 664 "$dir/$f"
+    done
+}
+
 case "$PROFILE" in
     # Le développeur possède, www-data écrit via le groupe. Profil courant.
     shared)      apply "$DEV_USER:$WWW_USER" u=rwX,g=rwX,o=rX setgid ;;
@@ -95,8 +108,19 @@ case "$PROFILE" in
     www)         apply "$WWW_USER:$WWW_USER" u=rwX,g=rwX,o=rX setgid ;;
     # Tout au développeur : édition depuis l'hôte.
     dev)         apply "$DEV_USER:$DEV_USER" u=rwX,g=rX,o=rX ;;
-    # wp-content côté conteneur, plus restrictif.
-    container)   apply "$WWW_USER:$WWW_USER" u=rwX,g=rX,o=rX ;;
+    # WordPress core côté conteneur, plus restrictif.
+    container)
+        apply "$WWW_USER:$WWW_USER" u=rwX,g=rX,o=rX
+        # wp-config.php et .htaccess vivent à la racine de cette arborescence
+        # et ne survivent pas au chmod ci-dessus : `g=rX` les laisse en 644
+        # www-data, ce qui retire l'écriture à l'hôte ET rabat le masque ACL
+        # à r--, annulant en silence toute entrée `u:...:rwx` posée avant.
+        # C'est la cause du « Permission denied » récurrent sur wp-config.php
+        # et de WP Rocket incapable d'écrire son .htaccess. L'entrypoint du
+        # conteneur les exclut déjà de son chmod ; on fait pareil ici, sinon
+        # « Fix Permissions » recrée le bug qu'il est censé réparer.
+        keep_shared_files "$RESOLVED"
+        ;;
     # Uploads : www-data doit pouvoir créer des fichiers.
     uploads)     apply "$DEV_USER:$WWW_USER" u=rwX,g=rwX,o=rX setgid ;;
 

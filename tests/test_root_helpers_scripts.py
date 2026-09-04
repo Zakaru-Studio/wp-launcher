@@ -156,3 +156,68 @@ def test_write_wp_config_refuse_un_contenu_vide(base):
         env={**os.environ, 'WPL_BASE_DIR': str(base)},
     )
     assert resultat.returncode != 0
+
+
+# ─── profil container : wp-config.php et .htaccess (régression) ──────────
+
+def _shim_chown(tmp_path):
+    """Un PATH où `chown` ne fait rien, pour exécuter le reste sans root.
+
+    Seul `chown` exige des privilèges ; `chmod` sur des fichiers qu'on
+    possède déjà s'exécute normalement. C'est donc bien le comportement
+    réel du profil qu'on observe, pas une imitation.
+    """
+    shim = tmp_path / 'bin'
+    shim.mkdir()
+    (shim / 'chown').write_text('#!/bin/sh\nexit 0\n')
+    (shim / 'chown').chmod(0o755)
+    return f"{shim}:{os.environ['PATH']}"
+
+
+def test_profil_container_preserve_wp_config_et_htaccess(base, tmp_path):
+    """Régression : « Fix Permissions » recréait le bug qu'il répare.
+
+    Le `chmod -R ...,g=rX` du profil laissait wp-config.php et .htaccess en
+    644 www-data — l'hôte perdait l'écriture, et le masque ACL retombait à
+    r--, ce qui annulait en silence toute entrée `u:...:rwx`. C'est la
+    source du « Permission denied » récurrent sur wp-config.php et de
+    WP Rocket incapable d'écrire son .htaccess.
+    """
+    wp = base / 'containers' / 'demo' / 'wordpress'
+    wp.mkdir(parents=True)
+    for nom in ('wp-config.php', '.htaccess', 'index.php'):
+        (wp / nom).write_text('x')
+        (wp / nom).chmod(0o600)
+
+    resultat = subprocess.run(
+        [os.path.join(SCRIPTS_DIR, 'wpl-fix-perms.sh'),
+         'demo', 'container', 'wordpress', '--containers'],
+        capture_output=True, text=True, timeout=30,
+        env={**os.environ, 'WPL_BASE_DIR': str(base),
+             'PATH': _shim_chown(tmp_path)},
+    )
+
+    assert resultat.returncode == 0, resultat.stderr
+    mode = lambda n: oct((wp / n).stat().st_mode & 0o777)
+    # Les deux fichiers partagés restent inscriptibles par le groupe.
+    assert mode('wp-config.php') == '0o664'
+    assert mode('.htaccess') == '0o664'
+    # Le reste du core garde bien le régime restrictif du profil.
+    assert mode('index.php') == '0o644'
+
+
+def test_profil_container_sans_htaccess_ne_casse_pas(base, tmp_path):
+    """Tous les projets n'ont pas de .htaccess — le profil doit passer."""
+    wp = base / 'containers' / 'demo' / 'wordpress'
+    wp.mkdir(parents=True)
+    (wp / 'index.php').write_text('x')
+
+    resultat = subprocess.run(
+        [os.path.join(SCRIPTS_DIR, 'wpl-fix-perms.sh'),
+         'demo', 'container', 'wordpress', '--containers'],
+        capture_output=True, text=True, timeout=30,
+        env={**os.environ, 'WPL_BASE_DIR': str(base),
+             'PATH': _shim_chown(tmp_path)},
+    )
+
+    assert resultat.returncode == 0, resultat.stderr

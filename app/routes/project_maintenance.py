@@ -789,29 +789,60 @@ def fix_wordpress_permissions(project_name):
         
         # Fonction helper pour nettoyer les ACL Samba et réappliquer des ACL permissives
         def clean_and_reapply_acls(path, label, commands_executed, errors):
-            """Nettoie les ACL Samba restrictives et réapplique des ACL permissives"""
+            """Nettoie les ACL Samba restrictives et réapplique des ACL permissives.
+
+            À lancer APRÈS le profil de permissions, jamais avant : `chmod`
+            recalcule le masque ACL depuis les bits de groupe et rabattrait
+            à r-- tout ce qu'on pose ici.
+
+            Le masque est réaffirmé explicitement pour la même raison, et les
+            échecs remontent en erreurs : un `setfacl -Rb` qui réussit suivi
+            d'une réapplication qui échoue laisse l'arborescence SANS aucune
+            ACL — strictement pire qu'au départ — et l'annoncer « corrigé »
+            envoie chercher le problème ailleurs pendant des heures.
+            """
+            # Même budget que le profil racine : sur un wp-content de plusieurs
+            # Go, 30 s ne suffisaient pas et la réapplication expirait juste
+            # après l'effacement.
+            acl_timeout = 300
             try:
                 # Nettoyer les ACL héritées (Samba)
                 result = subprocess.run(
                     ['setfacl', '-Rb', path],
-                    capture_output=True, text=True, timeout=30
+                    capture_output=True, text=True, timeout=acl_timeout
                 )
                 if result.returncode == 0:
                     commands_executed.append(f'{label}: setfacl -Rb (nettoyage ACL)')
                     print(f"🧹 [{label}] ACL nettoyées pour {path}")
 
-                # Réappliquer des ACL permissives
+                # Réappliquer des ACL permissives. `m::rwX` en dernier sur
+                # chaque passe : sans masque explicite, un chmod ultérieur le
+                # rabat et retire l'écriture en silence.
                 for acl_cmd in [
-                    ['setfacl', '-R', '-m', f'u:{current_user}:rwx', path],
-                    ['setfacl', '-R', '-m', 'u:www-data:rwx', path],
-                    ['setfacl', '-R', '-d', '-m', f'u:{current_user}:rwx', path],
-                    ['setfacl', '-R', '-d', '-m', 'u:www-data:rwx', path],
+                    ['setfacl', '-R', '-m', f'u:{current_user}:rwx',
+                     '-m', 'u:www-data:rwx', '-m', 'm::rwX', path],
+                    ['setfacl', '-R', '-d', '-m', f'u:{current_user}:rwx',
+                     '-d', '-m', 'u:www-data:rwx', '-d', '-m', 'm::rwX', path],
                 ]:
-                    subprocess.run(acl_cmd, capture_output=True, text=True, timeout=30)
+                    res = subprocess.run(
+                        acl_cmd, capture_output=True, text=True, timeout=acl_timeout
+                    )
+                    if res.returncode != 0:
+                        errors.append(
+                            f'{label} ACL: {(res.stderr or "").strip()[:200]}'
+                        )
+                        return
                 commands_executed.append(f'{label}: ACL permissives réappliquées')
                 print(f"🔒 [{label}] ACL permissives appliquées")
-            except Exception as e:
-                print(f"⚠️ [{label}] setfacl non disponible ou erreur: {e}")
+            except subprocess.TimeoutExpired:
+                errors.append(
+                    f'{label} ACL: setfacl a dépassé {acl_timeout}s sur {path} — '
+                    'les ACL sont peut-être partiellement effacées'
+                )
+            except FileNotFoundError:
+                errors.append(f'{label} ACL: setfacl absent de la machine')
+            except Exception as e:  # noqa: BLE001
+                errors.append(f'{label} ACL: {e}')
 
         # Fonction helper pour corriger les permissions d'un wp-content
         def fix_wp_content_permissions(wp_content_path, label, commands_executed, errors):
@@ -822,9 +853,6 @@ def fix_wordpress_permissions(project_name):
                 return
 
             print(f"🔧 [{label}] Correction: {wp_content_path}")
-
-            # 0. Nettoyer les ACL Samba restrictives
-            clean_and_reapply_acls(wp_content_path, label, commands_executed, errors)
 
             # Propriétaire: current_user:www-data (dev-server peut éditer, www-data peut lire/écrire via groupe)
             ownership = f'{current_user}:www-data'
@@ -845,6 +873,12 @@ def fix_wordpress_permissions(project_name):
             except root_helpers.RootHelperError as exc:
                 errors.append(f'{label} permissions wp-content: {exc}')
 
+            # Les ACL passent APRÈS le profil, jamais avant : `chmod` recalcule
+            # le masque ACL depuis les bits de groupe, si bien qu'une ACL posée
+            # d'abord se retrouve rabattue à r-- et ne sert à rien. Les poser en
+            # dernier leur laisse le dernier mot.
+            clean_and_reapply_acls(wp_content_path, label, commands_executed, errors)
+
         # Fonction helper pour corriger le dossier WordPress dans containers/
         def fix_container_wordpress_permissions(container_wp_path, label, commands_executed, errors):
             """Corrige les permissions du dossier WordPress core (containers/{project}/wordpress/)"""
@@ -853,9 +887,6 @@ def fix_wordpress_permissions(project_name):
                 return
 
             print(f"🔧 [{label}] Correction containers WordPress: {container_wp_path}")
-
-            # Nettoyer les ACL Samba
-            clean_and_reapply_acls(container_wp_path, label, commands_executed, errors)
 
             # Profil `container` : www-data propriétaire (Apache doit pouvoir
             # écrire pour les mises à jour), 755 sur les dossiers et 644 sur les
@@ -869,6 +900,9 @@ def fix_wordpress_permissions(project_name):
                 print(f"✅ [{label}] Propriétaire WordPress core changé → www-data:www-data")
             except root_helpers.RootHelperError as exc:
                 errors.append(f'{label} permissions wordpress/: {exc}')
+
+            # Idem : après le profil, pour que le masque ACL survive au chmod.
+            clean_and_reapply_acls(container_wp_path, label, commands_executed, errors)
         
         # Exécuter les commandes de correction de permissions
         commands_executed = []
