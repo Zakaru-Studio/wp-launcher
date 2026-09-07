@@ -33,7 +33,7 @@ requests==2.33.1  # GitHub OAuth service, HTTP calls
 # Vérifié le 2026-09-04 : les 5 serveurs configurés négocient tous
 # curve25519-sha256 + ssh-ed25519.
 paramiko==5.0.0
-cryptography==50.0.0
+cryptography==50.0.1
 
 # WSGI / production
 # <26 volontairement : gunicorn 26 supprime le worker eventlet, que
