@@ -65,3 +65,6 @@ exposed_sites.json
 docker-template/wordpress/
 # Config des helpers racine, générée par install.sh hors du dépôt
 scripts/root/wpl.conf
+
+# Index local de l’outil graft (cache)
+graft/
