@@ -8,12 +8,51 @@ from app.utils.logger import wp_logger
 from app.middleware.auth_middleware import login_required, admin_required
 from app.config.php_versions import SUPPORTED_PHP_VERSIONS, docker_image_exists
 from app.config.docker_config import DockerConfig
+import ipaddress
 import json
+import socket
+
+import psutil
 
 config_bp = Blueprint('config', __name__, url_prefix='/api/config')
 
 
-_LOOPBACK_ADDRS = ('127.0.0.1', '::1', 'localhost')
+def _is_address_of_this_machine(addr):
+    """True si `addr` est une adresse portée par une interface de cet hôte.
+
+    Le bouclage ne suffit pas : ouvrir l'app par l'IP du LAN
+    (http://192.168.1.21:5000) depuis la machine elle-même fait voir
+    192.168.1.21 au serveur, et le bouton partait en Remote-SSH vers soi-même.
+
+    Les interfaces sont relues à chaque appel (une fois par chargement de
+    page) : le DHCP et Docker en ajoutent ou en retirent en cours de route.
+    Pas de test par `bind` : avec net.ipv4.ip_nonlocal_bind=1 — le cas sur le
+    serveur de dev — le noyau l'accepte pour n'importe quelle adresse.
+    """
+    try:
+        ip = ipaddress.ip_address((addr or '').strip().split('%')[0])
+    except ValueError:
+        return False
+    # Client IPv4 vu par un socket dual-stack : ::ffff:192.168.1.21
+    if ip.version == 6 and ip.ipv4_mapped:
+        ip = ip.ipv4_mapped
+    if ip.is_loopback:
+        return True
+
+    try:
+        interfaces = psutil.net_if_addrs()
+    except OSError:
+        return False
+    for addresses in interfaces.values():
+        for entry in addresses:
+            if entry.family not in (socket.AF_INET, socket.AF_INET6):
+                continue
+            try:
+                if ipaddress.ip_address(entry.address.split('%')[0]) == ip:
+                    return True
+            except ValueError:
+                continue
+    return False
 
 
 def _client_is_on_this_machine():
@@ -24,8 +63,7 @@ def _client_is_on_this_machine():
     installé quand WPL_TRUSTED_PROXIES est configuré, donc l'adresse vue
     est bien celle du client et pas celle du reverse proxy.
     """
-    addr = (request.remote_addr or '').strip()
-    return addr in _LOOPBACK_ADDRS or addr.startswith('127.')
+    return _is_address_of_this_machine(request.remote_addr)
 
 
 @config_bp.route('/app', methods=['GET'])
