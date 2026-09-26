@@ -165,3 +165,39 @@ def test_validate_php_config_passes_when_docker_unreachable():
     with patch('app.routes.config.docker_image_exists', return_value=None):
         result = _validate_php_config({'php_version': pv.DEFAULT_PHP_VERSION})
     assert result['valid'] is True
+
+
+def test_legacy_upgrade_target_picks_nearest_newer_built_version():
+    built = {'8.4', '8.5'}
+    with patch.object(pv, 'docker_image_exists', side_effect=lambda v: v in built):
+        assert pv.legacy_upgrade_target('8.2') == '8.4'
+
+
+def test_legacy_upgrade_target_never_downgrades():
+    with patch.object(pv, 'docker_image_exists', side_effect=lambda v: v == '7.4'):
+        assert pv.legacy_upgrade_target('8.2') is None
+
+
+def test_legacy_upgrade_target_ignores_supported_versions():
+    with patch.object(pv, 'docker_image_exists', return_value=False):
+        assert pv.legacy_upgrade_target('8.3') is None
+
+
+def test_compose_up_migrates_legacy_project_off_vanished_image(tmp_path):
+    from app.services.docker_service import DockerService
+
+    (tmp_path / 'docker-compose.yml').write_text(
+        "services:\n  wordpress:\n    image: wp-launcher-wordpress:php8.2\n")
+    (tmp_path / '.php_version').write_text('8.2')
+
+    def inspect(cmd, **kwargs):
+        return MagicMock(returncode=0 if cmd[-1] != 'wp-launcher-wordpress:php8.2' else 1)
+
+    svc = DockerService.__new__(DockerService)
+    with patch('app.services.docker_service.subprocess.run', side_effect=inspect), \
+         patch.object(pv, 'docker_image_exists', side_effect=lambda v: v == '8.3'):
+        result = svc._compose(str(tmp_path), 'up', '-d')
+
+    assert result.returncode == 0
+    assert 'image: wp-launcher-wordpress:php8.3' in (tmp_path / 'docker-compose.yml').read_text()
+    assert (tmp_path / '.php_version').read_text() == '8.3'

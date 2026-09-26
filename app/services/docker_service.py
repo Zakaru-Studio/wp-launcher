@@ -4,6 +4,7 @@ Service de gestion Docker
 """
 
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -222,6 +223,85 @@ class DockerService:
         import re as _re
         return any(_re.search(pattern, text) for pattern in cls._STALE_CONTAINER_PATTERNS)
 
+    # Images construites localement (jamais publiées sur un registre). Repérées
+    # pour pouvoir échouer avec un message utile plutôt que de laisser Compose
+    # tenter un pull voué à un « pull access denied ».
+    _LOCAL_IMAGE_RE = re.compile(r'^\s*image:\s*(wp-launcher-wordpress:\S+)\s*$', re.M)
+
+    def _missing_local_image(self, container_path):
+        """Premier tag d'image locale référencé par le projet mais absent du
+        démon, ou None si tout est présent.
+
+        Compose ne sait pas construire ces images : elles viennent de
+        scripts/build_wordpress_images.sh et sont partagées par tous les
+        projets. Sans ce contrôle, un `up` sur une image absente part chercher
+        Docker Hub et retourne « pull access denied […] may require 'docker
+        login' », qui laisse croire à un problème d'authentification.
+        """
+        compose_file = os.path.join(container_path, 'docker-compose.yml')
+        try:
+            with open(compose_file, 'r') as fh:
+                content = fh.read()
+        except OSError:
+            return None  # pas de compose lisible : laisser docker-compose trancher
+
+        for tag in sorted(set(self._LOCAL_IMAGE_RE.findall(content))):
+            try:
+                probe = subprocess.run(
+                    ['docker', 'image', 'inspect', tag],
+                    capture_output=True, text=True, timeout=15,
+                )
+            except Exception:
+                return None  # démon injoignable : ce n'est pas à nous de le signaler
+            if probe.returncode != 0:
+                return tag
+        return None
+
+    def _migrate_legacy_php_image(self, container_path, missing_tag):
+        """Bascule un projet resté sur une version PHP retirée vers la version
+        supportée la plus proche, quand l'image de l'ancienne a disparu.
+
+        Renvoyer vers scripts/build_wordpress_images.sh ne servirait à rien :
+        le script ne construit que les versions supportées, faute de
+        Dockerfile pour les autres. Met à jour docker-compose.yml et
+        .php_version ; renvoie True si une migration a eu lieu.
+        """
+        from app.config.php_versions import IMAGE_PREFIX, image_tag, legacy_upgrade_target
+
+        prefix = f'{IMAGE_PREFIX}:php'
+        if not missing_tag.startswith(prefix):
+            return False
+        legacy = missing_tag[len(prefix):]
+        target = legacy_upgrade_target(legacy)
+        if not target:
+            return False
+
+        compose_file = os.path.join(container_path, 'docker-compose.yml')
+        try:
+            with open(compose_file, 'r') as fh:
+                content = fh.read()
+            content = re.sub(
+                rf'^(\s*image:\s*){re.escape(missing_tag)}\s*$',
+                rf'\g<1>{image_tag(target)}',
+                content, flags=re.M,
+            )
+            # Écriture en place : le fichier peut être bind-monté.
+            with open(compose_file, 'r+') as fh:
+                fh.seek(0)
+                fh.write(content)
+                fh.truncate()
+            with open(os.path.join(container_path, '.php_version'), 'w') as fh:
+                fh.write(target)
+        except OSError as e:
+            print(f"⚠️ [DOCKER_SERVICE] Migration PHP {legacy} → {target} impossible : {e}")
+            return False
+
+        message = (f"PHP {legacy} n'est plus supporté et son image a disparu : "
+                   f"projet basculé sur PHP {target}")
+        print(f"🔁 [DOCKER_SERVICE] {message}")
+        wp_logger.log_system_info(message, container_path=container_path)
+        return True
+
     def _compose(self, container_path, *args, timeout=60):
         """Lance docker-compose dans le dossier du projet.
 
@@ -234,6 +314,21 @@ class DockerService:
         bascule de version PHP tombait là-dessus, et la suppression de projet
         supprimait le répertoire courant sous ses propres pieds.
         """
+        if args and args[0] == 'up':
+            missing = self._missing_local_image(container_path)
+            if missing and self._migrate_legacy_php_image(container_path, missing):
+                missing = self._missing_local_image(container_path)
+            if missing:
+                message = (
+                    f"Image Docker locale manquante : {missing}. "
+                    "Elle est construite par scripts/build_wordpress_images.sh et n'est "
+                    "publiée sur aucun registre — lancez ce script puis réessayez."
+                )
+                print(f"❌ [DOCKER_SERVICE] {message}")
+                return subprocess.CompletedProcess(
+                    args=['docker-compose', *args], returncode=1, stdout='', stderr=message,
+                )
+
         return subprocess.run(
             ['docker-compose', *args],
             capture_output=True, text=True, timeout=timeout, cwd=container_path,
@@ -1580,7 +1675,7 @@ class DockerService:
             inexistant.
         """
         from app.config.php_versions import (
-            DEFAULT_PHP_VERSION, docker_image_exists, image_tag,
+            DEFAULT_PHP_VERSION, docker_image_exists, image_tag, legacy_upgrade_target,
         )
         try:
             print(f"🔄 [DOCKER_SERVICE] Rebuild conteneur WordPress pour {project_name}")
@@ -1628,6 +1723,18 @@ class DockerService:
             # image isn't present. Docker would happily create the
             # container and then loop forever trying to pull it.
             img_check = docker_image_exists(php_version)
+            if img_check is False:
+                target = legacy_upgrade_target(php_version)
+                if target:
+                    print(f"🔁 [DOCKER_SERVICE] PHP {php_version} n'est plus supporté et "
+                          f"son image a disparu : projet basculé sur PHP {target}")
+                    php_version = target
+                    img_check = True
+                    try:
+                        with open(version_file, 'w') as f:
+                            f.write(php_version)
+                    except OSError:
+                        pass  # le compose, réécrit plus bas, fait foi
             if img_check is False:
                 try:
                     os.remove(lock_path)

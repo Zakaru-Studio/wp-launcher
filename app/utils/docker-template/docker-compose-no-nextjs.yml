@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   mysql:
     image: mysql:8.0
@@ -34,6 +32,12 @@ services:
     # Tag explicite substitué au rendu : `latest` pointait sur une version
     # figée au dernier build, indépendante de la version par défaut déclarée.
     image: {php_image}
+    # Image construite localement par scripts/build_wordpress_images.sh,
+    # jamais publiée sur un registre. Sans cette ligne, Compose applique sa
+    # politique par défaut et tente un pull, qui échoue sur un « pull access
+    # denied […] may require 'docker login' » trompeur : rien ne cloche côté
+    # authentification, l'image doit simplement être construite.
+    pull_policy: never
     container_name: PROJECT_NAME_wordpress_1
     restart: unless-stopped
     environment:

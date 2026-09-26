@@ -83,6 +83,32 @@ def iter_for_build() -> Iterable[tuple[str, str]]:
         yield version, f'Dockerfile.php{version}'
 
 
+def _version_key(version: str) -> tuple[int, ...]:
+    try:
+        return tuple(int(part) for part in version.split('.'))
+    except ValueError:
+        return ()
+
+
+def legacy_upgrade_target(version: str) -> Optional[str]:
+    """Version supportée vers laquelle migrer un projet resté sur une version
+    retirée, ou None s'il n'y a pas lieu (ou pas moyen) de migrer.
+
+    Une version retirée de ``SUPPORTED_PHP_VERSIONS`` n'a plus de Dockerfile :
+    son image, une fois disparue du démon, ne peut plus être reconstruite, et
+    le projet ne démarrerait plus jamais. On prend la plus proche version
+    supportée qui ne soit pas plus ancienne (8.2 → 8.3 plutôt que 7.4) et dont
+    l'image est réellement présente — la moins risquée pour le code du site.
+    """
+    if is_supported(version):
+        return None
+    current = _version_key(version)
+    for candidate in SUPPORTED_PHP_VERSIONS:
+        if _version_key(candidate) >= current and docker_image_exists(candidate):
+            return candidate
+    return None
+
+
 def resolve_default_php_version() -> str:
     """Version PHP à utiliser pour un nouveau projet.
 
