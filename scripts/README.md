@@ -29,7 +29,7 @@ Ce dossier contient les scripts shell utilisés par l'application WordPress Laun
   - Sauvegarde MySQL et MongoDB
   - Compression automatique
   - Rotation des backups (7 jours de rétention)
-  - Utilisé par : Cron (toutes les 4 heures) + Interface de monitoring
+  - Utilisé par : Interface de monitoring (lancement manuel uniquement, cron retiré le 2026-09-06)
 
 ### 🗑️ Suppression sécurisée
 
@@ -70,10 +70,8 @@ sudo systemctl restart wp-launcher
 ## Configuration
 
 ### Cron (backups automatiques)
-Les backups sont configurés pour s'exécuter automatiquement :
-```cron
-0 */4 * * * /home/dev-server/Sites/wp-launcher/scripts/backup_databases.sh
-```
+Plus aucun cron n'est planifié depuis le 2026-09-06 : les backups se lancent
+uniquement à la demande, depuis l'interface de monitoring ou en ligne de commande.
 
 ### Systemd Service
 Le service systemd utilise `start.sh` :
