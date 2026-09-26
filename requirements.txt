@@ -24,7 +24,7 @@ Flask-Babel==4.0.0
 chardet==7.5.1
 python-dotenv==1.0.0
 psutil==5.9.8
-requests==2.33.1  # GitHub OAuth service, HTTP calls
+requests==2.34.2  # GitHub OAuth service, HTTP calls
 
 # Deployments: SSH client + at-rest encryption for stored private keys
 # paramiko 4.x drops DSA (DSSKey) support — handled in app/services/ssh_service.py
