@@ -1,1 +1,2 @@
 pyflakes  # lint des modules de push (tests de non-régression)
+pytest    # suite tests/ ; absent d'ici, il a disparu à la reconstruction du venv pour Python 3.14
