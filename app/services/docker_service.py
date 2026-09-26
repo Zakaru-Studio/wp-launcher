@@ -819,14 +819,16 @@ class DockerService:
         """Récupère les logs d'un conteneur"""
         try:
             container_name = self.container_for(project_name, service_name)
+            # stderr fusionné : un conteneur écrit ses logs sur les deux flux
+            # (next dev envoie ses erreurs de compilation sur stderr).
             result = subprocess.run([
                 'docker', 'logs', '--tail', str(lines), container_name
-            ], capture_output=True, text=True)
+            ], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=30)
             
             if result.returncode == 0:
                 return result.stdout
             else:
-                return f"Erreur: {result.stderr}"
+                return f"Erreur: {result.stdout}"
         except Exception as e:
             return f"Erreur lors de la récupération des logs: {str(e)}"
     
@@ -1424,6 +1426,11 @@ class DockerService:
     
     def fix_dev_permissions(self, project_name):
         """Applique les permissions de développement pour wp-config.php et wp-content avec nouvelle architecture"""
+        # Rien à corriger hors WordPress : les conteneurs Node (Payload)
+        # écrivent déjà sous l'uid de l'hôte.
+        from app.utils.project_utils import get_project_type
+        if get_project_type(os.path.join(self.projects_folder, project_name)) == 'payload':
+            return True
         try:
             wp_content_path = os.path.join(self.projects_folder, project_name, 'wp-content')
             wp_config_path = os.path.join(self.projects_folder, project_name, 'wp-config.php')

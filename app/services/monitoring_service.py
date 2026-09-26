@@ -19,10 +19,11 @@ from app.utils.logger import wp_logger
 _BACKUP_TYPES = {
     'mysql': {'subdir': 'mysql', 'suffixes': ('.sql', '.sql.gz')},
     'mongodb': {'subdir': 'mongodb', 'suffixes': ('.tar.gz',)},
+    'postgres': {'subdir': 'postgres', 'suffixes': ('.dump',)},
 }
 
 # Noms de fichiers générés par backup_databases.sh : <projet>_YYYYMMDD_HHMMSS.<ext>
-_BACKUP_FILENAME_RE = re.compile(r'^(?P<project>.+)_(?P<ts>\d{8}_\d{6})\.(sql(\.gz)?|tar\.gz)$')
+_BACKUP_FILENAME_RE = re.compile(r'^(?P<project>.+)_(?P<ts>\d{8}_\d{6})\.(sql(\.gz)?|tar\.gz|dump)$')
 # Charset strict pour tout nom de fichier reçu de l'API (pas de / ni de ..).
 _SAFE_FILENAME_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$')
 
@@ -334,6 +335,7 @@ class MonitoringService:
                 'backups': backups,
                 'total_mysql': len(backups['mysql']),
                 'total_mongodb': len(backups['mongodb']),
+                'total_postgres': len(backups['postgres']),
                 'storage': self._storage_stats(backups),
                 'last_run': self.get_backup_run_status(),
             }
@@ -355,7 +357,7 @@ class MonitoringService:
         Un seul backup à la fois : si un run est en cours, on refuse au
         lieu d'empiler des mysqldump concurrents.
         """
-        if backup_type not in ('all', 'mysql', 'mongodb'):
+        if backup_type not in ('all', 'mysql', 'mongodb', 'postgres'):
             return {'started': False, 'error': f'Type de backup invalide: {backup_type}'}
         if not os.path.exists(self.backup_script):
             return {'started': False, 'error': 'Script de backup non trouvé'}
@@ -400,6 +402,8 @@ class MonitoringService:
                 cmd = [self.backup_script, 'mysql-only']
             elif backup_type == 'mongodb':
                 cmd = [self.backup_script, 'mongodb-only']
+            elif backup_type == 'postgres':
+                cmd = [self.backup_script, 'postgres-only']
             else:
                 cmd = [self.backup_script]
 

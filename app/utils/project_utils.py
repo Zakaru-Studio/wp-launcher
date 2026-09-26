@@ -3,6 +3,7 @@
 Utilitaires pour la gestion et création des projets
 """
 import os
+import re
 import shutil
 import json
 from werkzeug.utils import secure_filename
@@ -64,8 +65,14 @@ def _copy_directory_robust(src, dst):
     shutil.copytree(src, dst, dirs_exist_ok=True)
 
 
-def _copy_file_robust(src, dst, project_name=None, ports=None, resource_limits=None):
-    """Copie un fichier de manière robuste et remplace les placeholders"""
+def _copy_file_robust(src, dst, project_name=None, ports=None, resource_limits=None,
+                      credentials=None):
+    """Copie un fichier de manière robuste et remplace les placeholders
+
+    ``credentials`` fixe la valeur de placeholders d'identifiants (voir
+    security_config.apply_project_credentials) quand l'appelant doit les
+    connaître, par exemple pour les réécrire dans le .env d'une app.
+    """
     print(f"📄 Copie du fichier: {src} → {dst}")
     
     if os.path.exists(dst):
@@ -88,7 +95,7 @@ def _copy_file_robust(src, dst, project_name=None, ports=None, resource_limits=N
     from app.utils import security_config
     content = content.replace('{site_bind}', security_config.site_bind_address())
     content = content.replace('{admin_bind}', security_config.admin_bind_address())
-    content = security_config.apply_project_credentials(content)
+    content = security_config.apply_project_credentials(content, credentials)
 
     # Image PHP — voir docker_service.configure_compose_file.
     from app.config.php_versions import image_tag, resolve_default_php_version
@@ -110,8 +117,16 @@ def _copy_file_robust(src, dst, project_name=None, ports=None, resource_limits=N
             content = content.replace('{mysql_port}', str(ports['mysql']))
         if 'mongo_express' in ports:
             content = content.replace('{mongo_express_port}', str(ports['mongo_express']))
+        for service in ('payload', 'postgres', 'adminer'):
+            if service in ports:
+                content = content.replace('{%s_port}' % service, str(ports[service]))
         print(f"🔄 Ports remplacés: {ports}")
     
+    # Utilisateur de l'hôte : les conteneurs Node lui rendent la propriété
+    # des fichiers qu'ils écrivent dans projets/.
+    content = content.replace('{host_uid}', str(os.getuid()))
+    content = content.replace('{host_gid}', str(os.getgid()))
+
     # Remplacer les placeholders de configuration DockerConfig
     content = content.replace('{local_ip}', DockerConfig.LOCAL_IP)
     content = content.replace('{wp_admin_user}', DockerConfig.WP_ADMIN_USER)
@@ -208,6 +223,42 @@ def copy_docker_template_nextjs_mysql(project_path, project_name, ports):
         print(f"   Destination: {project_path}")
         print(f"   Erreur: {e}")
         raise Exception(f"Échec de la copie du template Next.js + MySQL: {e}")
+
+
+#: Placeholder de template resté non rendu (`{mysql_memory}`, `{payload_port}`…).
+_UNRENDERED_PLACEHOLDER_RE = re.compile(r'\{[a-z][a-z0-9_]*\}')
+
+
+def copy_docker_template_payload(project_path, project_name, ports, credentials):
+    """Rend le stack Payload (Postgres + app + Adminer + Mailpit).
+
+    ``credentials`` fixe ``{postgres_password}`` et ``{payload_secret}`` :
+    l'appelant doit les connaître pour écrire ``.db.json`` et le ``.env`` de
+    l'app, qui doivent correspondre au compose.
+
+    Échoue si un placeholder reste dans le compose rendu : docker-compose
+    l'accepterait tel quel (``mem_limit: {mysql_memory}``…) et le stack
+    partirait avec une configuration absurde.
+    """
+    template_path = 'docker-template'
+    src_compose = os.path.join(template_path, 'docker-compose-payload.yml')
+    if not os.path.exists(src_compose):
+        raise Exception(f"Template Payload non trouvé: {src_compose}")
+
+    dst_compose = os.path.join(project_path, 'docker-compose.yml')
+    _copy_file_robust(src_compose, dst_compose, project_name, ports,
+                      credentials=credentials)
+
+    for folder in ('payload-config', 'adminer-config'):
+        _copy_directory_robust(os.path.join(template_path, folder),
+                               os.path.join(project_path, folder))
+
+    with open(dst_compose, encoding='utf-8') as fh:
+        leftovers = sorted(set(_UNRENDERED_PLACEHOLDER_RE.findall(fh.read())))
+    if leftovers:
+        raise Exception(f"Placeholders non remplacés dans le compose Payload: {', '.join(leftovers)}")
+
+    print("✅ Template Payload copié avec succès")
 
 
 def create_default_wp_content(wp_content_dest):
@@ -1411,6 +1462,17 @@ module.exports = dbTest
 
 def get_project_type(project_path):
     """Détermine le type d'un projet"""
+    marker = os.path.join(project_path, '.project_type')
+    if os.path.exists(marker):
+        try:
+            with open(marker) as f:
+                marked = f.read().strip()
+            if marked:
+                return marked
+        except OSError:
+            pass
+    if os.path.exists(os.path.join(project_path, 'app', 'src', 'payload.config.ts')):
+        return 'payload'
     if os.path.exists(os.path.join(project_path, 'client')):
         return 'nextjs'
     elif os.path.exists(os.path.join(project_path, 'wp-content')):

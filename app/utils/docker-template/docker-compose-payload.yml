@@ -1,0 +1,119 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: PROJECT_NAME_postgres_1
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: PROJECT_NAME
+      POSTGRES_USER: PROJECT_NAME
+      POSTGRES_PASSWORD: "{postgres_password}"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks:
+      - app_network
+    ports:
+      - "{admin_bind}:{postgres_port}:5432"  # Postgres — loopback (WPL_ADMIN_BIND)
+    stop_grace_period: 60s
+    mem_limit: 512m
+    cpus: '1.0'
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U PROJECT_NAME -d PROJECT_NAME"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  payload:
+    image: node:22-bookworm-slim
+    container_name: PROJECT_NAME_payload_1
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - ../../projets/{project_name}/app:/app:delegated
+      - node_modules:/app/node_modules
+      - next_cache:/app/.next
+      - npm_home:/home/app
+      - ./payload-config/start.sh:/usr/local/bin/wpl-start.sh:ro
+    networks:
+      - app_network
+    ports:
+      - "{site_bind}:{payload_port}:3000"  # Site + admin Payload (/admin)
+    environment:
+      - NODE_ENV=development
+      - NEXT_TELEMETRY_DISABLED=1
+      - WATCHPACK_POLLING=true
+      - CHOKIDAR_USEPOLLING=true
+      - HOST_UID={host_uid}
+      - HOST_GID={host_gid}
+      - PORT=3000
+      - DATABASE_URI=postgres://PROJECT_NAME:{postgres_password}@postgres:5432/PROJECT_NAME
+      - DATABASE_URL=postgres://PROJECT_NAME:{postgres_password}@postgres:5432/PROJECT_NAME
+      - PAYLOAD_SECRET={payload_secret}
+      - NEXT_PUBLIC_SERVER_URL=http://{local_ip}:{payload_port}
+      # Lues par le code patché à la création (payload_service.patch_app_config).
+      - WPL_DEV_ORIGINS={local_ip},localhost,127.0.0.1
+      - WPL_COOKIE_PREFIX=PROJECT_NAME
+      - WPL_AUTOLOGIN_EMAIL={wp_admin_email}
+      - SMTP_HOST=mailpit
+      - SMTP_PORT=1025
+    command: ["sh", "/usr/local/bin/wpl-start.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    # next dev + Payload est gourmand : la première compilation de /admin
+    # monte à ~1,9 Go ; à 2g elle frôle l'OOM killer.
+    mem_limit: 4g
+    cpus: '2.0'
+    shm_size: '1g'
+
+  adminer:
+    image: adminer:latest
+    container_name: PROJECT_NAME_adminer_1
+    restart: unless-stopped
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+      WPL_DB_NAME: PROJECT_NAME
+      WPL_DB_USER: PROJECT_NAME
+      WPL_DB_PASSWORD: "{postgres_password}"
+    volumes:
+      - ./adminer-config/wpl-autologin.php:/var/www/html/plugins-enabled/wpl-autologin.php:ro
+    networks:
+      - app_network
+    ports:
+      - "{admin_bind}:{adminer_port}:8080"  # Adminer — loopback (WPL_ADMIN_BIND)
+    depends_on:
+      postgres:
+        condition: service_started
+    mem_limit: 96m
+    cpus: '0.25'
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: PROJECT_NAME_mailpit_1
+    restart: unless-stopped
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    networks:
+      - app_network
+    ports:
+      - "{admin_bind}:{mailpit_port}:8025"  # Port interface web Mailpit
+      - "{admin_bind}:{smtp_port}:1025"     # Port SMTP Mailpit
+    mem_limit: 48m
+    cpus: '0.25'
+
+volumes:
+  pg_data:
+    driver: local
+  node_modules:
+    driver: local
+  next_cache:
+    driver: local
+  npm_home:
+    driver: local
+
+networks:
+  app_network:
+    driver: bridge

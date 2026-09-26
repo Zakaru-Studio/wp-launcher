@@ -181,6 +181,8 @@ function filterAndRenderProjects() {
                 case 'nextjs':
                     // Inclure les projets Next.js purs ET les projets WordPress avec Next.js ajouté
                     return project.type === 'nextjs' || project.nextjs_enabled;
+                case 'payload':
+                    return project.type === 'payload';
                 default:
                     return true;
             }

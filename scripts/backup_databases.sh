@@ -1,6 +1,7 @@
 #!/bin/bash
 
-# Script de backup automatique pour toutes les bases de données MySQL et MongoDB
+# Script de backup automatique pour toutes les bases de données MySQL, MongoDB
+# et Postgres (projets Payload)
 # Utilise Docker pour exporter les données directement depuis les conteneurs
 # Destiné à être exécuté toutes les 4 heures via cron
 
@@ -32,7 +33,7 @@ init_backup_system() {
     log_message "INFO" "🚀 Initialisation du système de backup"
     
     # Créer les dossiers nécessaires
-    mkdir -p "$BACKUP_DIR"/{mysql,mongodb}
+    mkdir -p "$BACKUP_DIR"/{mysql,mongodb,postgres}
     mkdir -p "$(dirname "$LOG_FILE")"
     
     # Vérifier que Docker est accessible
@@ -78,6 +79,51 @@ detect_mongodb_containers() {
             echo "$project_name"
         fi
     done
+}
+
+# Détecter tous les conteneurs Postgres actifs (projets Payload)
+detect_postgres_containers() {
+    log_message "INFO" "🔍 Détection des conteneurs Postgres actifs..."
+
+    docker ps --format "{{.Names}}" | grep "_postgres_[0-9]*$" | while read container_name; do
+        if [ ! -z "$container_name" ]; then
+            project_name=$(echo "$container_name" | sed 's/_postgres_[0-9]*$//')
+            log_message "INFO" "  └─ Trouvé: $project_name (Postgres)" >&2
+            echo "$project_name"
+        fi
+    done
+}
+
+# Backup Postgres pour un projet Payload : format custom (pg_dump -Fc),
+# déjà compressé et rechargeable tel quel par l'import du dashboard.
+backup_postgres_project() {
+    local project_name="$1"
+    local container_name="${project_name}_postgres_1"
+    local timestamp=$(date '+%Y%m%d_%H%M%S')
+    local backup_file="$BACKUP_DIR/postgres/${project_name}_${timestamp}.dump"
+
+    log_message "INFO" "🐘 Backup Postgres pour $project_name"
+
+    if ! docker ps --format "{{.Names}}" | grep -qx "$container_name"; then
+        log_message "ERROR" "❌ Conteneur $container_name non trouvé ou inactif"
+        return 1
+    fi
+
+    # Utilisateur et base lus dans l'env du conteneur ; la socket locale
+    # de l'image postgres n'exige pas de mot de passe.
+    if docker exec "$container_name" sh -c 'exec pg_dump -Fc --no-owner --no-acl \
+        -U "$POSTGRES_USER" -d "$POSTGRES_DB"' > "$backup_file" 2>/dev/null; then
+        local file_size=$(stat -c%s "$backup_file" 2>/dev/null || echo "0")
+        local size_mb=$((file_size / 1024 / 1024))
+        if [ $file_size -gt 0 ]; then
+            log_message "SUCCESS" "✅ Backup Postgres $project_name réussi (${size_mb}MB)"
+            return 0
+        fi
+    fi
+
+    log_message "ERROR" "❌ Erreur lors du backup Postgres de $project_name"
+    rm -f "$backup_file"
+    return 1
 }
 
 # Backup MySQL pour un projet
@@ -226,6 +272,15 @@ cleanup_old_backups() {
         done
     fi
 
+    # Nettoyer les backups Postgres
+    if [ -d "$BACKUP_DIR/postgres" ]; then
+        find "$BACKUP_DIR/postgres" -name "*.dump" -mtime +$RETENTION_DAYS -exec rm -f {} \;
+
+        for project in $(ls "$BACKUP_DIR/postgres" | sed 's/_[0-9]*_[0-9]*\.dump$//' | sort -u); do
+            ls -t "$BACKUP_DIR/postgres/${project}_"*.dump 2>/dev/null | tail -n +$((MAX_BACKUPS_PER_PROJECT + 1)) | xargs -r rm -f
+        done
+    fi
+
     # Purger les rapports texte : sans ça ils s'accumulent indéfiniment
     # à la racine du dossier de backups (6 par jour).
     find "$BACKUP_DIR" -maxdepth 1 -name "backup_report_*.txt" -mtime +$RETENTION_DAYS -delete 2>/dev/null
@@ -250,9 +305,11 @@ EOF
     # Compter les backups MySQL
     local mysql_count=$(find "$BACKUP_DIR/mysql" -name "*.sql*" 2>/dev/null | wc -l)
     local mongodb_count=$(find "$BACKUP_DIR/mongodb" -name "*.tar.gz" 2>/dev/null | wc -l)
+    local postgres_count=$(find "$BACKUP_DIR/postgres" -name "*.dump" 2>/dev/null | wc -l)
     
     echo "Backups MySQL: $mysql_count fichiers" >> "$report_file"
     echo "Backups MongoDB: $mongodb_count fichiers" >> "$report_file"
+    echo "Backups Postgres: $postgres_count fichiers" >> "$report_file"
     echo "" >> "$report_file"
     
     # Lister les backups MySQL
@@ -285,6 +342,8 @@ main() {
     local mysql_total=0
     local mongodb_success=0
     local mongodb_total=0
+    local postgres_success=0
+    local postgres_total=0
     
     # Backup des bases MySQL
     log_message "INFO" "🗄️ === BACKUP MYSQL ==="
@@ -332,6 +391,22 @@ main() {
         log_message "INFO" "ℹ️ Aucun conteneur MongoDB actif trouvé"
     fi
     
+    # Backup des bases Postgres (projets Payload)
+    log_message "INFO" "🐘 === BACKUP POSTGRES ==="
+    postgres_containers=$(detect_postgres_containers)
+    if [ ! -z "$postgres_containers" ]; then
+        while IFS= read -r project; do
+            if [ ! -z "$project" ]; then
+                postgres_total=$((postgres_total + 1))
+                if backup_postgres_project "$project"; then
+                    postgres_success=$((postgres_success + 1))
+                fi
+            fi
+        done <<< "$postgres_containers"
+    else
+        log_message "INFO" "ℹ️ Aucun conteneur Postgres actif trouvé"
+    fi
+
     # Nettoyage des anciens backups
     cleanup_old_backups
     
@@ -345,11 +420,12 @@ main() {
     log_message "INFO" "📊 === RÉSUMÉ DU BACKUP ==="
     log_message "INFO" "MySQL: $mysql_success/$mysql_total projets sauvegardés"
     log_message "INFO" "MongoDB: $mongodb_success/$mongodb_total projets sauvegardés"
+    log_message "INFO" "Postgres: $postgres_success/$postgres_total projets sauvegardés"
     log_message "INFO" "Durée totale: ${duration}s"
     log_message "INFO" "🏁 === FIN DU BACKUP AUTOMATIQUE ==="
     
     # Code de sortie
-    if [ $((mysql_success + mongodb_success)) -eq $((mysql_total + mongodb_total)) ]; then
+    if [ $((mysql_success + mongodb_success + postgres_success)) -eq $((mysql_total + mongodb_total + postgres_total)) ]; then
         exit 0
     else
         exit 1
@@ -363,6 +439,14 @@ case "${1:-}" in
         init_backup_system
         detect_mysql_containers
         detect_mongodb_containers
+        detect_postgres_containers
+        ;;
+    "postgres-only")
+        log_message "INFO" "🐘 Mode Postgres uniquement"
+        init_backup_system
+        detect_postgres_containers | while IFS= read -r project; do
+            [ -n "$project" ] && backup_postgres_project "$project"
+        done
         ;;
     "mysql-only")
         log_message "INFO" "🗄️ Mode MySQL uniquement"

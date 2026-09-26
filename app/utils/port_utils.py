@@ -18,6 +18,7 @@ from typing import Dict, List, Set
 
 from app.config.app_config import PROJECTS_FOLDER, CONTAINERS_FOLDER
 from app.config.docker_config import DockerConfig
+from app.config.ports_config import PortsConfig
 
 
 # ---------------------------------------------------------------------------
@@ -144,9 +145,10 @@ def get_used_ports():
         for project in os.listdir(containers_folder):
             project_path = os.path.join(containers_folder, project)
             if os.path.isdir(project_path):
-                # Lire les fichiers de ports
-                port_files = ['.port', '.pma_port', '.mailpit_port', '.smtp_port', '.nextjs_port']
-                for port_file in port_files:
+                # Tous les sidecars connus, pas seulement ceux de WordPress :
+                # un port réservé par un projet Next.js ou Payload arrêté
+                # serait sinon réattribué à un autre projet.
+                for port_file in PortsConfig.PORT_FILES.values():
                     port_file_path = os.path.join(project_path, port_file)
                     if os.path.exists(port_file_path):
                         try:

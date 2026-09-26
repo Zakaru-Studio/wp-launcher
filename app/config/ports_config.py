@@ -20,8 +20,13 @@ class PortsConfig:
         'mailpit': '.mailpit_port',
         'smtp': '.smtp_port',
         'nextjs': '.nextjs_port',
+        'api': '.api_port',
+        'mysql': '.mysql_port',
         'mongodb': '.mongodb_port',
-        'mongo_express': '.mongo_express_port'
+        'mongo_express': '.mongo_express_port',
+        'payload': '.payload_port',
+        'postgres': '.postgres_port',
+        'adminer': '.adminer_port',
     }
     
     # Ports par défaut pour certains services

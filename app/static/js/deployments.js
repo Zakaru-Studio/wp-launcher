@@ -913,6 +913,7 @@ function matchesDeployFilter(p, filter) {
         case 'inactive':  return p.status !== 'active';
         case 'wordpress': return p.type === 'wordpress';
         case 'nextjs':    return p.type === 'nextjs' || p.has_nextjs;
+        case 'payload':   return p.type === 'payload';
         default:          return true;
     }
 }
@@ -935,7 +936,8 @@ function updateDeployCounts() {
         active: all.filter(p => matchesDeployFilter(p, 'active')).length,
         inactive: all.filter(p => matchesDeployFilter(p, 'inactive')).length,
         wordpress: all.filter(p => matchesDeployFilter(p, 'wordpress')).length,
-        nextjs: all.filter(p => matchesDeployFilter(p, 'nextjs')).length
+        nextjs: all.filter(p => matchesDeployFilter(p, 'nextjs')).length,
+        payload: all.filter(p => matchesDeployFilter(p, 'payload')).length
     };
     Object.keys(counts).forEach(k => {
         const el = document.querySelector(`#deploy-filters [data-count="${k}"]`);

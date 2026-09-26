@@ -721,6 +721,13 @@ def api_deploy_target(target_id: int):
     ), 202
 
 
+def _is_payload_project(project_name: str) -> bool:
+    """db_push et media_push lisent wp-config.php et wp-content/uploads."""
+    from app.config.docker_config import DockerConfig
+    from app.utils.project_utils import get_project_type
+    return get_project_type(os.path.join(DockerConfig.PROJECTS_FOLDER, project_name)) == 'payload'
+
+
 @deployments_bp.route("/api/deployment-targets/<int:target_id>/push-db", methods=["POST"])
 @login_required
 def api_push_db_target(target_id: int):
@@ -742,6 +749,8 @@ def api_push_db_target(target_id: int):
         return jsonify(error="You don't have permission to deploy this project."), 403
     if project_name not in _list_all_projects():
         return jsonify(error="Unknown project."), 404
+    if _is_payload_project(project_name):
+        return jsonify(error="Database push is not supported for Payload projects yet."), 400
 
     try:
         deployment_id = svc.run_db_push(
@@ -785,6 +794,8 @@ def api_push_media_target(target_id: int):
         return jsonify(error="You don't have permission to deploy this project."), 403
     if project_name not in _list_all_projects():
         return jsonify(error="Unknown project."), 404
+    if _is_payload_project(project_name):
+        return jsonify(error="Media push is not supported for Payload projects yet."), 400
 
     try:
         deployment_id = svc.run_media_push(

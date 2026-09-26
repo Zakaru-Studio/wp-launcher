@@ -20,6 +20,7 @@ from werkzeug.utils import secure_filename
 from app.config.app_config import CONTAINERS_FOLDER, PROJECTS_FOLDER
 from app.middleware.auth_middleware import admin_required, login_required
 from app.utils.file_utils import allowed_file
+from app.utils.project_utils import get_project_type
 
 database_bp = Blueprint('database', __name__)
 log = logging.getLogger(__name__)
@@ -69,7 +70,14 @@ def fast_import_database(project_name):
     db_file = request.files['db_file']
     if not db_file.filename:
         return jsonify({'success': False, 'message': 'Aucun fichier sélectionné'}), 400
-    if not allowed_file(db_file.filename):
+
+    is_payload = get_project_type(project_path) == 'payload'
+    if is_payload:
+        from app.services.pg_import_service import DUMP_EXTENSIONS
+        if not (allowed_file(db_file.filename)
+                or db_file.filename.lower().endswith(DUMP_EXTENSIONS)):
+            return jsonify({'success': False, 'message': 'Type de fichier non autorisé (.sql, .sql.gz, .zip, .dump)'}), 400
+    elif not allowed_file(db_file.filename):
         return jsonify({'success': False, 'message': 'Type de fichier non autorisé (.sql, .sql.gz, .zip)'}), 400
 
     try:
@@ -84,6 +92,9 @@ def fast_import_database(project_name):
 
     def run_import():
         with app.app_context():
+            if is_payload:
+                _run_payload_import(app, project_name, temp_path)
+                return
             fast_import_service = app.extensions.get('fast_import_service')
             if not fast_import_service:
                 log.error("fast_import_service missing from app.extensions")
@@ -110,6 +121,45 @@ def fast_import_database(project_name):
     })
 
 
+def _run_payload_import(app, project_name, temp_path):
+    """Import Postgres d'un projet Payload (même event de progression)."""
+    from app.services.pg_import_service import PgImportService
+    try:
+        PgImportService(app.extensions.get('socketio')).import_database(project_name, temp_path)
+    except Exception:  # noqa: BLE001
+        log.exception("pg import worker crashed for %s", project_name)
+    finally:
+        if os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except OSError:
+                log.warning("Could not remove temp file %s", temp_path)
+        import_processes.pop(project_name, None)
+
+
+def _export_payload_database(project_name):
+    """Export Postgres au format custom (.dump), rechargeable par l'import."""
+    import datetime
+    from app.services.pg_import_service import PgImportService
+    from app.utils.pg_target import pg_target
+
+    timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+    export_filename = f"{project_name}_export_{timestamp}.dump"
+    export_path = os.path.join(current_app.config['UPLOAD_FOLDER'], export_filename)
+
+    ok, error = PgImportService.dump(pg_target(project_name), export_path)
+    if not ok:
+        return jsonify({'success': False, 'message': f'Erreur pg_dump : {error}'}), 500
+
+    export_size_mb = os.path.getsize(export_path) / (1024 * 1024)
+    return jsonify({
+        'success': True,
+        'message': f'Export terminé avec succès ({export_size_mb:.1f}MB)',
+        'download_url': f'/download_export/{export_filename}',
+        'filename': export_filename,
+    })
+
+
 @database_bp.route('/update_database/<project_name>', methods=['POST'])
 @login_required
 def update_database(project_name):
@@ -124,6 +174,9 @@ def export_database(project_name):
     project_path = os.path.join(PROJECTS_FOLDER, project_name)
     if not os.path.exists(project_path):
         return jsonify({'success': False, 'message': 'Projet non trouvé'}), 404
+
+    if get_project_type(project_path) == 'payload':
+        return _export_payload_database(project_name)
 
     import datetime
     timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -222,7 +275,7 @@ def stop_import(project_name):
 def download_export(filename):
     """Télécharge un fichier d'export de base de données."""
     secure_name = secure_filename(filename)
-    if not secure_name.endswith('.sql'):
+    if not secure_name.endswith(('.sql', '.dump')):
         return jsonify({'success': False, 'message': 'Type de fichier non autorisé'}), 400
 
     upload_folder = current_app.config['UPLOAD_FOLDER']
@@ -237,7 +290,7 @@ def download_export(filename):
         export_path,
         as_attachment=True,
         download_name=secure_name,
-        mimetype='application/sql',
+        mimetype='application/sql' if secure_name.endswith('.sql') else 'application/octet-stream',
     )
 
 

@@ -73,6 +73,15 @@ class DockerConfig:
     WP_ADMIN_EMAIL = os.getenv('WP_ADMIN_EMAIL') or 'admin@example.com'
     WP_LOCALE = os.getenv('WP_LOCALE') or 'en_US'
     
+    # --- Projets Payload CMS ----------------------------------------------
+    # Version de l'outil create-payload-app, figée pour que ses options en
+    # ligne de commande ne changent pas sous nos pieds. Attention : elle ne
+    # fige PAS Payload lui-même — l'outil récupère toujours la dernière
+    # version publiée du template. Templates proposés : PAYLOAD_TEMPLATES.
+    PAYLOAD_CLI_VERSION = os.getenv('WPL_PAYLOAD_CLI_VERSION') or '3.88.0'
+    PAYLOAD_NODE_IMAGE = 'node:22-bookworm-slim'
+    PAYLOAD_TEMPLATES = ('blank', 'website')
+
     # Noms des services Docker standards
     SERVICES = {
         'mysql': 'mysql',
@@ -89,7 +98,8 @@ class DockerConfig:
         'wordpress_only': 'docker-compose-no-nextjs.yml',
         'wordpress_nextjs': 'docker-compose.yml',
         'nextjs_mongo': 'docker-compose-nextjs-mongo.yml',
-        'nextjs_mysql': 'docker-compose-nextjs-mysql.yml'
+        'nextjs_mysql': 'docker-compose-nextjs-mysql.yml',
+        'payload': 'docker-compose-payload.yml'
     }
     
     @classmethod

@@ -21,8 +21,8 @@ class Project:
         self.name = name
         self.projects_folder = projects_folder or DockerConfig.PROJECTS_FOLDER
         self.containers_folder = containers_folder or DockerConfig.CONTAINERS_FOLDER
-        self.path = os.path.join(projects_folder, name)  # Fichiers éditables
-        self.container_path = os.path.join(containers_folder, name)  # Configuration Docker
+        self.path = os.path.join(self.projects_folder, name)  # Fichiers éditables
+        self.container_path = os.path.join(self.containers_folder, name)  # Configuration Docker
     
     @property
     def editable_path(self):
@@ -160,6 +160,21 @@ class Project:
         self._set_port('.mongo_express_port', value)
     
     @property
+    def payload_port(self):
+        """Port de l'app Payload (site public + /admin)"""
+        return self._get_port('.payload_port')
+
+    @property
+    def postgres_port(self):
+        """Port Postgres publié sur l'interface d'admin"""
+        return self._get_port('.postgres_port')
+
+    @property
+    def adminer_port(self):
+        """Port d'Adminer, l'admin web de la base Postgres"""
+        return self._get_port('.adminer_port')
+
+    @property
     def has_nextjs(self):
         """Vérifie si le projet a Next.js configuré"""
         # Pour les projets Next.js purs, vérifier la structure client/api
@@ -202,6 +217,8 @@ class Project:
                 pass
         
         # Détecter le type selon la structure
+        if os.path.exists(os.path.join(self.path, 'app', 'src', 'payload.config.ts')):
+            return 'payload'
         if os.path.exists(os.path.join(self.path, 'client')) and os.path.exists(os.path.join(self.path, 'api')):
             return 'nextjs'
         elif os.path.exists(os.path.join(self.path, 'wp-content')):
@@ -595,6 +612,9 @@ const posts = await response.json();
             'mailpit_port': self.mailpit_port,
             'smtp_port': self.smtp_port,
             'nextjs_port': self.nextjs_port,
+            'payload_port': self.payload_port,
+            'postgres_port': self.postgres_port,
+            'adminer_port': self.adminer_port,
             'has_nextjs': self.has_nextjs
         }
 

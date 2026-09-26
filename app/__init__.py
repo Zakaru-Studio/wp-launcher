@@ -255,6 +255,9 @@ def init_app_services(app, socketio):
     app.register_blueprint(project_wpcli_bp)
     app.register_blueprint(project_clone_bp)
     app.register_blueprint(project_snapshots_bp)
+
+    from app.routes.project_payload import project_payload_bp
+    app.register_blueprint(project_payload_bp)
     
     # WP Debug
     from app.routes.project_wpdebug import project_wpdebug_bp

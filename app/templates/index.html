@@ -50,6 +50,11 @@
         <span class="stat-label">{{ _('Next.js') }}</span>
         <span class="stat-number" id="nextjs-projects">—</span>
     </article>
+    <article class="stat-card stat-card-payload" data-filter="payload" onclick="filterProjects('payload')">
+        <span class="stat-accent"></span>
+        <span class="stat-label">{{ _('Payload') }}</span>
+        <span class="stat-number" id="payload-projects">—</span>
+    </article>
 </section>
 
 <!-- Search bar + Sort toggle, on the same line, above the sites table -->
@@ -176,6 +181,23 @@
                                     </div>
                                 </label>
                             </div>
+                            <div class="project-type-option">
+                                <input type="radio" id="project_type_payload" name="project_type" value="payload"
+                                    onchange="updateProjectTypeInterface()">
+                                <label for="project_type_payload" class="project-type-card">
+                                    <div class="project-type-icon">
+                                        <i class="fas fa-layer-group"></i>
+                                    </div>
+                                    <div class="project-type-info">
+                                        <h5>{{ _('Payload CMS') }}</h5>
+                                        <div class="tech-stack">
+                                            <span class="tech-badge">Payload 3</span>
+                                            <span class="tech-badge">Postgres</span>
+                                            <span class="tech-badge">Next.js</span>
+                                        </div>
+                                    </div>
+                                </label>
+                            </div>
                         </div>
                     </div>
 
@@ -261,6 +283,40 @@
                     </div>
 
 
+
+                    <!-- Template Payload (seulement pour Payload) -->
+                    <div class="form-group" id="payload_template_option" style="display: none;">
+                        <label class="form-label">
+                            <i class="fas fa-shapes me-1"></i>
+                            {{ _('Payload template') }} *
+                        </label>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" id="payload_template_blank"
+                                           name="payload_template" value="blank" checked>
+                                    <label class="form-check-label" for="payload_template_blank">
+                                        <strong>{{ _('Blank') }}</strong>
+                                        <div class="form-text">{{ _('Users and media collections only') }}</div>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" id="payload_template_website"
+                                           name="payload_template" value="website">
+                                    <label class="form-check-label" for="payload_template_website">
+                                        <strong>{{ _('Website') }}</strong>
+                                        <div class="form-text">{{ _('Pages, posts, layout blocks, SEO and Tailwind front-end') }}</div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-text">
+                            <i class="fas fa-info-circle me-1"></i>
+                            {{ _('Postgres database with Adminer. The first start installs dependencies and compiles the admin: allow a few minutes.') }}
+                        </div>
+                    </div>
 
                     <!-- Informations Next.js App (seulement pour Next.js) -->
                     <div class="form-group" id="nextjs_info_section" style="display: none;">
@@ -348,8 +404,9 @@
                     <div class="form-group">
                         <label for="db-file" class="form-label">{{ _('Database file') }}</label>
                         <input type="file" class="form-control" id="db-file" name="db_file"
-                            accept=".sql,.zip,.gz,.sql.gz" required>
+                            accept=".sql,.zip,.gz,.sql.gz,.dump,.backup" required>
                         <div class="form-text">{{ _('Accepted formats: SQL, ZIP (containing a .sql), .sql.gz') }}</div>
+                        <div class="form-text">{{ _('Payload projects (Postgres) also accept pg_dump files (.dump).') }}</div>
                         <div class="form-text text-info">
                             <i class="fas fa-rocket me-1"></i>
                             {{ _('Ultra-fast import, up to 100x faster than phpMyAdmin') }}

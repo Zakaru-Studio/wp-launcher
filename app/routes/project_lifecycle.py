@@ -14,7 +14,8 @@ from app.utils.file_utils import allowed_file, extract_zip, is_sql_file, is_zip_
 from app.utils.port_utils import find_free_port_for_project, get_used_ports, get_comprehensive_used_ports
 from app.utils.project_utils import (
     secure_project_name, copy_docker_template, copy_docker_template_nextjs_mongo,
-    copy_docker_template_nextjs_mysql, create_default_wp_content, create_wordpress_base_files,
+    copy_docker_template_nextjs_mysql, copy_docker_template_payload,
+    create_default_wp_content, create_wordpress_base_files,
     create_nextjs_app_structure, project_exists, create_project_marker, update_project_wordpress_urls_in_files
 )
 from app.utils import root_helpers
@@ -36,6 +37,9 @@ project_lifecycle_bp = Blueprint('project_lifecycle', __name__)
 # vide en plein milieu d'une création.
 PROJECTS_FOLDER = DockerConfig.PROJECTS_FOLDER
 CONTAINERS_FOLDER = DockerConfig.CONTAINERS_FOLDER
+
+#: Types de projets que /create_project sait créer.
+PROJECT_TYPES = ('wordpress', 'nextjs', 'payload')
 
 
 @project_lifecycle_bp.route('/create_project', methods=['POST'])
@@ -69,6 +73,7 @@ def create_project():
             wordpress_type = data.get('wordpress_type', 'showcase')  # Type WordPress
             # Pour WordPress, toujours utiliser MySQL, pour Next.js utiliser la sélection
             database_type = data.get('database_type', 'mongodb') if project_type == 'nextjs' else 'mysql'
+            payload_template = data.get('payload_template', 'blank')
         else:
             # Données de formulaire depuis l'interface web
             project_name = request.form['project_name'].strip()
@@ -77,6 +82,16 @@ def create_project():
             wordpress_type = request.form.get('wordpress_type', 'showcase')  # Type WordPress
             # Pour WordPress, toujours utiliser MySQL, pour Next.js utiliser la sélection
             database_type = request.form.get('database_type', 'mongodb') if project_type == 'nextjs' else 'mysql'
+            payload_template = request.form.get('payload_template', 'blank')
+
+        if project_type not in PROJECT_TYPES:
+            return jsonify({'success': False,
+                            'message': f'Type de projet inconnu: {project_type}'}), 400
+        if project_type == 'payload':
+            database_type = 'postgres'
+            if payload_template not in DockerConfig.PAYLOAD_TEMPLATES:
+                return jsonify({'success': False,
+                                'message': f'Template Payload inconnu: {payload_template}'}), 400
         
         # Initialiser le logger de debug pour ce projet
         debug_logger = create_debug_logger(project_name)
@@ -157,8 +172,9 @@ def create_project():
         debug_logger.step("CREATE_PROJECT_TYPE", f"Creating {project_type} project")
         if project_type == 'wordpress':
             return _create_wordpress_project(project_name, editable_path, container_path, enable_nextjs, debug_logger, wordpress_type)
-        else:
-            return _create_nextjs_project(project_name, editable_path, container_path, database_type, debug_logger)
+        if project_type == 'payload':
+            return _create_payload_project(project_name, editable_path, container_path, payload_template)
+        return _create_nextjs_project(project_name, editable_path, container_path, database_type, debug_logger)
             
     except Exception as e:
         if debug_logger:
@@ -669,6 +685,136 @@ def _create_nextjs_project(project_name, editable_path, container_path, database
     })
 
 
+def _create_payload_project(project_name, editable_path, container_path, template):
+    """Crée un projet Payload CMS (Postgres + Adminer + Mailpit).
+
+    Le scaffold `create-payload-app` télécharge le template : en cas d'échec,
+    les dossiers du projet sont retirés pour qu'une nouvelle tentative avec
+    le même nom reste possible.
+    """
+    from app.services import payload_service
+    from app.utils.pg_target import write_sidecar
+    from app.utils.security_config import generate_password, generate_payload_secret
+
+    def fail(message):
+        import shutil
+        shutil.rmtree(editable_path, ignore_errors=True)
+        shutil.rmtree(container_path, ignore_errors=True)
+        wp_logger.log_operation_error('create', project_name, Exception(message),
+                                      context="Payload project creation",
+                                      project_type="payload")
+        _emit_creation_progress(_CREATE_TOTAL_STEPS, message, status='error',
+                                project_name=project_name)
+        return jsonify({'success': False, 'message': message})
+
+    postgres_password = generate_password()
+    payload_secret = generate_payload_secret()
+    database_uri = f'postgres://{project_name}:{postgres_password}@postgres:5432/{project_name}'
+
+    _emit_creation_progress(2, 'Allocation des ports…', project_name=project_name)
+    ports = _allocate_ports(('payload', 'postgres', 'adminer', 'mailpit', 'smtp'))
+
+    _emit_creation_progress(3, 'Génération du docker-compose…', project_name=project_name)
+    try:
+        copy_docker_template_payload(container_path, project_name, ports, {
+            '{postgres_password}': postgres_password,
+            '{payload_secret}': payload_secret,
+        })
+    except Exception as e:  # noqa: BLE001
+        return fail(f'Erreur lors de la génération du compose: {e}')
+    write_sidecar(project_name, project_name, project_name, postgres_password,
+                  CONTAINERS_FOLDER)
+    _save_project_ports(project_name, ports)
+
+    _emit_creation_progress(4, f'Téléchargement du template Payload « {template} »…',
+                            project_name=project_name)
+    ok, output = payload_service.scaffold(editable_path, template, database_uri, payload_secret)
+    if not ok:
+        return fail(f'create-payload-app a échoué: {output}')
+    payload_service.write_env(project_name, database_uri, payload_secret, ports['payload'],
+                              PROJECTS_FOLDER)
+    unpatched = payload_service.patch_app_config(project_name, PROJECTS_FOLDER)
+    if unpatched:
+        print(f"⚠️ Payload {project_name}: config non adaptée ({', '.join(unpatched)})")
+
+    _emit_creation_progress(5, 'Démarrage des conteneurs…', project_name=project_name)
+    docker_service = current_app.extensions.get('docker')
+    if docker_service:
+        success, error = docker_service.start_containers(container_path)
+        if not success:
+            return jsonify({'success': False, 'message': f'Erreur lors du démarrage: {error}'})
+
+    _start_first_user_registration(project_name, ports['payload'])
+
+    success_message = (f'Projet Payload {project_name} créé ! Le premier démarrage installe '
+                       f'les dépendances puis compile /admin : comptez quelques minutes.')
+    wp_logger.log_operation_success('create', project_name, "Projet Payload créé avec succès",
+                                    project_path=editable_path, container_path=container_path,
+                                    project_type="payload", template=template)
+    _emit_creation_progress(_CREATE_TOTAL_STEPS, success_message,
+                            status='completed', project_name=project_name)
+    _broadcast_project_created(project_name)
+
+    return jsonify({
+        'success': True,
+        'message': success_message,
+        'project_name': project_name,
+        'urls': _get_project_urls(project_name, ports)
+    })
+
+
+def _start_first_user_registration(project_name, port):
+    """Crée l'admin Payload en arrière-plan, sans retenir la réponse HTTP.
+
+    `npm install` + la première compilation de /admin prennent plusieurs
+    minutes. Si ça échoue, Payload affiche de lui-même son écran « Create
+    first user » : ce n'est jamais bloquant.
+    """
+    import threading
+    from app.services import payload_service
+
+    socketio = current_app.extensions.get('socketio')
+
+    def worker():
+        ok, message = payload_service.register_first_user(
+            port, DockerConfig.WP_ADMIN_EMAIL, DockerConfig.WP_ADMIN_PASSWORD)
+        print(f"{'✅' if ok else '⚠️'} Payload {project_name}: {message}")
+        if socketio:
+            try:
+                socketio.emit('payload_ready', {'project_name': project_name,
+                                                'success': ok, 'message': message})
+            except Exception:  # noqa: BLE001
+                pass
+
+    threading.Thread(target=worker, name=f'payload-first-user-{project_name}',
+                     daemon=True).start()
+
+
+def _allocate_ports(services):
+    """Attribue aux services un bloc de ports consécutifs libres (8080-9000).
+
+    Un bloc, et non le premier port libre pour chacun : les ports libérés
+    par des projets supprimés laissent des trous isolés en bas de plage, et
+    le « premier libre » dispersait un même projet (app sur 8080, base sur
+    8270…). Un port compte comme pris s'il est réservé par un projet (même
+    arrêté), publié par Docker, ou déjà écouté sur l'hôte.
+    """
+    from app.utils.port_preflight import is_host_port_free
+
+    taken = set(get_used_ports())
+    count = len(services)
+    start = 8080
+    while start + count - 1 <= 9000:
+        block = range(start, start + count)
+        busy = next((p for p in block if p in taken or not is_host_port_free(p)), None)
+        if busy is None:
+            ports = dict(zip(services, block))
+            print(f"📋 Ports alloués: {ports}")
+            return ports
+        start = busy + 1
+    raise Exception(f"Aucun bloc de {count} ports libres dans la plage 8080-9000")
+
+
 def _configure_wordpress_ports(project_name, enable_nextjs):
     """Configure les ports pour un projet WordPress avec sauvegarde automatique"""
     # Obtenir tous les ports utilisés
@@ -926,6 +1072,13 @@ def _get_project_urls(project_name, ports):
     
     if 'mongo_express' in ports:
         urls['mongo_express'] = f'http://{DockerConfig.LOCAL_IP}:{ports["mongo_express"]}'
+
+    if 'payload' in ports:
+        urls['payload'] = f'http://{DockerConfig.LOCAL_IP}:{ports["payload"]}'
+        urls['payload_admin'] = f'http://{DockerConfig.LOCAL_IP}:{ports["payload"]}/admin'
+
+    if 'adminer' in ports:
+        urls['adminer'] = f'http://{DockerConfig.LOCAL_IP}:{ports["adminer"]}'
     
     return urls
 
@@ -946,7 +1099,10 @@ def _save_project_ports(project_name, ports):
             'api': '.api_port',
             'mongodb': '.mongodb_port',
             'mysql': '.mysql_port',
-            'mongo_express': '.mongo_express_port'
+            'mongo_express': '.mongo_express_port',
+            'payload': '.payload_port',
+            'postgres': '.postgres_port',
+            'adminer': '.adminer_port',
         }
         
         # Sauvegarder chaque port dans son fichier
@@ -1004,7 +1160,7 @@ def start_project(project_name):
                                               container_path=project.container_path)
                 
                 # Récupérer l'URL du projet
-                project_url = f'http://{DockerConfig.LOCAL_IP}:{project.port}'
+                project_url = f'http://{DockerConfig.LOCAL_IP}:{project.payload_port if project.project_type == "payload" else project.port}'
                 
                 return jsonify({
                     'success': True,
@@ -1160,7 +1316,7 @@ def restart_project(project_name):
             print(f"🔍 [RESTART_PROJECT] Récupération des informations du projet...")
             project = Project(project_name, PROJECTS_FOLDER, CONTAINERS_FOLDER)
             
-            port = project.port or 'unknown'
+            port = (project.payload_port if project.project_type == 'payload' else project.port) or 'unknown'
             pma_port = project.pma_port
             mailpit = project.mailpit_port
             
@@ -1248,7 +1404,7 @@ def rebuild_project(project_name):
             print(f"🔍 [REBUILD_PROJECT] Récupération des informations du projet...")
             project = Project(project_name, PROJECTS_FOLDER, CONTAINERS_FOLDER)
             
-            port = project.port or 'unknown'
+            port = (project.payload_port if project.project_type == 'payload' else project.port) or 'unknown'
             pma_port = project.pma_port
             mailpit = project.mailpit_port
             

@@ -2399,7 +2399,7 @@ body.import-progress-visible {
    ============================================ */
 .project-type-selector {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, 1fr);
     gap: 1rem;
     margin-top: 0.5rem;
 }
@@ -4260,9 +4260,9 @@ body.app-shell {
     .stats-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-/* Tablet: keep 5 cards on one line if there is room */
+/* Tablet: keep 6 cards on one line if there is room */
 @media (max-width: 1100px) and (min-width: 769px) {
-    .stats-row { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+    .stats-row { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
     .stats-row .stat-card { padding: 16px 18px; }
 }
 
@@ -4282,8 +4282,8 @@ body.app-shell {
    ============================================================ */
 .stats-row {
     display: grid;
-    /* 5 cards on the same line: Total / Running / Stopped / WordPress / Next.js */
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    /* 6 cards on the same line: Total / Running / Stopped / WordPress / Next.js / Payload */
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 16px;
     margin: 0 0 28px;
     width: 100%;
@@ -4323,6 +4323,7 @@ body.app-shell {
 .stats-row .stat-card-stopped  .stat-accent { background: var(--al-surface-variant); }
 .stats-row .stat-card-attention .stat-accent { background: var(--al-primary); }
 .stats-row .stat-card-nextjs   .stat-accent { background: var(--al-tertiary); }
+.stats-row .stat-card-payload  .stat-accent { background: var(--al-secondary); }
 
 .stats-row .stat-card:hover {
     transform: translateY(-1px);

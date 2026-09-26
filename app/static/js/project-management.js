@@ -62,6 +62,17 @@ function initProgressTracking() {
         loadProjects({ silent: true });
     });
 
+    // Projet Payload : le premier démarrage (npm install + compilation de
+    // /admin) se termine plusieurs minutes après la création.
+    socket.on('payload_ready', function (data) {
+        if (!data || !data.project_name) return;
+        if (data.success) {
+            showSuccess(`${data.project_name} : Payload est prêt — ${data.message}`);
+        } else {
+            showInfo(`${data.project_name} : ${data.message}. L'écran « Create first user » de /admin prendra le relais.`);
+        }
+    });
+
     socket.on('project_deleted', function (data) {
         console.log('📡 Projet supprimé:', data && data.project_name);
         loadProjects({ silent: true });
@@ -312,44 +323,33 @@ window.addEventListener('load', () => {
  * Fonction pour gérer l'interface selon le type de projet sélectionné
  */
 function updateProjectTypeInterface() {
-    const wordpressSelected = document.getElementById('project_type_wordpress')?.checked;
-    const nextjsSelected = document.getElementById('project_type_nextjs')?.checked;
+    const selected = document.querySelector('input[name="project_type"]:checked')?.value || 'wordpress';
 
-    // Éléments à montrer/cacher
-    const wordpressTypeOption = document.getElementById('wordpress_type_option');
-    const wordpressNextjsOption = document.getElementById('wordpress_nextjs_option');
-    const wordpressArchiveSection = document.getElementById('wordpress_archive_section');
-    const nextjsInfoSection = document.getElementById('nextjs_info_section');
-    const nextjsDatabaseSection = document.getElementById('nextjs_database_section');
+    // Sections du formulaire, par type de projet qui les affiche.
+    const sections = {
+        wordpress_type_option: 'wordpress',
+        wordpress_nextjs_option: 'wordpress',
+        nextjs_info_section: 'nextjs',
+        nextjs_database_section: 'nextjs',
+        payload_template_option: 'payload',
+    };
+    Object.entries(sections).forEach(([id, type]) => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = selected === type ? 'block' : 'none';
+    });
 
-    if (wordpressSelected) {
-        // Afficher les options WordPress uniquement
-        if (wordpressTypeOption) wordpressTypeOption.style.display = 'block';
-        if (wordpressNextjsOption) wordpressNextjsOption.style.display = 'block';
-        if (wordpressArchiveSection) wordpressArchiveSection.style.display = 'block';
-        if (nextjsInfoSection) nextjsInfoSection.style.display = 'none';
-        if (nextjsDatabaseSection) nextjsDatabaseSection.style.display = 'none';
+    // Champs d'un autre type : désactivés pour ne pas partir dans le FormData.
+    document.querySelectorAll('input[name="database_type"]')
+        .forEach(input => input.disabled = selected !== 'nextjs');
+    document.querySelectorAll('input[name="payload_template"]')
+        .forEach(input => input.disabled = selected !== 'payload');
 
-        // Désactiver les champs database_type pour WordPress (ne pas les inclure dans FormData)
-        const dbTypeInputs = document.querySelectorAll('input[name="database_type"]');
-        dbTypeInputs.forEach(input => input.disabled = true);
-    } else if (nextjsSelected) {
-        // Afficher les options Next.js App uniquement
-        if (wordpressTypeOption) wordpressTypeOption.style.display = 'none';
-        if (wordpressNextjsOption) wordpressNextjsOption.style.display = 'none';
-        if (wordpressArchiveSection) wordpressArchiveSection.style.display = 'none';
-        if (nextjsInfoSection) nextjsInfoSection.style.display = 'block';
-        if (nextjsDatabaseSection) nextjsDatabaseSection.style.display = 'block';
-
-        // Réactiver les champs database_type pour Next.js
-        const dbTypeInputs = document.querySelectorAll('input[name="database_type"]');
-        dbTypeInputs.forEach(input => input.disabled = false);
-
-        // Décocher l'option Next.js pour WordPress si elle était cochée
+    if (selected !== 'wordpress') {
+        // L'option « Next.js headless » n'a de sens que pour WordPress.
         const enableNextjsCheckbox = document.getElementById('enable_nextjs');
         if (enableNextjsCheckbox) enableNextjsCheckbox.checked = false;
-
-        // Mettre à jour l'affichage selon la base de données sélectionnée
+    }
+    if (selected === 'nextjs') {
         updateDatabaseChoice();
     }
 }
@@ -583,6 +583,7 @@ function updateStats() {
     const wordpressProjects = projects.filter(p => p.type === 'wordpress' && !p.nextjs_enabled).length;
     // Compter les projets Next.js purs ET les projets WordPress avec Next.js ajouté
     const nextjsProjects = projects.filter(p => p.type === 'nextjs' || p.type === 'wordpress_nextjs' || p.nextjs_enabled || p.has_nextjs).length;
+    const payloadProjects = projects.filter(p => p.type === 'payload').length;
 
     // Les compteurs n'existent que sur l'accueil. Écrire à l'aveugle levait
     // une TypeError que le try/catch de loadProjects présentait comme une
@@ -593,6 +594,7 @@ function updateStats() {
         'inactive-projects': inactiveProjects,
         'wordpress-projects': wordpressProjects,
         'nextjs-projects': nextjsProjects,
+        'payload-projects': payloadProjects,
     };
     for (const [id, value] of Object.entries(counters)) {
         const el = document.getElementById(id);
@@ -716,16 +718,159 @@ function openProjectInVSCode(projectName) {
 }
 window.openProjectInVSCode = openProjectInVSCode;
 
+/** Commandes npm proposées dans le menu « … » d'un projet Payload
+ *  (liste blanche côté serveur : app/services/payload_service.py). */
+const PAYLOAD_COMMANDS = [
+    { cmd: 'generate:types', label: 'Générer les types', icon: 'fas fa-file-code' },
+    { cmd: 'generate:importmap', label: "Régénérer l'import map", icon: 'fas fa-sitemap' },
+    { cmd: 'migrate:status', label: 'État des migrations', icon: 'fas fa-list-check' },
+    { cmd: 'migrate', label: 'Lancer les migrations', icon: 'fas fa-forward' },
+    { cmd: 'migrate:create', label: 'Créer une migration', icon: 'fas fa-plus' },
+    { cmd: 'install', label: 'npm install', icon: 'fas fa-download' },
+];
+
+/** Cartes de services d'un projet Payload actif. */
+function payloadServices(project) {
+    const services = [];
+    if (project.payload_port) {
+        const siteUrl = getProjectUrl(project.payload_port);
+        services.push({
+            name: 'Payload',
+            icon: 'fas fa-layer-group',
+            url: siteUrl,
+            display: `:${project.payload_port}`,
+            isMain: true,
+            type: 'payload',
+            buttons: [
+                { text: 'Site', icon: 'fas fa-globe', class: 'btn-primary',
+                  action: `window.open('${siteUrl}', '_blank')` },
+                { text: 'Admin', icon: 'fas fa-user-shield', class: 'btn-primary',
+                  action: `window.open('${siteUrl}/admin', '_blank')` },
+                { text: 'Logs', icon: 'fas fa-scroll', class: 'btn-secondary',
+                  action: `openContainerLogs('${project.name}', 'payload')`,
+                  title: "Logs de next dev (erreurs de compilation, premier démarrage)" }
+            ]
+        });
+    }
+    if (project.adminer_port) {
+        services.push({
+            name: 'Adminer',
+            icon: 'fas fa-database',
+            url: getProjectUrl(project.adminer_port),
+            display: `:${project.adminer_port}`,
+            isMain: false,
+            type: 'adminer',
+            buttons: [
+                { text: 'Import', icon: 'fas fa-upload', class: 'btn-secondary',
+                  action: `updateDatabase('${project.name}')`,
+                  title: 'Remplacer la base par un dump (.sql, .sql.gz, .zip, .dump)' },
+                { text: 'Export', icon: 'fas fa-download', class: 'btn-secondary',
+                  action: `exportDatabase('${project.name}')`,
+                  title: 'Télécharger un dump pg_dump (.dump)' }
+            ]
+        });
+    }
+    if (project.mailpit_port) {
+        services.push({
+            name: 'Mailpit',
+            icon: 'fas fa-envelope',
+            url: getProjectUrl(project.mailpit_port),
+            display: `:${project.mailpit_port}`,
+            isMain: false,
+            type: 'mailpit',
+            buttons: [
+                { text: 'Voir les e-mails', icon: 'fas fa-inbox', class: 'btn-secondary',
+                  action: `window.open('${getProjectUrl(project.mailpit_port)}', '_blank')`,
+                  title: "Ouvrir l'interface Mailpit" }
+            ]
+        });
+    }
+    return services;
+}
+
+/** Modal de sortie texte (commandes Payload, logs), créé à la demande. */
+function showOutputModal(title) {
+    let modalEl = document.getElementById('outputModal');
+    if (!modalEl) {
+        modalEl = document.createElement('div');
+        modalEl.className = 'modal fade';
+        modalEl.id = 'outputModal';
+        modalEl.tabIndex = -1;
+        modalEl.innerHTML = `
+            <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"></h5>
+                        <div class="output-modal-actions ms-auto me-2"></div>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+                    </div>
+                    <div class="modal-body">
+                        <pre class="output-modal-body mb-0" style="white-space: pre-wrap; font-size: 0.8rem; max-height: 70vh;"></pre>
+                    </div>
+                </div>
+            </div>`;
+        document.body.appendChild(modalEl);
+    }
+    modalEl.querySelector('.modal-title').textContent = title;
+    modalEl.querySelector('.output-modal-actions').innerHTML = '';
+    const body = modalEl.querySelector('.output-modal-body');
+    body.textContent = 'Chargement…';
+    bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    return { modalEl, body, actions: modalEl.querySelector('.output-modal-actions') };
+}
+
+async function runPayloadCommand(projectName, command) {
+    const { body } = showOutputModal(`${projectName} — ${command}`);
+    body.textContent = `Exécution de ${command} dans le conteneur de l'app…`;
+    try {
+        const res = await fetch(`/payload/${encodeURIComponent(projectName)}/cmd/${encodeURIComponent(command)}`,
+                                { method: 'POST' });
+        const data = await res.json();
+        body.textContent = (data.output || '').trim() || data.message;
+        (data.success ? showSuccess : showError)(`${projectName} : ${data.message}`);
+    } catch (error) {
+        body.textContent = `Erreur réseau : ${error.message}`;
+        showError(`${command} : ${error.message}`);
+    }
+}
+window.runPayloadCommand = runPayloadCommand;
+
+async function openContainerLogs(projectName, service) {
+    const { body, actions } = showOutputModal(`${projectName} — logs ${service}`);
+    try {
+        const res = await fetch(`/api/projects/${encodeURIComponent(projectName)}/logs?service=${encodeURIComponent(service)}&tail=500`);
+        const data = await res.json();
+        if (!data.success) {
+            body.textContent = data.message;
+            return;
+        }
+        // Un bouton par service du projet, pour passer d'un conteneur à l'autre.
+        actions.innerHTML = data.services.map(s => `
+            <button type="button" class="btn btn-sm ${s === data.service ? 'btn-primary' : 'btn-outline-secondary'} me-1"
+                    onclick="openContainerLogs('${projectName}', '${s}')">${s}</button>`).join('');
+        body.textContent = data.logs || '(aucun log)';
+        body.scrollTop = body.scrollHeight;
+    } catch (error) {
+        body.textContent = `Erreur réseau : ${error.message}`;
+    }
+}
+window.openContainerLogs = openContainerLogs;
+
 function createProjectHTML(project) {
     // Services disponibles
     const services = [];
 
     // Déterminer le type de projet
     const isNextjsApp = project.type === 'nextjs';
+    const isPayload = project.type === 'payload';
     const isWordPress = project.type === 'wordpress' || project.type === 'wordpress_nextjs' || !project.type; // Fallback pour anciens projets
+    // Port du site : l'app Payload a le sien, `.port` reste celui de WordPress.
+    const sitePort = isPayload ? project.payload_port : project.port;
 
     if (project.status === 'active') {
-        if (isNextjsApp) {
+        if (isPayload) {
+            services.push(...payloadServices(project));
+        } else if (isNextjsApp) {
             // Projet Next.js pur avec client/API séparés
 
             // Client Next.js
@@ -1000,7 +1145,11 @@ function createProjectHTML(project) {
     let mainIcon = 'fas fa-cube';
     let projectTypeLabel = 'Projet';
 
-    if (isNextjsApp) {
+    if (isPayload) {
+        mainUrl = sitePort ? getProjectUrl(sitePort) : '';
+        mainIcon = 'fas fa-layer-group';
+        projectTypeLabel = 'Payload CMS';
+    } else if (isNextjsApp) {
         mainUrl = getProjectUrl(project.port);
         mainIcon = 'fab fa-react';
         projectTypeLabel = 'App Next.js';
@@ -1017,14 +1166,16 @@ function createProjectHTML(project) {
 
     // Meta row values (Stitch: domain  ·  server  ·  PHP)
     const host = (window.APP_CONFIG && window.APP_CONFIG.host) ? window.APP_CONFIG.host : 'localhost';
-    const metaDomain = project.status === 'active' && project.port
-        ? `${host}:${project.port}`
+    const metaDomain = project.status === 'active' && sitePort
+        ? `${host}:${sitePort}`
         : (project.domain || projectTypeLabel);
     const metaServer = project.server || (isNextjsApp ? 'Next.js Runtime' : 'Docker Compose');
     // Default PHP label falls back to generic "PHP" when the backend
     // hasn't yet returned the version — better than a hard-coded 8.2
     // that silently lies if the default changes server-side.
-    const metaTech = isNextjsApp
+    const metaTech = isPayload
+        ? 'Node 22 · Postgres 16'
+        : isNextjsApp
         ? (project.node_version ? `Node ${project.node_version}` : 'Node.js')
         : (project.php_version ? `PHP ${project.php_version}` : 'PHP');
 
@@ -1096,7 +1247,7 @@ function createProjectHTML(project) {
                         </button>
                     ` : ''}
 
-                    ${project.status === 'active' && mainUrl ? `
+                    ${project.status === 'active' && mainUrl && isWordPress ? `
                         <a href="${mainUrl}/wp-admin/" target="_blank" class="instance-link-btn" onclick="event.stopPropagation();">
                             WP Admin
                         </a>
@@ -1128,9 +1279,17 @@ function createProjectHTML(project) {
                             <li><a class="dropdown-item" href="#" onclick="restartProject('${project.name}'); return false;"><i class="fas fa-redo me-2"></i>Redémarrer</a></li>
                             ` : ''}
                             <li><a class="dropdown-item" href="#" onclick="rebuildProject('${project.name}'); return false;"><i class="fas fa-hammer me-2"></i>Rebuild Containers</a></li>
-                            ${project.status === 'active' ? `
+                            ${project.status === 'active' && !isPayload ? `
                             <li><a class="dropdown-item" href="#" onclick="openCloneModal('${project.name}'); return false;"><i class="fas fa-clone me-2"></i>Cloner</a></li>
                             <li><a class="dropdown-item" href="#" onclick="openSnapshotsModal('${project.name}'); return false;"><i class="fas fa-camera me-2"></i>Snapshots</a></li>
+                            ` : ''}
+                            ${isPayload && project.status === 'active' ? `
+                            <li><hr class="dropdown-divider"></li>
+                            <li><h6 class="dropdown-header">Payload</h6></li>
+                            ${PAYLOAD_COMMANDS.map(c => `
+                            <li><a class="dropdown-item" href="#" onclick="runPayloadCommand('${project.name}', '${c.cmd}'); return false;"><i class="${c.icon} me-2"></i>${c.label}</a></li>
+                            `).join('')}
+                            <li><a class="dropdown-item" href="#" onclick="openContainerLogs('${project.name}', 'payload'); return false;"><i class="fas fa-scroll me-2"></i>Logs de l'app</a></li>
                             ` : ''}
                             ${isWordPress && project.status === 'active' ? `
                             <li><hr class="dropdown-divider"></li>

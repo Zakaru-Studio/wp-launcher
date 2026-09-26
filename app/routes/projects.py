@@ -179,18 +179,33 @@ def list_projects_with_status():
             ports['mongodb'] = project.mongodb_port
         if project.mongo_express_port:
             ports['mongo_express'] = project.mongo_express_port
+
+        # Projets Payload
+        project_type = project.project_type
+        for service in ('payload', 'postgres', 'adminer'):
+            port = getattr(project, f'{service}_port')
+            if port:
+                ports[service] = port
         
         urls = _get_project_urls(project_name, ports)
+
+        # Le code d'un projet Payload vit dans app/ : c'est la racine à ouvrir
+        # dans VS Code (package.json, tsconfig…).
+        editable_path = project.editable_path
+        if project_type == 'payload':
+            editable_path = os.path.join(editable_path, 'app')
         
         project_info = {
             'name': project_name,
             # Chemin des fichiers éditables sur l'hôte (pas le dossier
             # containers/), consommé par le bouton « Ouvrir dans VS Code ».
-            'path': project.editable_path,
-            'port': project.port,
+            'path': editable_path,
+            # `.port` vaut 8080 par défaut même sans fichier : pour Payload,
+            # le port du site est celui de l'app.
+            'port': project.payload_port if project_type == 'payload' else project.port,
             'container_status': container_status,
             'has_nextjs': project.has_nextjs,
-            'type': project.project_type,
+            'type': project_type,
             'valid': project.is_valid,
             'status': 'active' if container_status == 'active' else 'inactive',
             'pma_port': project.pma_port,
@@ -202,6 +217,9 @@ def list_projects_with_status():
             'mysql_port': project.mysql_port,
             'mongodb_port': project.mongodb_port,
             'mongo_express_port': project.mongo_express_port,
+            'payload_port': project.payload_port,
+            'postgres_port': project.postgres_port,
+            'adminer_port': project.adminer_port,
             'urls': urls,
             # Served from the project's local files; the route 404s when
             # there's no logo, so the card falls back to its default icon.
@@ -311,6 +329,13 @@ def _get_project_urls(project_name, ports):
     
     if 'mongo_express' in ports:
         urls['mongo_express'] = f'http://{DockerConfig.LOCAL_IP}:{ports["mongo_express"]}'
+
+    if 'payload' in ports:
+        urls['payload'] = f'http://{DockerConfig.LOCAL_IP}:{ports["payload"]}'
+        urls['payload_admin'] = f'http://{DockerConfig.LOCAL_IP}:{ports["payload"]}/admin'
+
+    if 'adminer' in ports:
+        urls['adminer'] = f'http://{DockerConfig.LOCAL_IP}:{ports["adminer"]}'
     
     return urls
 

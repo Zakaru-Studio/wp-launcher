@@ -7,7 +7,7 @@ detected (another container or host process already owns the port), pick a
 free port and rewrite:
 
 - docker-compose.yml  (the `0.0.0.0:OLD:INT` binding, plus WP_HOME/PMA_ABSOLUTE_URI env vars)
-- sidecar .port files (.port, .pma_port, .mailpit_port, .smtp_port)
+- sidecar .port files (every entry of PortsConfig.PORT_FILES)
 - projets/<name>/wp-config.php (WP_HOME, WP_SITEURL) when the WordPress port changes
 - wp_options.siteurl/home in MySQL when the WordPress port changes and MySQL is reachable
 
@@ -21,6 +21,8 @@ import re
 import socket
 import subprocess
 from typing import Dict, List, Optional, Tuple
+
+from app.config.ports_config import PortsConfig
 
 log = logging.getLogger(__name__)
 
@@ -121,6 +123,12 @@ def _classify_binding(compose_text: str, binding_match_start: int,
         return 'wordpress'
     if service == 'phpmyadmin':
         return 'phpmyadmin'
+    # Services qui portent le même nom que leur sidecar (Next.js, Payload…).
+    # `client` est le service Next.js du stack Next.js autonome.
+    if service == 'client':
+        return 'nextjs'
+    if service in PortsConfig.PORT_FILES:
+        return service
     # Fallback on container-side heuristic
     heuristic = _classify_port(container_port)
     if heuristic == 'wordpress_or_pma':
@@ -132,13 +140,7 @@ def _classify_binding(compose_text: str, binding_match_start: int,
 
 
 def _sidecar_file(container_path: str, kind: str) -> Optional[str]:
-    mapping = {
-        'wordpress': '.port',
-        'phpmyadmin': '.pma_port',
-        'mailpit': '.mailpit_port',
-        'smtp': '.smtp_port',
-    }
-    name = mapping.get(kind)
+    name = PortsConfig.PORT_FILES.get(kind)
     return os.path.join(container_path, name) if name else None
 
 
@@ -249,11 +251,13 @@ def _replace_port_in_compose(compose_text: str, old_port: int, new_port: int) ->
         )
     compose_text = _PORT_LINE_RE.sub(repl_binding, compose_text)
 
-    # URL-bearing env vars (WP_HOME, PMA_ABSOLUTE_URI).
+    # URL-bearing env vars (WP_HOME, PMA_ABSOLUTE_URI, NEXT_PUBLIC_SERVER_URL
+    # de Payload, ce dernier en syntaxe liste `- CLÉ=valeur`).
     # Le guillemet ouvrant est conservé tel quel : le motif s'arrête au port,
     # donc en réécrire un ici laisserait la chaîne sans fermeture.
     url_re = re.compile(
-        r'(WP_HOME|PMA_ABSOLUTE_URI)(\s*:\s*"?)(http://[^:"\s]+):' + str(old_port)
+        r'(WP_HOME|PMA_ABSOLUTE_URI|NEXT_PUBLIC_SERVER_URL)(\s*[:=]\s*"?)(http://[^:"\s]+):'
+        + str(old_port) + r'\b'
     )
     compose_text = url_re.sub(
         lambda m: f"{m.group(1)}{m.group(2)}{m.group(3)}:{new_port}",
@@ -305,7 +309,7 @@ def resolve_port_conflicts(
         bindings.append((host, container, kind))
 
     if not bindings:
-        return False, remap, warnings
+        return False, remap, warnings, by_kind
 
     # Track newly picked ports so we don't pick the same one twice during this pass.
     picked_this_run: set = set()
@@ -370,8 +374,8 @@ def _find_free_port_avoiding(avoid: set, start: int = 8080, end: int = 9000) -> 
 
 
 def _collect_reserved_ports() -> set:
-    """Scan containers/*/{.port,.pma_port,.mailpit_port,.smtp_port} to gather
-    every host port already reserved by any project."""
+    """Scan every sidecar port file of containers/* to gather every host
+    port already reserved by any project."""
     reserved: set = set()
     root = os.environ.get('WP_LAUNCHER_CONTAINERS', None)
     if not root:
@@ -386,7 +390,7 @@ def _collect_reserved_ports() -> set:
         project_dir = os.path.join(root, entry)
         if not os.path.isdir(project_dir):
             continue
-        for fname in ('.port', '.pma_port', '.mailpit_port', '.smtp_port'):
+        for fname in PortsConfig.PORT_FILES.values():
             path = os.path.join(project_dir, fname)
             if not os.path.isfile(path):
                 continue

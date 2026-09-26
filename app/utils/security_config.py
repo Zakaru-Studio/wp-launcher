@@ -158,6 +158,11 @@ def generate_password(length: int = 24) -> str:
     return ''.join(secrets.choice(_PASSWORD_ALPHABET) for _ in range(length))
 
 
+def generate_payload_secret() -> str:
+    """Secret ``PAYLOAD_SECRET`` d'un projet Payload (JWT et chiffrement)."""
+    return secrets.token_hex(32)
+
+
 def apply_project_credentials(content: str, overrides: dict | None = None) -> str:
     """Substitute the credential placeholders in a rendered compose file.
 
@@ -172,12 +177,14 @@ def apply_project_credentials(content: str, overrides: dict | None = None) -> st
     re-render mints fresh random passwords, and the site is locked out of a
     database whose password nobody changed.
     """
-    placeholders = ('{mysql_root_password}', '{mysql_password}', '{mongo_password}')
+    placeholders = ('{mysql_root_password}', '{mysql_password}', '{mongo_password}',
+                    '{postgres_password}', '{payload_secret}')
 
     legacy = {
         '{mysql_root_password}': LEGACY_MYSQL_ROOT_PASSWORD,
         '{mysql_password}': LEGACY_MYSQL_PASSWORD,
         '{mongo_password}': 'adminpassword',
+        '{postgres_password}': 'payload',
     }
 
     overrides = overrides or {}
@@ -188,6 +195,10 @@ def apply_project_credentials(content: str, overrides: dict | None = None) -> st
             continue
         if token in overrides:
             value = overrides[token]
+        elif token == '{payload_secret}':
+            # Pas de valeur « legacy » partagée : ce secret signe les
+            # sessions de l'admin Payload.
+            value = generate_payload_secret()
         else:
             value = generate_password() if randomise else legacy[token]
         content = content.replace(token, value)
